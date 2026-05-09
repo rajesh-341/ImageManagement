@@ -6,13 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import ApiService from "../services/apiService";
-import offlineStorage from "../offline/offlineStorage";
 
 function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
@@ -31,14 +29,9 @@ function LoginScreen({ navigation }) {
     setError("");
 
     try {
-      const response = await ApiService.login(username, password);
+      await ApiService.login(username, password);
 
-      // Store auth data
-      await offlineStorage.storeToken(response.token);
-      await offlineStorage.storeUser(response.user);
-
-      // Navigate to image screen
-      navigation.replace("Images");
+      navigation.replace("Home");
     } catch (err) {
       setError(err.message);
     } finally {
