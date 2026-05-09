@@ -173,6 +173,10 @@ const ApiService = {
       method: "PUT",
       body: JSON.stringify({ folderName }),
     });
+  },
+
+  async moveImageToFolder(imageId, folderName) {
+    return this.updateImageFolder(imageId, folderName);
   }
 };
 

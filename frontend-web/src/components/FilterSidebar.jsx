@@ -29,7 +29,7 @@ const EVENT_TYPES = ["Wedding", "Corporate", "Birthday", "Gala", "Conference", "
 const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
 const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 
-function FilterSidebar({ onApply, onClear, filters, onFilterChange }) {
+function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
   const [selectedVenues, setSelectedVenues] = useState(filters?.venues || []);
   const [selectedSizes, setSelectedSizes] = useState(filters?.sizes || []);
@@ -95,6 +95,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange }) {
     <div className="filter-sidebar">
       <div className="filter-sidebar-header">
         <h2>Filters</h2>
+        <button className="filter-close-btn" onClick={onClose}>×</button>
       </div>
 
       <div className="filter-sidebar-content">

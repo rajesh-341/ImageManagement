@@ -1,10 +1,7 @@
 const pool = require("../config/db");
 const path = require("path");
 const fs = require("fs");
-
-const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const DELETE_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMember", "Owner"];
+const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES } = require("../config/constants");
 
 const getImages = async (req, res) => {
   try {

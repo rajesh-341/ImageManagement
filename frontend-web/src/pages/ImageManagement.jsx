@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
 import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
+import ImageMeta from "../components/ImageMeta";
 import "./ImageManagement.css";
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
@@ -125,6 +126,54 @@ function ImageManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadFavorites();
+    }
+  }, [user]);
+
+  const loadFavorites = async () => {
+    try {
+      const favList = await ApiService.getFavorites();
+      setFavorites(favList);
+      setFavoritesSet(new Set(favList.map(f => f.id)));
+    } catch (err) {
+      console.error("Failed to load favorites:", err);
+    }
+  };
+
+  const toggleFavorite = async (imageId) => {
+    try {
+      if (favoritesSet.has(imageId)) {
+        await ApiService.removeFavorite(imageId);
+        setFavoritesSet(prev => {
+          const next = new Set(prev);
+          next.delete(imageId);
+          return next;
+        });
+        setFavorites(prev => prev.filter(f => f.id !== imageId));
+      } else {
+        const img = images.find(i => i.id === imageId) || favorites.find(f => f.id === imageId);
+        if (img) {
+          await ApiService.addFavorite(imageId);
+          setFavoritesSet(prev => new Set([...prev, imageId]));
+          setFavorites(prev => [...prev, img]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to toggle favorite:", err);
+    }
+  };
+
+  const openLightbox = (imageArray, index) => {
+    const img = imageArray[index];
+    setLightboxImage({
+      url: img.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "",
+      data: img.image_data,
+      id: img.id
+    });
   };
 
   const handleAddFolder = async (e) => {
@@ -366,6 +415,37 @@ function ImageManagement() {
     }
   };
 
+  const handleMoveImagesToFolder = async (targetFolderName) => {
+    if (selectedImagesForMove.size === 0) return;
+    setLoading(true);
+    try {
+      for (const imageId of selectedImagesForMove) {
+        await ApiService.moveImageToFolder(imageId, targetFolderName);
+      }
+      setSelectedImagesForMove(new Set());
+      setShowMoveModal(false);
+      loadImages();
+      loadFavorites();
+    } catch (err) {
+      alert("Move failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMoveImagesToFolderById = async (imageId, targetFolderName) => {
+    setLoading(true);
+    try {
+      await ApiService.moveImageToFolder(imageId, targetFolderName);
+      loadImages();
+      loadFavorites();
+    } catch (err) {
+      alert("Move failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleApplyFilters = async (filterData) => {
     setActiveFilters(filterData);
     setLoading(true);
@@ -417,11 +497,6 @@ function ImageManagement() {
       <nav className="navbar">
         <div className="navbar-left">
           <div className="navbar-brand">Event Management</div>
-          {currentFolder && (
-            <button className="btn-back" onClick={handleBackToFolders}>
-              ← Back to Folders
-            </button>
-          )}
         </div>
         <div className="navbar-right">
           <button
@@ -440,17 +515,93 @@ function ImageManagement() {
         </div>
       </nav>
 
-      <div className="main-content">
-        {!currentFolder ? (
-          <div className="folder-view-with-filters">
-            {showFiltersSidebar && (
-              <FilterSidebar
-                onApply={handleApplyFilters}
-                onClear={handleClearFilters}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-              />
+<div className="main-content">
+        {view === "favorites" ? (
+          <div className="favorites-view">
+            <div className="action-bar">
+              <h2>Favorites</h2>
+              <div className="action-bar-buttons">
+                {canUpload && (
+                  <button
+                    className="btn btn-primary btn-add-folder"
+                    onClick={() => setShowAddFolderModal(true)}
+                  >
+                    + Add Folder
+                  </button>
+                )}
+              </div>
+            </div>
+            {loading ? (
+              <div className="loading-state"><div className="spinner"></div></div>
+            ) : favorites.length === 0 ? (
+              <div className="empty-state">
+                <p>No favorites yet. Click the star on any image to add it here!</p>
+              </div>
+            ) : (
+              <div className="favorites-images-grid">
+                {favorites.map((image, index) => {
+                  const imgUrl = image.image_data?.imageUrl ? `${IMAGE_BASE_URL}${image.image_data.imageUrl}` : "";
+                  const isSelected = selectedImagesForMove.has(image.id);
+                  return (
+                    <div
+                      key={image.id}
+                      className={`image-card ${isSelected ? 'selected' : ''}`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('imageId', image.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onClick={() => openLightbox(favorites, index)}
+                    >
+                      <div
+                        className={`image-select-checkbox ${isSelected ? 'selected' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedImagesForMove(prev => {
+                            const next = new Set(prev);
+                            if (next.has(image.id)) next.delete(image.id);
+                            else next.add(image.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        {isSelected && "✓"}
+                      </div>
+                      <button
+                        className={`favorite-btn favorite-btn-card ${favoritesSet.has(image.id) ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(image.id);
+                        }}
+                      >
+                        {favoritesSet.has(image.id) ? "★" : "☆"}
+                      </button>
+                      {imgUrl ? (
+                        <img
+                          className="image-card-img"
+                          src={imgUrl}
+                          alt={image.image_data?.designName}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "";
+                            e.target.style.background = "#e5e7eb";
+                          }}
+                        />
+                      ) : (
+                        <div className="image-card-placeholder">No Image</div>
+                      )}
+                      <div className="image-card-content">
+                        <h3>{image.image_data?.designName || "Untitled"}</h3>
+                        <ImageMeta data={image.image_data} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
+          </div>
+        ) : !currentFolder ? (
+          <div className="folder-view-with-filters">
             <div className="folder-main-content">
               <div className="action-bar">
                 <h2>Folders</h2>
@@ -474,72 +625,134 @@ function ImageManagement() {
                   )}
                 </div>
               </div>
-
-            {folders.length === 0 ? (
-              <div className="empty-state">
-                <p>No folders yet. Create one to get started!</p>
-              </div>
-            ) : (
-              <div className="folder-grid">
-                {folders.map(folder => (
-                  <div
-                    key={folder.id}
-                    className="folder-item"
-                    onClick={() => handleEnterFolder(folder)}
-                  >
-                    <div className="folder-icon">
-                      <svg viewBox="0 0 64 64" width="64" height="64">
-                        <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
-                        <path d="M8 22h48v28H8z" fill="#FFD54F" />
-                        <path d="M8 16h18l6 6H8z" fill="#FFB300" />
-                      </svg>
-                    </div>
-                    <span className="folder-name">{folder.name}</span>
-                    {canUpload && (
-                      <button
-                        className="folder-delete"
-                        onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
-                      >
-                        ×
-                      </button>
-                    )}
+              {showFiltersSidebar && (
+                <FilterSidebar
+                  onApply={handleApplyFilters}
+                  onClear={handleClearFilters}
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onClose={() => setShowFiltersSidebar(false)}
+                />
+              )}
+              {activeFilters ? (
+                loading ? (
+                  <div className="loading-state"><div className="spinner"></div></div>
+                ) : filteredImages.length === 0 ? (
+                  <div className="empty-state"><p>No images match your filters.</p></div>
+                ) : (
+                  <div className="image-grid">
+                    {filteredImages.map((image, index) => {
+                      const imgUrl = image.image_data?.imageUrl ? `${IMAGE_BASE_URL}${image.image_data.imageUrl}` : "";
+                      return (
+                        <div key={image.id} className="image-card" onClick={() => openLightbox(filteredImages, index)}>
+                          <button
+                            className={`favorite-btn favorite-btn-card ${favoritesSet.has(image.id) ? "active" : ""}`}
+                            onClick={(e) => { e.stopPropagation(); toggleFavorite(image.id); }}
+                          >
+                            {favoritesSet.has(image.id) ? "★" : "☆"}
+                          </button>
+                          {imgUrl ? (
+                            <img className="image-card-img" src={imgUrl} alt={image.image_data?.designName}
+                              onError={(e) => { e.target.onerror = null; e.target.src = ""; e.target.style.background = "#e5e7eb"; }}
+                            />
+                          ) : (
+                            <div className="image-card-placeholder">No Image</div>
+                          )}
+                          <div className="image-card-content">
+                            <h3>{image.image_data?.designName || "Untitled"}</h3>
+                            <ImageMeta data={image.image_data} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            )}
-            </div>
-            </div>
-          ) : (
-          <div className="folder-content">
-            <div className="action-bar">
-              <h2>{currentFolder.name}</h2>
-              {canUpload && (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setUploadTab("single");
-                    setShowUploadModal(true);
-                  }}
-                >
-                  + Upload Images
-                </button>
+                )
+              ) : folders.length === 0 ? (
+                <div className="empty-state">
+                  <p>No folders yet. Create one to get started!</p>
+                </div>
+              ) : (
+                <div className="folder-grid">
+                  {folders.map(folder => (
+                    <div
+                      key={folder.id}
+                      className="folder-item"
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add('drag-over');
+                      }}
+                      onDragLeave={(e) => {
+                        e.currentTarget.classList.remove('drag-over');
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove('drag-over');
+                        const imageId = e.dataTransfer.getData('imageId');
+                        if (imageId) {
+                          handleMoveImagesToFolderById(imageId, folder.name);
+                        }
+                      }}
+                      onClick={() => handleEnterFolder(folder)}
+                    >
+                      <div className="folder-icon">
+                        <svg viewBox="0 0 64 64" width="64" height="64">
+                          <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
+                          <path d="M8 22h48v28H8z" fill="#FFD54F" />
+                          <path d="M8 16h18l6 6H8z" fill="#FFB300" />
+                        </svg>
+                      </div>
+                      <span className="folder-name">{folder.name}</span>
+                      {canUpload && (
+                        <button
+                          className="folder-delete"
+                          onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-
+          </div>
+        ) : (
+          <div className="folder-content">
+            <div className="folder-header">
+              <button className="btn-back-folder" onClick={handleBackToFolders}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+              </button>
+              <h2>{currentFolder.name}</h2>
+            </div>
             {loading ? (
-              <div className="loading-state">
-                <div className="spinner"></div>
-              </div>
-            ) : images.length === 0 ? (
-              <div className="empty-state">
-                <p>No images in this folder. Upload an image or Excel file to add images!</p>
-              </div>
+              <div className="loading-state"><div className="spinner"></div></div>
+            ) : !canUpload && images.length === 0 ? (
+              <div className="empty-state"><p>No images in this folder.</p></div>
             ) : (
               <div className="image-grid">
-                {images.map(image => {
+                {canUpload && (
+                  <div className="upload-box-card" onClick={() => { setUploadTab("single"); setShowUploadModal(true); }}>
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span>Upload Image</span>
+                  </div>
+                )}
+                {images.map((image, index) => {
                   const imgUrl = image.image_data?.imageUrl ? `${IMAGE_BASE_URL}${image.image_data.imageUrl}` : "";
                   return (
-                    <div key={image.id} className="image-card">
+                    <div key={image.id} className="image-card" onClick={() => openLightbox(images, index)}>
+                      <button
+                        className={`favorite-btn favorite-btn-card ${favoritesSet.has(image.id) ? "active" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(image.id);
+                        }}
+                      >
+                        {favoritesSet.has(image.id) ? "★" : "☆"}
+                      </button>
                       {imgUrl ? (
                         <img
                           className="image-card-img"
@@ -550,22 +763,13 @@ function ImageManagement() {
                             e.target.src = "";
                             e.target.style.background = "#e5e7eb";
                           }}
-                          onClick={() => setLightboxImage({ url: imgUrl, data: image.image_data })}
                         />
                       ) : (
                         <div className="image-card-placeholder">No Image</div>
                       )}
                       <div className="image-card-content">
                         <h3>{image.image_data?.designName || "Untitled"}</h3>
-                        <div className="image-meta">
-                          {image.image_data?.size && <p>Size: {image.image_data.size} {image.image_data.sizeUnit}</p>}
-                          {image.image_data?.colourCombination?.length > 0 && (
-                            <p>Colours: {image.image_data.colourCombination.join(", ")}</p>
-                          )}
-                          {image.image_data?.placeOfEvent && <p>Place: {image.image_data.placeOfEvent}</p>}
-                          {image.image_data?.decorType && <p>Decor Name: {image.image_data.decorType}</p>}
-                          {image.image_data?.eventName && <p>Event Name: {image.image_data.eventName}</p>}
-                        </div>
+                        <ImageMeta data={image.image_data} />
                         {canUpload && (
                           <button
                             className="image-card-delete"
@@ -579,7 +783,7 @@ function ImageManagement() {
                         )}
                       </div>
                     </div>
-                  );
+);
                 })}
               </div>
             )}
@@ -592,40 +796,45 @@ function ImageManagement() {
         <div className="modal-overlay" onClick={() => setShowAddFolderModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Create New Folder</h2>
+              <h2 className="modal-title">Add Folder</h2>
               <button className="modal-close" onClick={() => setShowAddFolderModal(false)}>×</button>
             </div>
             <form onSubmit={handleAddFolder}>
               <div className="form-group">
-                <label className="label">Folder Name *</label>
+                <label className="label">Folder Name</label>
                 <input
                   type="text"
                   className="input"
                   value={folderName}
                   onChange={(e) => setFolderName(e.target.value)}
-                  placeholder="e.g., Wedding_Decor_HallA_2024"
+                  placeholder="Enter folder name"
                   required
                 />
               </div>
               <div className="form-group">
-                <label className="label">Description (optional)</label>
-                <input
-                  type="text"
+                <label className="label">Description (Optional)</label>
+                <textarea
                   className="input"
                   value={folderDescription}
                   onChange={(e) => setFolderDescription(e.target.value)}
-                  placeholder="Brief description"
+                  placeholder="Enter folder description"
+                  rows={3}
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? "Creating..." : "Create Folder"}
-              </button>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddFolderModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? "Creating..." : "Create Folder"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Upload Modal - Tabs for Single Image and Excel */}
+      {/* Upload Modal */}
       {showUploadModal && (
         <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
           <div className="modal upload-modal" onClick={e => e.stopPropagation()}>
@@ -932,10 +1141,19 @@ function ImageManagement() {
           </div>
         </div>
       )}
-      {/* Lightbox */}
+{/* Lightbox */}
       {lightboxImage && (
         <div className="lightbox" onClick={() => setLightboxImage(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>×</button>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>X</button>
+          <button
+            className={`lightbox-favorite-btn ${lightboxImage.id && favoritesSet.has(lightboxImage.id) ? "active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (lightboxImage.id) toggleFavorite(lightboxImage.id);
+            }}
+          >
+            {lightboxImage.id && favoritesSet.has(lightboxImage.id) ? "★" : "☆"}
+          </button>
           {lightboxImage.url ? (
             <img
               className="lightbox-image"
@@ -951,15 +1169,38 @@ function ImageManagement() {
           )}
           <div className="lightbox-info">
             <h3>{lightboxImage.data?.designName || "Untitled"}</h3>
-            <div className="lightbox-meta">
-              {lightboxImage.data?.size && <span>Size: {lightboxImage.data.size} {lightboxImage.data.sizeUnit}</span>}
-              {lightboxImage.data?.colourCombination?.length > 0 && (
-                <span>Colours: {lightboxImage.data.colourCombination.join(", ")}</span>
-              )}
-              {lightboxImage.data?.placeOfEvent && <span>Place: {lightboxImage.data.placeOfEvent}</span>}
-              {lightboxImage.data?.decorType && <span>Decor Name: {lightboxImage.data.decorType}</span>}
-              {lightboxImage.data?.eventName && <span>Event Name: {lightboxImage.data.eventName}</span>}
+            <ImageMeta data={lightboxImage.data} />
+          </div>
+        </div>
+      )}
+
+      {/* Move to Folder Modal */}
+      {showMoveModal && (
+        <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Move to Folder</h2>
+              <button className="modal-close" onClick={() => setShowMoveModal(false)}>X</button>
             </div>
+            <div className="move-folder-list">
+              {folders.length === 0 ? (
+                <p className="empty-folder-message">No folders available. Create a folder first.</p>
+              ) : (
+                folders.map(folder => (
+                  <button
+                    key={folder.id}
+                    className="move-folder-item"
+                    onClick={() => handleMoveImagesToFolder(folder.name)}
+                  >
+                    <span className="folder-icon">F</span>
+                    <span className="folder-item-name">{folder.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+            <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)} style={{ marginTop: "16px", width: "100%" }}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
