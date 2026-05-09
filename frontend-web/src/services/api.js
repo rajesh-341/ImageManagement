@@ -137,6 +137,42 @@ const ApiService = {
     }
 
     return data;
+  },
+
+  async getFavorites() {
+    return request("/favorites");
+  },
+
+  async addFavorite(imageId) {
+    return request("/favorites", {
+      method: "POST",
+      body: JSON.stringify({ imageId }),
+    });
+  },
+
+  async removeFavorite(imageId) {
+    return request(`/favorites/${imageId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getFavoriteStatus() {
+    return request("/favorites/status");
+  },
+
+  async searchImages(filters) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.append(key, value);
+    });
+    return request(`/images?${params.toString()}`);
+  },
+
+  async updateImageFolder(imageId, folderName) {
+    return request(`/images/${imageId}/folder`, {
+      method: "PUT",
+      body: JSON.stringify({ folderName }),
+    });
   }
 };
 

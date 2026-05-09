@@ -8,14 +8,85 @@ const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMe
 
 const getImages = async (req, res) => {
   try {
-    const { folder } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax } = req.query;
     
     let query = "SELECT * FROM images";
     let params = [];
+    let paramIndex = 1;
+
+    const conditions = [];
 
     if (folder) {
-      query += " WHERE folder_name = $1";
+      conditions.push(`folder_name = $${paramIndex}`);
       params.push(folder);
+      paramIndex++;
+    }
+
+    if (folderName) {
+      conditions.push(`folder_name ILIKE $${paramIndex}`);
+      params.push(`%${folderName}%`);
+      paramIndex++;
+    }
+
+    if (designName) {
+      conditions.push(`image_data->>'designName' ILIKE $${paramIndex}`);
+      params.push(`%${designName}%`);
+      paramIndex++;
+    }
+
+    if (eventType) {
+      const eventTypes = eventType.split(",");
+      const eventTypeConditions = eventTypes.map(() => `image_data->>'eventType' ILIKE $${paramIndex++}`);
+      conditions.push(`(${eventTypeConditions.join(" OR ")})`);
+      eventTypes.forEach(type => params.push(`%${type}%`));
+    }
+
+    if (decorType) {
+      const decorTypes = decorType.split(",");
+      const decorTypeConditions = decorTypes.map(() => `image_data->>'decorType' ILIKE $${paramIndex++}`);
+      conditions.push(`(${decorTypeConditions.join(" OR ")})`);
+      decorTypes.forEach(type => params.push(`%${type}%`));
+    }
+
+    if (placeOfEvent) {
+      conditions.push(`(image_data->>'venueCustomer' ILIKE $${paramIndex} OR image_data->>'venueName' ILIKE $${paramIndex})`);
+      params.push(`%${placeOfEvent}%`);
+      paramIndex++;
+    }
+
+    if (eventName) {
+      conditions.push(`image_data->>'eventName' ILIKE $${paramIndex}`);
+      params.push(`%${eventName}%`);
+      paramIndex++;
+    }
+
+    if (flowerType) {
+      conditions.push(`image_data->>'flowerType' ILIKE $${paramIndex}`);
+      params.push(`%${flowerType}%`);
+      paramIndex++;
+    }
+
+    if (colors) {
+      const colorList = colors.split(",");
+      const colorConditions = colorList.map(() => `image_data->'colourCombination' @> $${paramIndex++}`);
+      conditions.push(`(${colorConditions.join(" AND ")})`);
+      colorList.forEach(color => params.push(`["${color}"]`));
+    }
+
+    if (priceMin) {
+      conditions.push(`(image_data->>'priceMin' IS NOT NULL AND CAST(image_data->>'priceMin' AS NUMERIC) >= $${paramIndex})`);
+      params.push(parseFloat(priceMin));
+      paramIndex++;
+    }
+
+    if (priceMax) {
+      conditions.push(`(image_data->>'priceMax' IS NOT NULL AND CAST(image_data->>'priceMax' AS NUMERIC) <= $${paramIndex})`);
+      params.push(parseFloat(priceMax));
+      paramIndex++;
+    }
+
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
     }
 
     query += " ORDER BY created_at DESC";
@@ -47,7 +118,6 @@ const uploadImage = async (req, res) => {
     const role = req.user.role;
     const roleLower = role ? role.toLowerCase() : "";
     
-    // Check against lowercase roles
     const canUpload = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
     
     if (!canUpload) {
@@ -65,23 +135,57 @@ const uploadImage = async (req, res) => {
       placeOfEvent,
       decorType,
       eventName,
-      eventTime
+      eventTime,
+      eventType,
+      venueCustomer,
+      venueName,
+      venueDate,
+      sizeWidth,
+      sizeLength,
+      sizeHeight,
+      sizeDisplay,
+      flowerType,
+      priceMin,
+      priceMax
     } = req.body;
 
     if (!folderName || !imageUrl) {
       return res.status(400).json({ message: "Folder name and image URL required" });
     }
 
+    if (!designName) {
+      return res.status(400).json({ message: "Missing required field: Design Name" });
+    }
+    if (!eventType) {
+      return res.status(400).json({ message: "Missing required field: Event Type" });
+    }
+    if (!decorType) {
+      return res.status(400).json({ message: "Missing required field: Decoration Type" });
+    }
+    if (!colourCombination || colourCombination.length === 0) {
+      return res.status(400).json({ message: "Missing required field: Colour" });
+    }
+    if (!flowerType) {
+      return res.status(400).json({ message: "Missing required field: Flower Type" });
+    }
+
     const imageData = {
       imageUrl,
       colourCombination: colourCombination || [],
-      size: size || "",
-      sizeUnit: sizeUnit || "inch",
-      designName: designName || "",
-      placeOfEvent: placeOfEvent || "",
-      decorType: decorType || "",
-      eventName: eventName || "",
-      eventTime: eventTime || null,
+      sizeWidth: sizeWidth || null,
+      sizeLength: sizeLength || null,
+      sizeHeight: sizeHeight || null,
+      sizeUnit: sizeUnit || "sq.ft",
+      sizeDisplay: sizeDisplay || null,
+      designName,
+      eventType,
+      decorType,
+      venueCustomer: venueCustomer || null,
+      venueName: venueName || null,
+      venueDate: venueDate || null,
+      flowerType,
+      priceMin: priceMin ? parseFloat(priceMin) : null,
+      priceMax: priceMax ? parseFloat(priceMax) : null,
       uploadedAt: new Date().toISOString()
     };
 
@@ -152,12 +256,44 @@ const getImageById = async (req, res) => {
   }
 };
 
+const updateImageFolder = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const roleLower = role ? role.toLowerCase() : "";
+    
+    const canUpdate = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
+    
+    if (!canUpdate) {
+      return res.status(403).json({ message: "Update access denied" });
+    }
+
+    const { id } = req.params;
+    const { folderName } = req.body;
+
+    if (!folderName) {
+      return res.status(400).json({ message: "Folder name is required" });
+    }
+
+    const query = "UPDATE images SET folder_name = $1 WHERE id = $2 RETURNING *";
+    const result = await pool.query(query, [folderName, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    res.json({ message: "Image moved successfully", image: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getImages,
   getFolders,
   uploadImage,
   deleteImage,
   getImageById,
+  updateImageFolder,
   UPLOAD_ROLES,
   DELETE_ROLES,
   VIEW_ROLES

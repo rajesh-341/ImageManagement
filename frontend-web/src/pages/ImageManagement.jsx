@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
+import FilterSidebar from "../components/FilterSidebar";
+import ColorPicker from "../components/ColorPicker";
 import "./ImageManagement.css";
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
+
+const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
+const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
 
 function ImageManagement() {
   const [folders, setFolders] = useState([]);
@@ -25,14 +30,30 @@ function ImageManagement() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [imageData, setImageData] = useState({
     designName: "",
-    size: "",
-    sizeUnit: "inch",
-    colours: "",
-    placeOfEvent: "",
+    eventType: "",
     decorType: "",
-    eventName: "",
+    venueCustomer: "",
+    venueName: "",
+    venueDate: "",
+    sizeWidth: "",
+    sizeLength: "",
+    sizeHeight: "",
+    sizeUnit: "sq.ft",
+    colours: [],
+    flowerType: "",
+    priceMin: "",
+    priceMax: "",
   });
   const [uploadProgress, setUploadProgress] = useState("");
+  const [favorites, setFavorites] = useState([]);
+  const [favoritesSet, setFavoritesSet] = useState(new Set());
+  const [view, setView] = useState("folders");
+  const [filteredImages, setFilteredImages] = useState([]);
+  const [showFiltersSidebar, setShowFiltersSidebar] = useState(false);
+  const [selectedImagesForMove, setSelectedImagesForMove] = useState(new Set());
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [filters, setFilters] = useState({});
+  const [activeFilters, setActiveFilters] = useState(null);
   const navigate = useNavigate();
   const excelFileRef = useRef(null);
   const batchImageRef = useRef(null);
@@ -178,12 +199,19 @@ function ImageManagement() {
       file,
       preview: URL.createObjectURL(file),
       designName: "",
-      size: "",
-      sizeUnit: "inch",
-      colours: "",
-      placeOfEvent: "",
+      eventType: "",
       decorType: "",
-      eventName: "",
+      venueCustomer: "",
+      venueName: "",
+      venueDate: "",
+      sizeWidth: "",
+      sizeLength: "",
+      sizeHeight: "",
+      sizeUnit: "sq.ft",
+      colours: [],
+      flowerType: "",
+      priceMin: "",
+      priceMax: "",
     }));
     setBatchImages(prev => [...prev, ...newRows]);
     e.target.value = "";
@@ -338,6 +366,42 @@ function ImageManagement() {
     }
   };
 
+  const handleApplyFilters = async (filterData) => {
+    setActiveFilters(filterData);
+    setLoading(true);
+    try {
+      const searchFilters = {};
+      if (filterData.searchText) searchFilters.searchText = filterData.searchText;
+      if (filterData.designName) searchFilters.designName = filterData.designName;
+      if (filterData.eventTypes && filterData.eventTypes.length > 0) searchFilters.eventType = filterData.eventTypes.join(",");
+      if (filterData.decorTypes && filterData.decorTypes.length > 0) searchFilters.decorType = filterData.decorTypes.join(",");
+      if (filterData.colors && filterData.colors.length > 0) searchFilters.colors = filterData.colors.join(",");
+      if (filterData.flowerTypes && filterData.flowerTypes.length > 0) searchFilters.flowerType = filterData.flowerTypes.join(",");
+      if (filterData.venueFilter) searchFilters.placeOfEvent = filterData.venueFilter;
+      if (filterData.priceRange) {
+        searchFilters.priceMin = filterData.priceRange[0];
+        searchFilters.priceMax = filterData.priceRange[1];
+      }
+      
+      const data = await ApiService.searchImages(searchFilters);
+      setFilteredImages(data);
+    } catch (err) {
+      console.error("Filter search failed:", err);
+      alert("Search failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setActiveFilters(null);
+    setFilteredImages([]);
+  };
+
+  const handleFilterChange = (newFilters) => {
+    setFilters(newFilters);
+  };
+
   const handleLogout = async () => {
     await ApiService.logout();
     navigate("/", { replace: true });
@@ -360,6 +424,12 @@ function ImageManagement() {
           )}
         </div>
         <div className="navbar-right">
+          <button
+            className="btn btn-favorites-nav"
+            onClick={() => setView(view === "favorites" ? "folders" : "favorites")}
+          >
+            {view === "favorites" ? "Back to Folders" : "Favorites"}
+          </button>
           <div className="user-info">
             <span className="user-display">User: <strong>{displayName}</strong></span>
             <span className="user-role">Role: <strong>{role}</strong></span>
@@ -372,18 +442,38 @@ function ImageManagement() {
 
       <div className="main-content">
         {!currentFolder ? (
-          <div className="folder-view">
-            <div className="action-bar">
-              <h2>Folders</h2>
-              {canUpload && (
-                <button
-                  className="btn btn-primary btn-add-folder"
-                  onClick={() => setShowAddFolderModal(true)}
-                >
-                  + Add Folder
-                </button>
-              )}
-            </div>
+          <div className="folder-view-with-filters">
+            {showFiltersSidebar && (
+              <FilterSidebar
+                onApply={handleApplyFilters}
+                onClear={handleClearFilters}
+                filters={filters}
+                onFilterChange={handleFilterChange}
+              />
+            )}
+            <div className="folder-main-content">
+              <div className="action-bar">
+                <h2>Folders</h2>
+                <div className="action-bar-buttons">
+                  <button
+                    className={`btn btn-filter-toggle ${showFiltersSidebar ? 'active' : ''}`}
+                    onClick={() => setShowFiltersSidebar(!showFiltersSidebar)}
+                  >
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                    </svg>
+                    Filters
+                  </button>
+                  {canUpload && (
+                    <button
+                      className="btn btn-primary btn-add-folder"
+                      onClick={() => setShowAddFolderModal(true)}
+                    >
+                      + Add Folder
+                    </button>
+                  )}
+                </div>
+              </div>
 
             {folders.length === 0 ? (
               <div className="empty-state">
@@ -417,8 +507,9 @@ function ImageManagement() {
                 ))}
               </div>
             )}
-          </div>
-        ) : (
+            </div>
+            </div>
+          ) : (
           <div className="folder-content">
             <div className="action-bar">
               <h2>{currentFolder.name}</h2>

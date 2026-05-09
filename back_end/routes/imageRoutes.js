@@ -10,6 +10,7 @@ const {
   uploadImage, 
   deleteImage, 
   getImageById,
+  updateImageFolder,
   VIEW_ROLES,
   UPLOAD_ROLES,
   DELETE_ROLES
@@ -53,6 +54,14 @@ router.delete(
   verifyToken,
   allowRoles(DELETE_ROLES),
   deleteImage
+);
+
+// Update image folder - Captain, ViceCaptain, Owner only
+router.put(
+  "/:id/folder",
+  verifyToken,
+  allowRoles(UPLOAD_ROLES),
+  updateImageFolder
 );
 
 module.exports = router;

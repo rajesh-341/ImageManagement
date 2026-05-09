@@ -55,6 +55,17 @@ const uploadExcel = async (req, res) => {
         continue;
       }
 
+      const missing = [];
+      if (!row["Decoration Name"] || row["Decoration Name"].toString().trim() === "") missing.push("Decoration Name");
+      if (!row["Event Type"] || row["Event Type"].toString().trim() === "") missing.push("Event Type");
+      if (!row["Decor Type"] || row["Decor Type"].toString().trim() === "") missing.push("Decor Type");
+      if (!row["Colours"] || row["Colours"].toString().trim() === "") missing.push("Colours");
+      if (!row["Flower Type"] || row["Flower Type"].toString().trim() === "") missing.push("Flower Type");
+      if (missing.length > 0) {
+        errors.push(`Row ${i + 1}: Missing required fields: ${missing.join(", ")}`);
+        continue;
+      }
+
       let imageData;
       let webpPath;
 
@@ -86,14 +97,18 @@ const uploadExcel = async (req, res) => {
 
       const imageRecord = {
         imageUrl: imageData,
-        colourCombination: row["Colours"] ? row["Colours"].toString().split(",").map(c => c.trim()).filter(c => c) : [],
-        size: row["Size"] ? row["Size"].toString() : "",
-        sizeUnit: "inch",
-        designName: row["Decoration Name"] ? row["Decoration Name"].toString() : "",
-        placeOfEvent: row["Place"] ? row["Place"].toString() : "",
-        decorType: row["Decor Type"] ? row["Decor Type"].toString() : "",
-        eventName: row["Event Name"] ? row["Event Name"].toString() : "",
-        eventTime: null,
+        colourCombination: row["Colours"].toString().split(",").map(c => c.trim()).filter(c => c),
+        sizeWidth: row["Size Width"] ? row["Size Width"].toString() : null,
+        sizeLength: row["Size Length"] ? row["Size Length"].toString() : null,
+        sizeHeight: row["Size Height"] ? row["Size Height"].toString() : null,
+        sizeUnit: row["Size Unit"] ? row["Size Unit"].toString() : "sq.ft",
+        designName: row["Decoration Name"].toString(),
+        eventType: row["Event Type"].toString(),
+        decorType: row["Decor Type"].toString(),
+        venueCustomer: row["Venue Customer"] ? row["Venue Customer"].toString() : null,
+        venueName: row["Venue Name"] ? row["Venue Name"].toString() : null,
+        venueDate: row["Venue Date"] ? row["Venue Date"].toString() : null,
+        flowerType: row["Flower Type"].toString(),
         uploadedAt: new Date().toISOString(),
       };
 

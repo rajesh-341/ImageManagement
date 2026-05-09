@@ -12,6 +12,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
 const folderRoutes = require("./routes/folderRoutes");
+const favoriteRoutes = require("./routes/favoriteRoutes");
 const { uploadExcel } = require("./controllers/excelController");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
@@ -21,6 +22,7 @@ const app = express();
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
 }));
 
 app.use(cors({
@@ -126,6 +128,7 @@ app.post("/api/upload", verifyToken, upload.single("image"), async (req, res) =>
 app.use("/api/auth", authRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/folders", folderRoutes);
+app.use("/api/favorites", favoriteRoutes);
 app.post("/api/upload-excel", verifyToken, upload.array("files", 100), uploadExcel);
 app.post("/api/logout", logout);
 app.get("/api/me", verifyToken, me);

@@ -26,6 +26,17 @@ async function runMigrations() {
 
     await pool.query(`ALTER TABLE folders ALTER COLUMN created_by TYPE VARCHAR(255)`);
     console.log("[Migration] updated created_by to VARCHAR");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS favorites (
+        id SERIAL PRIMARY KEY,
+        image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+        username VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(image_id, username)
+      )
+    `);
+    console.log("[Migration] favorites table ready");
   } catch (error) {
     console.error("[Migration] Error:", error.message);
   }
