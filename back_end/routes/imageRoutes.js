@@ -11,6 +11,7 @@ const {
   deleteImage, 
   getImageById,
   updateImageFolder,
+  updateImage,
   VIEW_ROLES,
   UPLOAD_ROLES,
   DELETE_ROLES
@@ -62,6 +63,14 @@ router.put(
   verifyToken,
   allowRoles(UPLOAD_ROLES),
   updateImageFolder
+);
+
+// Update image metadata
+router.put(
+  "/:id",
+  verifyToken,
+  allowRoles(UPLOAD_ROLES),
+  updateImage
 );
 
 module.exports = router;

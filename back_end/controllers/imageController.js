@@ -5,13 +5,27 @@ const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES } = require("../config/constants"
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText } = req.query;
     
-    let query = "SELECT * FROM images";
+    let query = "SELECT * FROM image_management";
     let params = [];
     let paramIndex = 1;
 
     const conditions = [];
+
+    if (searchText) {
+      conditions.push(`(
+        image_data->>'designName' ILIKE $${paramIndex} OR
+        image_data->>'eventType' ILIKE $${paramIndex} OR
+        image_data->>'decorType' ILIKE $${paramIndex} OR
+        image_data->>'venueCustomer' ILIKE $${paramIndex} OR
+        image_data->>'venueName' ILIKE $${paramIndex} OR
+        image_data->>'flowerType' ILIKE $${paramIndex} OR
+        folder_name ILIKE $${paramIndex}
+      )`);
+      params.push(`%${searchText}%`);
+      paramIndex++;
+    }
 
     if (folder) {
       conditions.push(`folder_name = $${paramIndex}`);
@@ -102,7 +116,7 @@ const getImages = async (req, res) => {
 const getFolders = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT DISTINCT folder_name FROM images ORDER BY folder_name DESC"
+      "SELECT DISTINCT folder_name FROM image_management ORDER BY folder_name DESC"
     );
     res.json(result.rows.map(r => r.folder_name));
   } catch (error) {
@@ -187,7 +201,7 @@ const uploadImage = async (req, res) => {
     };
 
     const query = `
-      INSERT INTO images (folder_name, image_data, created_by)
+      INSERT INTO image_management (folder_name, image_data, employee_id)
       VALUES ($1, $2, $3)
       RETURNING *
     `;
@@ -213,7 +227,7 @@ const deleteImage = async (req, res) => {
 
     const { id } = req.params;
 
-    const selectQuery = "SELECT image_data FROM images WHERE id = $1";
+    const selectQuery = "SELECT image_data FROM image_management WHERE id = $1";
     const selectResult = await pool.query(selectQuery, [id]);
 
     if (selectResult.rows.length === 0) {
@@ -229,7 +243,7 @@ const deleteImage = async (req, res) => {
       }
     }
 
-    const query = "DELETE FROM images WHERE id = $1 RETURNING *";
+    const query = "DELETE FROM image_management WHERE id = $1 RETURNING *";
     const result = await pool.query(query, [id]);
 
     res.json({ message: "Image deleted successfully" });
@@ -241,7 +255,7 @@ const deleteImage = async (req, res) => {
 const getImageById = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query("SELECT * FROM images WHERE id = $1", [id]);
+    const result = await pool.query("SELECT * FROM image_management WHERE id = $1", [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Image not found" });
@@ -271,7 +285,7 @@ const updateImageFolder = async (req, res) => {
       return res.status(400).json({ message: "Folder name is required" });
     }
 
-    const query = "UPDATE images SET folder_name = $1 WHERE id = $2 RETURNING *";
+    const query = "UPDATE image_management SET folder_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *";
     const result = await pool.query(query, [folderName, id]);
 
     if (result.rows.length === 0) {
@@ -284,6 +298,59 @@ const updateImageFolder = async (req, res) => {
   }
 };
 
+const updateImage = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const roleLower = role ? role.toLowerCase() : "";
+    const canUpdate = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
+    if (!canUpdate) return res.status(403).json({ message: "Update access denied" });
+
+    const { id } = req.params;
+    const existing = await pool.query("SELECT image_data FROM image_management WHERE id = $1", [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ message: "Image not found" });
+
+    const currentData = typeof existing.rows[0].image_data === "string"
+      ? JSON.parse(existing.rows[0].image_data)
+      : existing.rows[0].image_data;
+
+    const {
+      designName, eventType, decorType, venueCustomer, venueName, venueDate,
+      sizeWidth, sizeLength, sizeHeight, sizeUnit, sizeDisplay,
+      colourCombination, flowerType, priceMin, priceMax
+    } = req.body;
+
+    const updatedData = {
+      ...currentData,
+      ...(designName !== undefined && { designName }),
+      ...(eventType !== undefined && { eventType }),
+      ...(decorType !== undefined && { decorType }),
+      ...(venueCustomer !== undefined && { venueCustomer }),
+      ...(venueName !== undefined && { venueName }),
+      ...(venueDate !== undefined && { venueDate }),
+      ...(sizeWidth !== undefined && { sizeWidth }),
+      ...(sizeLength !== undefined && { sizeLength }),
+      ...(sizeHeight !== undefined && { sizeHeight }),
+      ...(sizeUnit !== undefined && { sizeUnit }),
+      ...(sizeDisplay !== undefined && { sizeDisplay }),
+      ...(colourCombination !== undefined && { colourCombination }),
+      ...(flowerType !== undefined && { flowerType }),
+      ...(priceMin !== undefined && { priceMin: parseFloat(priceMin) }),
+      ...(priceMax !== undefined && { priceMax: parseFloat(priceMax) }),
+    };
+
+    const result = await pool.query(
+      "UPDATE image_management SET image_data = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
+      [JSON.stringify(updatedData), id]
+    );
+
+    const img = result.rows[0];
+    img.image_data = typeof img.image_data === "string" ? JSON.parse(img.image_data) : img.image_data;
+    res.json({ message: "Image updated successfully", image: img });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getImages,
   getFolders,
@@ -291,6 +358,7 @@ module.exports = {
   deleteImage,
   getImageById,
   updateImageFolder,
+  updateImage,
   UPLOAD_ROLES,
   DELETE_ROLES,
   VIEW_ROLES

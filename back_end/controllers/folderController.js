@@ -65,7 +65,7 @@ const deleteFolder = async (req, res) => {
     const folderName = folderResult.rows[0].name;
     const sanitizedFolder = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
-    const imagesResult = await pool.query("SELECT image_data FROM images WHERE folder_name = $1", [folderName]);
+    const imagesResult = await pool.query("SELECT image_data FROM image_management WHERE folder_name = $1", [folderName]);
     for (const row of imagesResult.rows) {
       const imageData = typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data;
       if (imageData && imageData.imageUrl) {
@@ -76,7 +76,7 @@ const deleteFolder = async (req, res) => {
       }
     }
 
-    await pool.query("DELETE FROM images WHERE folder_name = $1", [folderName]);
+    await pool.query("DELETE FROM image_management WHERE folder_name = $1", [folderName]);
 
     const uploadDir = path.join(__dirname, "..", "uploads", sanitizedFolder);
     if (fs.existsSync(uploadDir)) {

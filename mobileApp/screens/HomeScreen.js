@@ -27,8 +27,6 @@ function HomeScreen({ navigation }) {
   const [activeFilters, setActiveFilters] = useState(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("folders");
-  const [favorites, setFavorites] = useState([]);
-  const [favoritesSet, setFavoritesSet] = useState(new Set());
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [folderDescription, setFolderDescription] = useState("");
@@ -63,7 +61,6 @@ function HomeScreen({ navigation }) {
   useEffect(() => {
     if (user) {
       loadFolders();
-      loadFavorites();
     }
   }, [user]);
 
@@ -73,35 +70,6 @@ function HomeScreen({ navigation }) {
       setFolders(list);
     } catch (err) {
       console.error("Failed to load folders:", err);
-    }
-  };
-
-  const loadFavorites = async () => {
-    try {
-      const list = await ApiService.getFavorites();
-      setFavorites(list);
-      setFavoritesSet(new Set(list.map(f => f.id)));
-    } catch (err) {
-      console.error("Failed to load favorites:", err);
-    }
-  };
-
-  const toggleFavorite = async (imageId) => {
-    try {
-      if (favoritesSet.has(imageId)) {
-        await ApiService.removeFavorite(imageId);
-        setFavoritesSet(prev => { const n = new Set(prev); n.delete(imageId); return n; });
-        setFavorites(prev => prev.filter(f => f.id !== imageId));
-      } else {
-        const img = favorites.find(f => f.id === imageId);
-        if (img) {
-          await ApiService.addFavorite(imageId);
-          setFavoritesSet(prev => new Set([...prev, imageId]));
-          setFavorites(prev => [...prev, img]);
-        }
-      }
-    } catch (err) {
-      console.error("Toggle favorite failed:", err);
     }
   };
 
@@ -216,7 +184,6 @@ function HomeScreen({ navigation }) {
       }
       setSelectedImagesForMove(new Set());
       setShowMoveModal(false);
-      loadFavorites();
     } catch (err) {
       Alert.alert("Error", err.message);
     } finally {
@@ -252,35 +219,9 @@ function HomeScreen({ navigation }) {
   const renderImageCard = ({ item, isFilteredView = false }) => {
     const imgUrl = getImgUrl(item);
     const isSelected = selectedImagesForMove.has(item.id);
-    const isFav = favoritesSet.has(item.id);
 
     return (
       <View style={[styles.imageCard, isSelected && styles.imageCardSelected]}>
-        <TouchableOpacity
-          style={styles.favBtn}
-          onPress={() => toggleFavorite(item.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={[styles.favBtnText, isFav && styles.favBtnActive]}>
-            {isFav ? "★" : "☆"}
-          </Text>
-        </TouchableOpacity>
-
-        {view === "favorites" && (
-          <TouchableOpacity
-            style={[styles.selectCheckbox, isSelected && styles.selectCheckboxActive]}
-            onPress={() => {
-              setSelectedImagesForMove(prev => {
-                const n = new Set(prev);
-                n.has(item.id) ? n.delete(item.id) : n.add(item.id);
-                return n;
-              });
-            }}
-          >
-            {isSelected && <Text style={styles.checkmark}>✓</Text>}
-          </TouchableOpacity>
-        )}
-
         <TouchableOpacity onPress={() => setLightboxImage({ url: imgUrl, data: item.image_data, id: item.id })} activeOpacity={0.9}>
           {imgUrl ? (
             <Image source={{ uri: imgUrl }} style={styles.imageCardImg} resizeMode="cover" />
@@ -302,42 +243,6 @@ function HomeScreen({ navigation }) {
       };
 
   const renderMainContent = () => {
-    if (view === "favorites") {
-      return (
-        <View style={styles.page}>
-          <View style={styles.actionBar}>
-            <Text style={styles.pageTitle}>Favorites</Text>
-            {canUpload && (
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddFolderModal(true)}>
-                <Text style={styles.addBtnText}>+ Add Folder</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {view === "favorites" && selectedImagesForMove.size > 0 && (
-            <TouchableOpacity style={styles.moveBtn} onPress={() => setShowMoveModal(true)}>
-              <Text style={styles.moveBtnText}>Move ({selectedImagesForMove.size}) to Folder</Text>
-            </TouchableOpacity>
-          )}
-          {loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
-          ) : favorites.length === 0 ? (
-            <View style={styles.center}><Text style={styles.emptyText}>No favorites yet. Star an image to add it!</Text></View>
-          ) : (
-            <FlatList
-              data={favorites}
-              renderItem={(props) => renderImageCard({ ...props, isFilteredView: false })}
-              keyExtractor={item => item.id?.toString()}
-              numColumns={numColumns}
-              key={`fav-${numColumns}`}
-              contentContainerStyle={styles.grid}
-              columnWrapperStyle={styles.gridRow}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
-        </View>
-      );
-    }
-
     return (
       <View style={styles.page}>
         <View style={styles.actionBar}>
@@ -399,12 +304,6 @@ function HomeScreen({ navigation }) {
       <View style={styles.navbar}>
         <Text style={styles.navbarTitle}>Event Management</Text>
         <View style={styles.navbarRight}>
-          <TouchableOpacity
-            style={styles.navBtn}
-            onPress={() => setView(view === "favorites" ? "folders" : "favorites")}
-          >
-            <Text style={styles.navBtnText}>{view === "favorites" ? "Folders" : "★ Favorites"}</Text>
-          </TouchableOpacity>
           <Text style={styles.userText} numberOfLines={1}>
             {user?.displayName || user?.username}
           </Text>
@@ -620,16 +519,6 @@ function HomeScreen({ navigation }) {
           <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxImage(null)}>
             <Text style={styles.lightboxCloseText}>X</Text>
           </TouchableOpacity>
-          {lightboxImage?.id && (
-            <TouchableOpacity
-              style={styles.lightboxFav}
-              onPress={() => toggleFavorite(lightboxImage.id)}
-            >
-              <Text style={[styles.lightboxFavText, favoritesSet.has(lightboxImage.id) && styles.lightboxFavActive]}>
-                {favoritesSet.has(lightboxImage.id) ? "★" : "☆"}
-              </Text>
-            </TouchableOpacity>
-          )}
           {lightboxImage?.url ? (
             <Image source={{ uri: lightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
           ) : (
@@ -723,12 +612,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
   },
   imageCardSelected: { borderWidth: 2, borderColor: "#f59e0b" },
-  favBtn: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.9)", justifyContent: "center", alignItems: "center" },
-  favBtnText: { fontSize: 18, color: "#d1d5db" },
-  favBtnActive: { color: "#f59e0b" },
-  selectCheckbox: { position: "absolute", top: 8, left: 8, zIndex: 10, width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: "#d1d5db", backgroundColor: "rgba(255,255,255,0.9)", justifyContent: "center", alignItems: "center" },
-  selectCheckboxActive: { backgroundColor: "#f59e0b", borderColor: "#f59e0b" },
-  checkmark: { color: "#fff", fontSize: 14, fontWeight: "700" },
   imageCardImg: { width: "100%", height: cardWidth * 0.75 },
   imagePlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
   placeholderText: { color: "#9ca3af", fontSize: 14 },
@@ -785,9 +668,6 @@ const styles = StyleSheet.create({
   lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
   lightboxClose: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
   lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  lightboxFav: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, left: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
-  lightboxFavText: { fontSize: 20, color: "#d1d5db" },
-  lightboxFavActive: { color: "#f59e0b" },
   lightboxImg: { width: "90%", height: "60%" },
   lightboxInfo: { position: "absolute", bottom: 40, left: 20, right: 20, backgroundColor: "rgba(0,0,0,0.7)", padding: 16, borderRadius: 12 },
   lightboxTitle: { fontSize: 18, fontWeight: "600", color: "#fff" },

@@ -114,7 +114,7 @@ const uploadExcel = async (req, res) => {
 
       try {
         const query = `
-          INSERT INTO images (folder_name, image_data, created_by)
+          INSERT INTO image_management (folder_name, image_data, employee_id)
           VALUES ($1, $2, $3)
           RETURNING *
         `;
@@ -128,10 +128,10 @@ const uploadExcel = async (req, res) => {
     fs.unlinkSync(excelFile.path);
 
     res.status(201).json({
-      message: `Uploaded ${results.length} images${errors.length > 0 ? ` with ${errors.length} errors` : ""}`,
+      message: `Uploaded ${results.length} image_management${errors.length > 0 ? ` with ${errors.length} errors` : ""}`,
       uploaded: results.length,
       errors: errors.length > 0 ? errors : undefined,
-      images: results,
+      image_management: results,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

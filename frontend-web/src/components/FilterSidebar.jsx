@@ -4,28 +4,22 @@ import RangeSlider from "./RangeSlider";
 import ColorPicker, { COLORS } from "./ColorPicker";
 
 const DECOR_TYPES = [
-  "Name board",
-  "Stage Ceiling",
-  "Hall side Decoration",
-  "Hall ceiling work",
-  "Hall Entrance",
-  "Receiption Area",
-  "Pathway",
-  "Main Entrance",
-  "Orchestra Stage",
-  "Car Decoration",
-  "Selfie Area",
-  "Bedroom Decoration",
-  "Home Decoration",
-  "Lighting work in Home",
-  "Lighting work in Mahal",
-  "Audio work",
+  "Name board", "Stage Ceiling", "Hall side Decoration",
+  "Hall ceiling work", "Hall Entrance", "Receiption Area",
+  "Pathway", "Main Entrance", "Orchestra Stage", "Car Decoration",
+  "Selfie Area", "Bedroom Decoration", "Home Decoration",
+  "Lighting work in Home", "Lighting work in Mahal", "Audio work",
 ];
 
-const VENUES = ["Indoor", "Outdoor", "Ballroom", "Garden", "Historic", "Industrial"];
 const SIZES = ["Small (1–50)", "Medium (51–200)", "Large (200+)", "Extra Large (500+)"];
 const EVENT_TIMES = ["Morning", "Afternoon", "Evening/Night"];
-const EVENT_TYPES = ["Wedding", "Corporate", "Birthday", "Gala", "Conference", "Social"];
+const EVENT_TYPES = [
+  "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
+  "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
+  "Shashtiabdapoorti", "Surprise Gift", "Salagai Poojai", "Annual Day",
+  "Labour Day", "Naming Ceremony", "Holy Communion", "Farewell",
+  "Kari Virundhu", "Get Together"
+];
 const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
 const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 
@@ -59,7 +53,6 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
       searchText: filters?.searchText || "",
       designName: filters?.designName || "",
       colors: selectedColors,
-      venues: selectedVenues,
       venueFilter,
       sizes: selectedSizes,
       sizeFilters,
@@ -91,6 +84,19 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     type.toLowerCase().includes(decorTypeSearch.toLowerCase())
   );
 
+  const buildSizeDisplay = () => {
+    const w = sizeFilters.width;
+    const l = sizeFilters.length;
+    const h = sizeFilters.height;
+    const u = sizeFilters.unit;
+    const parts = [];
+    if (w) parts.push(w);
+    if (l) parts.push(l);
+    if (h) parts.push(h);
+    if (parts.length === 0) return "";
+    return parts.join("x") + (u ? ` ${u}` : "");
+  };
+
   return (
     <div className="filter-sidebar">
       <div className="filter-sidebar-header">
@@ -121,15 +127,6 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 value={filters?.searchText || ""}
                 onChange={(e) => onFilterChange?.({ ...filters, searchText: e.target.value })}
               />
-            </div>
-            <div className="filter-select-wrapper">
-              <select
-                className="filter-select"
-                value={filters?.designName || ""}
-                onChange={(e) => onFilterChange?.({ ...filters, designName: e.target.value })}
-              >
-                <option value="">Select Design</option>
-              </select>
             </div>
           </div>
         </Accordion>
@@ -210,35 +207,59 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 }}
               />
             </div>
-            <div className="checkbox-list" style={{ marginTop: "12px" }}>
-              {VENUES.map((venue) => (
-                <label key={venue} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedVenues.includes(venue)}
-                    onChange={() => toggleCheckbox(venue, selectedVenues, setSelectedVenues)}
-                  />
-                  <span className="checkbox-label">{venue}</span>
-                </label>
-              ))}
-            </div>
           </div>
         </Accordion>
 
-        <Accordion title="Size (Capacity)">
+        <Accordion title="Size">
           <div className="filter-section">
-            <div className="checkbox-list">
-              {SIZES.map((size) => (
-                <label key={size} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedSizes.includes(size)}
-                    onChange={() => toggleCheckbox(size, selectedSizes, setSelectedSizes)}
-                  />
-                  <span className="checkbox-label">{size}</span>
-                </label>
-              ))}
+            <div className="size-input-group">
+              <div className="size-input-row">
+                <input
+                  type="number"
+                  className="filter-input size-input"
+                  placeholder="Width"
+                  value={sizeFilters.width}
+                  min="0"
+                  onWheel={(e) => e.target.blur()}
+                  onChange={(e) => setSizeFilters({ ...sizeFilters, width: e.target.value })}
+                />
+                <span className="size-label">x</span>
+                <input
+                  type="number"
+                  className="filter-input size-input"
+                  placeholder="Length"
+                  value={sizeFilters.length}
+                  min="0"
+                  onWheel={(e) => e.target.blur()}
+                  onChange={(e) => setSizeFilters({ ...sizeFilters, length: e.target.value })}
+                />
+                <span className="size-label">x</span>
+                <input
+                  type="number"
+                  className="filter-input size-input"
+                  placeholder="Height"
+                  value={sizeFilters.height}
+                  min="0"
+                  onWheel={(e) => e.target.blur()}
+                  onChange={(e) => setSizeFilters({ ...sizeFilters, height: e.target.value })}
+                />
+              </div>
+              <select
+                className="filter-select size-unit-select"
+                value={sizeFilters.unit}
+                onChange={(e) => setSizeFilters({ ...sizeFilters, unit: e.target.value })}
+              >
+                {SIZE_UNITS.map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
             </div>
+            {buildSizeDisplay() && (
+              <div className="size-display-preview">
+                <span className="size-preview-label">Size: </span>
+                <span className="size-preview-value">{buildSizeDisplay()}</span>
+              </div>
+            )}
           </div>
         </Accordion>
 
@@ -277,23 +298,6 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
               value={priceRange}
               onChange={setPriceRange}
             />
-          </div>
-        </Accordion>
-
-        <Accordion title="Event Time">
-          <div className="filter-section">
-            <div className="checkbox-list">
-              {EVENT_TIMES.map((time) => (
-                <label key={time} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedEventTimes.includes(time)}
-                    onChange={() => toggleCheckbox(time, selectedEventTimes, setSelectedEventTimes)}
-                  />
-                  <span className="checkbox-label">{time}</span>
-                </label>
-              ))}
-            </div>
           </div>
         </Accordion>
       </div>

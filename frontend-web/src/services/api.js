@@ -87,6 +87,13 @@ const ApiService = {
     });
   },
 
+  async updateImage(id, imageData) {
+    return request(`/images/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(imageData),
+    });
+  },
+
   async deleteImage(id) {
     return request(`/images/${id}`, {
       method: "DELETE",
@@ -139,27 +146,6 @@ const ApiService = {
     return data;
   },
 
-  async getFavorites() {
-    return request("/favorites");
-  },
-
-  async addFavorite(imageId) {
-    return request("/favorites", {
-      method: "POST",
-      body: JSON.stringify({ imageId }),
-    });
-  },
-
-  async removeFavorite(imageId) {
-    return request(`/favorites/${imageId}`, {
-      method: "DELETE",
-    });
-  },
-
-  async getFavoriteStatus() {
-    return request("/favorites/status");
-  },
-
   async searchImages(filters) {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
@@ -177,6 +163,62 @@ const ApiService = {
 
   async moveImageToFolder(imageId, folderName) {
     return this.updateImageFolder(imageId, folderName);
+  },
+
+  async getFavorites(folder = null) {
+    const endpoint = folder
+      ? `/favorites?folder=${encodeURIComponent(folder)}`
+      : "/favorites";
+    return request(endpoint);
+  },
+
+  async addFavorite(imageId) {
+    return request("/favorites", {
+      method: "POST",
+      body: JSON.stringify({ imageId }),
+    });
+  },
+
+  async removeFavorite(imageId) {
+    return request(`/favorites/${imageId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getFavoriteFolders() {
+    return request("/favorites/folders");
+  },
+
+  async createFavoriteFolder(folderName, description = "") {
+    return request("/favorites/folders", {
+      method: "POST",
+      body: JSON.stringify({ folderName, description }),
+    });
+  },
+
+  async downloadImage(imageId) {
+    const url = `${API_BASE_URL}/download/${imageId}`;
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || "Download failed");
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = `image_${imageId}.webp`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    return { success: true };
   }
 };
 

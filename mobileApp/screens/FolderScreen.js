@@ -19,7 +19,6 @@ function FolderScreen({ route, navigation }) {
   const [user, setUser] = useState(null);
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [favoritesSet, setFavoritesSet] = useState(new Set());
   const [lightboxImage, setLightboxImage] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -46,29 +45,9 @@ function FolderScreen({ route, navigation }) {
       } finally {
         setLoading(false);
       }
-      try {
-        const favList = await ApiService.getFavorites();
-        setFavoritesSet(new Set(favList.map(f => f.id)));
-      } catch (err) {
-        console.error("Failed to load favorites:", err);
-      }
     };
     loadData();
   }, [user, folder.name]);
-
-  const toggleFavorite = async (imageId) => {
-    try {
-      if (favoritesSet.has(imageId)) {
-        await ApiService.removeFavorite(imageId);
-        setFavoritesSet(prev => { const n = new Set(prev); n.delete(imageId); return n; });
-      } else {
-        await ApiService.addFavorite(imageId);
-        setFavoritesSet(prev => new Set([...prev, imageId]));
-      }
-    } catch (err) {
-      console.error("Toggle favorite failed:", err);
-    }
-  };
 
   const handleImageSelect = () => {
     launchImageLibrary({ mediaType: "photo", quality: 0.8 }, (res) => {
@@ -129,20 +108,9 @@ function FolderScreen({ route, navigation }) {
 
   const renderItem = ({ item }) => {
     const imgUrl = getImgUrl(item);
-    const isFav = favoritesSet.has(item.id);
 
     return (
       <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.favBtn}
-          onPress={() => toggleFavorite(item.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={[styles.favBtnText, isFav && styles.favBtnActive]}>
-            {isFav ? "★" : "☆"}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity onPress={() => setLightboxImage({ url: imgUrl, data: item.image_data, id: item.id })} activeOpacity={0.9}>
           {imgUrl ? (
             <Image source={{ uri: imgUrl }} style={styles.cardImg} resizeMode="cover" />
@@ -237,13 +205,6 @@ function FolderScreen({ route, navigation }) {
           <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxImage(null)}>
             <Text style={styles.lightboxCloseText}>X</Text>
           </TouchableOpacity>
-          {lightboxImage?.id && (
-            <TouchableOpacity style={styles.lightboxFav} onPress={() => toggleFavorite(lightboxImage.id)}>
-              <Text style={[styles.lightboxFavText, favoritesSet.has(lightboxImage.id) && styles.lightboxFavActive]}>
-                {favoritesSet.has(lightboxImage.id) ? "★" : "☆"}
-              </Text>
-            </TouchableOpacity>
-          )}
           {lightboxImage?.url ? (
             <Image source={{ uri: lightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
           ) : (
@@ -287,9 +248,6 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
   },
-  favBtn: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.9)", justifyContent: "center", alignItems: "center" },
-  favBtnText: { fontSize: 18, color: "#d1d5db" },
-  favBtnActive: { color: "#f59e0b" },
   cardImg: { width: "100%", height: cardWidth * 0.75 },
   cardPlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
   placeholderText: { color: "#9ca3af", fontSize: 14 },
@@ -315,9 +273,6 @@ const styles = StyleSheet.create({
   lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
   lightboxClose: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
   lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  lightboxFav: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, left: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
-  lightboxFavText: { fontSize: 20, color: "#d1d5db" },
-  lightboxFavActive: { color: "#f59e0b" },
   lightboxImg: { width: "90%", height: "60%" },
   lightboxInfo: { position: "absolute", bottom: 40, left: 20, right: 20, backgroundColor: "rgba(0,0,0,0.7)", padding: 16, borderRadius: 12 },
   lightboxTitle: { fontSize: 18, fontWeight: "600", color: "#fff" },

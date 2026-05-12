@@ -4,24 +4,19 @@ const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMe
 
 const UPLOAD_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
-const EVENT_TYPES = ["Wedding", "Corporate", "Birthday", "Gala", "Conference", "Social"];
+const EVENT_TYPES = [
+  "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
+  "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
+  "Shashtiabdapoorti", "Surprise Gift", "Salagai Poojai", "Annual Day",
+  "Labour Day", "Naming Ceremony", "Holy Communion", "Farewell",
+  "Kari Virundhu", "Get Together"
+];
 const DECOR_TYPES = [
-  "Name board",
-  "Stage Ceiling",
-  "Hall side Decoration",
-  "Hall ceiling work",
-  "Hall Entrance",
-  "Receiption Area",
-  "Pathway",
-  "Main Entrance",
-  "Orchestra Stage",
-  "Car Decoration",
-  "Selfie Area",
-  "Bedroom Decoration",
-  "Home Decoration",
-  "Lighting work in Home",
-  "Lighting work in Mahal",
-  "Audio work",
+  "Name board", "Stage Ceiling", "Hall side Decoration",
+  "Hall ceiling work", "Hall Entrance", "Receiption Area",
+  "Pathway", "Main Entrance", "Orchestra Stage", "Car Decoration",
+  "Selfie Area", "Bedroom Decoration", "Home Decoration",
+  "Lighting work in Home", "Lighting work in Mahal", "Audio work",
 ];
 
 const VENUES = ["Indoor", "Outdoor", "Ballroom", "Garden", "Historic", "Industrial"];

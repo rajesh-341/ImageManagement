@@ -140,28 +140,6 @@ class ApiService {
     });
   }
 
-  // Favorites
-  async getFavorites() {
-    return this.request("/favorites");
-  }
-
-  async addFavorite(imageId) {
-    return this.request("/favorites", {
-      method: "POST",
-      body: JSON.stringify({ imageId }),
-    });
-  }
-
-  async removeFavorite(imageId) {
-    return this.request(`/favorites/${imageId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async getFavoriteStatus() {
-    return this.request("/favorites/status");
-  }
-
   // Search / Filters
   async searchImages(filters) {
     const params = new URLSearchParams();

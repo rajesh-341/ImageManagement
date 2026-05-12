@@ -16,6 +16,7 @@ const favoriteRoutes = require("./routes/favoriteRoutes");
 const { uploadExcel } = require("./controllers/excelController");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
+const pool = require("./config/db");
 
 const app = express();
 
@@ -138,6 +139,27 @@ const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+app.get("/api/download/:id", verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT image_data FROM image_management WHERE id = $1", [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ message: "Image not found" });
+
+    const imgData = typeof result.rows[0].image_data === "string"
+      ? JSON.parse(result.rows[0].image_data)
+      : result.rows[0].image_data;
+
+    if (!imgData || !imgData.imageUrl) return res.status(404).json({ message: "Image file not found" });
+
+    const filePath = path.join(__dirname, imgData.imageUrl.replace(/^\//, ""));
+    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
+
+    const filename = path.basename(filePath);
+    res.download(filePath, filename);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.use("/uploads", express.static(uploadsDir, {
   setHeaders: (res, filePath) => {
     res.set("Cache-Control", "public, max-age=86400");
