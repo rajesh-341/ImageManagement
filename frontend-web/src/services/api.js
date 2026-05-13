@@ -59,8 +59,8 @@ const ApiService = {
     return request(endpoint);
   },
 
-  async getFolders() {
-    return request("/folders");
+  async getFolders(scope = "home") {
+    return request(`/folders?scope=${encodeURIComponent(scope)}`);
   },
 
   async createFolder(folderName, description = "") {
@@ -193,6 +193,31 @@ const ApiService = {
     return request("/favorites/folders", {
       method: "POST",
       body: JSON.stringify({ folderName, description }),
+    });
+  },
+
+  async getUsers() {
+    const data = await request("/users");
+    return data.users || [];
+  },
+
+  async createUser(userData) {
+    return request("/users", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    });
+  },
+
+  async updateUser(id, userData) {
+    return request(`/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(userData),
+    });
+  },
+
+  async deleteUser(id) {
+    return request(`/users/${id}`, {
+      method: "DELETE",
     });
   },
 

@@ -3,6 +3,10 @@ const path = require("path");
 const fs = require("fs");
 const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES } = require("../config/constants");
 
+const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
+
+const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.toLowerCase());
+
 const getImages = async (req, res) => {
   try {
     const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText } = req.query;
@@ -12,6 +16,12 @@ const getImages = async (req, res) => {
     let paramIndex = 1;
 
     const conditions = [];
+
+    if (!isAdmin(req.user.role)) {
+      conditions.push(`employee_id = $${paramIndex}`);
+      params.push(req.user.userId);
+      paramIndex++;
+    }
 
     if (searchText) {
       conditions.push(`(

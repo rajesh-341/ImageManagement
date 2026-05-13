@@ -13,6 +13,7 @@ const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
 const folderRoutes = require("./routes/folderRoutes");
 const favoriteRoutes = require("./routes/favoriteRoutes");
+const userRoutes = require("./routes/userRoutes");
 const { uploadExcel } = require("./controllers/excelController");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
@@ -21,9 +22,21 @@ const pool = require("./config/db");
 const app = express();
 
 app.use(helmet({
-  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", `${process.env.FRONTEND_URL || "http://localhost:3000"}`],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || "http://localhost:3000"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
 }));
 
 app.use(cors({
@@ -62,6 +75,18 @@ app.use((req, res, next) => {
   res.set("Expires", "0");
   res.set("X-Content-Type-Options", "nosniff");
   res.set("X-Frame-Options", "DENY");
+  res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    const csrfHeader = req.headers["x-requested-with"];
+    if (csrfHeader !== "XMLHttpRequest") {
+      return next();
+    }
+  }
   next();
 });
 
@@ -130,8 +155,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/folders", folderRoutes);
 app.use("/api/favorites", favoriteRoutes);
+app.use("/api/users", userRoutes);
 app.post("/api/upload-excel", verifyToken, upload.array("files", 100), uploadExcel);
-app.post("/api/logout", logout);
+app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
 // Serve uploaded images statically

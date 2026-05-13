@@ -1,17 +1,17 @@
 :root {
   /* Four-color theme system - Change colors here to reflect everywhere */
-  --primary-color: #2563eb;
-  --secondary-color: #64748b;
-  --accent-color: #f59e0b;
-  --background-color: #f8fafc;
+  --primary-color: #7EC0CE;
+  --secondary-color: #D56493;
+  --accent-color: #DA87A9;
+  --background-color: #F6DCE7;
   
   /* Additional colors derived from theme */
-  --primary-dark: #1d4ed8;
-  --primary-light: #3b82f6;
-  --secondary-dark: #475569;
-  --secondary-light: #94a3b8;
-  --accent-dark: #d97706;
-  --accent-light: #fbbf24;
+  --primary-dark: #6BAEBC;
+  --primary-light: #A0D0DB;
+  --secondary-dark: #C45382;
+  --secondary-light: #DA87A9;
+  --accent-dark: #C45382;
+  --accent-light: #F6DCE7;
   --background-dark: #e2e8f0;
   --background-card: #ffffff;
   
@@ -21,10 +21,10 @@
   --text-light: #ffffff;
   
   /* Status colors */
-  --success: #22c55e;
-  --error: #ef4444;
-  --warning: #f59e0b;
-  --info: #3b82f6;
+  --success: #7EC0CE;
+  --error: #D56493;
+  --warning: #DA87A9;
+  --info: #7EC0CE;
   
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -297,7 +297,7 @@ body {
 
 /* Navbar */
 .navbar {
-  background: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   padding: var(--spacing-md) var(--spacing-lg);
   display: flex;
   justify-content: space-between;
@@ -339,23 +339,18 @@ body {
   text-transform: uppercase;
 }
 
-.role-badge.captain, .role-badge.owner {
-  background: var(--primary-color);
-  color: var(--text-light);
-}
-
-.role-badge.vicecaptain {
-  background: var(--accent-color);
+.role-badge.captain, .role-badge.vicecaptain, .role-badge.owner {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: var(--text-light);
 }
 
 .role-badge.facilitator {
-  background: var(--secondary-color);
+  background: var(--accent-color);
   color: var(--text-light);
 }
 
 .role-badge.teamlead, .role-badge.teammember {
-  background: var(--success);
+  background: var(--primary-color);
   color: var(--text-light);
 }
 

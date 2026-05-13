@@ -20,13 +20,13 @@ const createFolder = async (req, res) => {
       return res.status(400).json({ message: "Folder name is required" });
     }
 
-    const existing = await pool.query("SELECT id FROM folders WHERE name = $1", [folderName]);
+    const existing = await pool.query("SELECT id FROM folders WHERE name = $1 AND (scope = 'home' OR scope IS NULL)", [folderName]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ message: "Folder already exists" });
     }
 
     const result = await pool.query(
-      "INSERT INTO folders (name, description, created_by) VALUES ($1, $2, $3) RETURNING *",
+      "INSERT INTO folders (name, description, created_by, scope) VALUES ($1, $2, $3, 'home') RETURNING *",
       [folderName, description || "", req.user.userId]
     );
 
@@ -38,7 +38,17 @@ const createFolder = async (req, res) => {
 
 const getFolders = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM folders ORDER BY created_at DESC");
+    const { scope } = req.query;
+    let query = "SELECT * FROM folders";
+    const params = [];
+    if (scope === 'home') {
+      query += " WHERE (scope = 'home' OR scope IS NULL)";
+    } else if (scope) {
+      query += " WHERE scope = $1";
+      params.push(scope);
+    }
+    query += " ORDER BY created_at DESC";
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -57,7 +67,7 @@ const deleteFolder = async (req, res) => {
 
     const { id } = req.params;
 
-    const folderResult = await pool.query("SELECT name FROM folders WHERE id = $1", [id]);
+    const folderResult = await pool.query("SELECT name, scope FROM folders WHERE id = $1", [id]);
     if (folderResult.rows.length === 0) {
       return res.status(404).json({ message: "Folder not found" });
     }

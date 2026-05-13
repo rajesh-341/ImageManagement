@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
 import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
-import ImageMeta from "../components/ImageMeta";
+import AutocompleteInput from "../components/AutocompleteInput";
 import "./ImageManagement.css";
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
+const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin"];
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
@@ -54,13 +55,39 @@ function ImageManagement() {
   const [favoriteImages, setFavoriteImages] = useState([]);
   const [favoriteFolders, setFavoriteFolders] = useState([]);
   const [showAddFavFolderModal, setShowAddFavFolderModal] = useState(false);
-  const [favFolderName, setFavFolderName] = useState("");
+  const [favCustName, setFavCustName] = useState("");
+  const [favVenue, setFavVenue] = useState("");
+  const [favEventDate, setFavEventDate] = useState("");
+  const [favFolderDesc, setFavFolderDesc] = useState("");
   const [selectedFavFolder, setSelectedFavFolder] = useState(null);
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("designName");
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
   const [editData, setEditData] = useState({});
+  const [formConfig, setFormConfig] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("formConfig")) || {}; } catch { return {}; }
+  });
+  const [showFormSettings, setShowFormSettings] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  const showNotif = (message, type = "error") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const saveFormConfig = (config) => {
+    setFormConfig(config);
+    localStorage.setItem("formConfig", JSON.stringify(config));
+  };
+
+  const isFieldRequired = (fieldKey) => formConfig[fieldKey] !== false;
+
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [userForm, setUserForm] = useState({ username: "", displayName: "", role: "", password: "" });
+  const [editingUser, setEditingUser] = useState(null);
+  const [visiblePasswords, setVisiblePasswords] = useState(new Set());
 
   const [customerName, setCustomerName] = useState("");
   const [venueName, setVenueName] = useState("");
@@ -71,8 +98,6 @@ function ImageManagement() {
     designName: "",
     eventType: "",
     decorType: "",
-    venueCustomer: "",
-    venue: "",
     venueDate: "",
     sizeWidth: "",
     sizeLength: "",
@@ -112,7 +137,14 @@ function ImageManagement() {
   }, [navigate]);
 
   useEffect(() => {
-    if (user) loadFolders();
+    if (user) {
+      loadFolders();
+      const isFolderViewUser = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+      if (!isFolderViewUser) {
+        setView("images");
+        loadAllImages();
+      }
+    }
   }, [user]);
 
   useEffect(() => {
@@ -121,7 +153,7 @@ function ImageManagement() {
 
   const loadFolders = async () => {
     try {
-      const folderList = await ApiService.getFolders();
+      const folderList = await ApiService.getFolders("home");
       setFolders(folderList);
     } catch (err) {
       console.error("Failed to load folders:", err);
@@ -135,7 +167,7 @@ function ImageManagement() {
       const imageList = await ApiService.getImages(currentFolder.name);
       setImages(imageList);
     } catch (err) {
-      alert("Error loading images: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -177,6 +209,7 @@ function ImageManagement() {
       url: img.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "",
       data: img.image_data,
       id: img.id,
+      isFav: img.favourite,
       allImages: imageArray,
       currentIndex: index,
     });
@@ -184,8 +217,13 @@ function ImageManagement() {
 
   const handleAddFolder = async (e) => {
     e.preventDefault();
-    if (!customerName.trim() || !venueName.trim() || !eventDate) {
-      alert("Please fill all fields: Customer Name, Venue, and Event Date");
+    const missing = [];
+    if (isFieldRequired("folder_customerName") && !customerName.trim()) missing.push("Customer Name");
+    if (isFieldRequired("folder_venue") && !venueName.trim()) missing.push("Venue");
+    if (isFieldRequired("folder_eventDate") && !eventDate) missing.push("Event Date");
+    if (isFieldRequired("folder_description") && !folderDescription.trim()) missing.push("Description");
+    if (missing.length > 0) {
+      showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
       return;
     }
     const folderName = `${customerName.trim()}_${venueName.trim()}_${eventDate}`;
@@ -199,7 +237,7 @@ function ImageManagement() {
       setShowAddFolderModal(false);
       loadFolders();
     } catch (err) {
-      alert("Failed to create folder: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -217,7 +255,7 @@ function ImageManagement() {
       }
       loadFolders();
     } catch (err) {
-      alert("Failed to delete folder: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -247,7 +285,7 @@ function ImageManagement() {
       reader.onloadend = () => setImagePreview(reader.result);
       reader.readAsDataURL(file);
     } else {
-      alert("Please select a valid image file");
+      showNotif("Please select a valid image file", "warning");
     }
   };
 
@@ -256,7 +294,7 @@ function ImageManagement() {
     const newRows = files.map(file => ({
       file, preview: URL.createObjectURL(file),
       designName: "", eventType: "", decorType: "",
-      venueCustomer: "", venueName: "", venueDate: "",
+      venueDate: "",
       sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
       colours: "", flowerType: "", priceMin: "", priceMax: "",
     }));
@@ -292,7 +330,7 @@ function ImageManagement() {
 
   const handleUploadBatch = async (e) => {
     e.preventDefault();
-    if (batchImages.length === 0) { alert("Please select at least one image"); return; }
+    if (batchImages.length === 0) { showNotif("Please select at least one image", "warning"); return; }
     setLoading(true);
     setUploadProgress(`Uploading 0 of ${batchImages.length} images...`);
     let successCount = 0;
@@ -303,6 +341,7 @@ function ImageManagement() {
         setUploadProgress(`Uploading ${i + 1} of ${batchImages.length} images...`);
         try {
           const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
+          const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
           const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
           const colours = Array.isArray(row.colours)
             ? row.colours
@@ -319,8 +358,8 @@ function ImageManagement() {
             designName: row.designName,
             eventType: row.eventType,
             decorType: row.decorType,
-            venueCustomer: row.venueCustomer,
-            venueName: row.venueName,
+            venueCustomer: folderCustomer,
+            venueName: folderVenue,
             venueDate: row.venueDate,
             flowerType: row.flowerType,
             priceMin: row.priceMin,
@@ -343,7 +382,7 @@ function ImageManagement() {
         setUploadTab("single");
       }, 2000);
     } catch (err) {
-      alert("Batch upload failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -351,16 +390,24 @@ function ImageManagement() {
 
   const handleUploadSingleImage = async (e) => {
     e.preventDefault();
-    if (!selectedImage) { alert("Please select an image"); return; }
-    if (!imageData.designName) { alert("Design Name is required"); return; }
-    if (!imageData.eventType) { alert("Event Type is required"); return; }
-    if (!imageData.decorType) { alert("Decoration Type is required"); return; }
-    if (imageData.colours.length === 0) { alert("Please select at least one colour"); return; }
-    if (!imageData.flowerType) { alert("Flower Type is required"); return; }
+    if (!selectedImage) { showNotif("Please select an image", "warning"); return; }
+    const missing = [];
+    if (isFieldRequired("image_designName") && !imageData.designName) missing.push("Design Name");
+    if (isFieldRequired("image_eventType") && !imageData.eventType) missing.push("Event Type");
+    if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
+    if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
+    if (isFieldRequired("image_flowerType") && !imageData.flowerType) missing.push("Flower Type");
+    if (isFieldRequired("image_venueDate") && !imageData.venueDate) missing.push("Event Date");
+    if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
+    if (missing.length > 0) {
+      showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
+      return;
+    }
     setLoading(true);
     setUploadProgress("Uploading image...");
     try {
       const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
+      const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
       const metaData = {
         folderName: currentFolder.name,
@@ -374,8 +421,8 @@ function ImageManagement() {
         designName: imageData.designName,
         eventType: imageData.eventType,
         decorType: imageData.decorType,
-        venueCustomer: imageData.venueCustomer,
-        venueName: imageData.venue,
+        venueCustomer: folderCustomer,
+        venueName: folderVenue,
         venueDate: imageData.venueDate,
         flowerType: imageData.flowerType,
         priceMin: imageData.priceMin,
@@ -386,7 +433,7 @@ function ImageManagement() {
       setUploadProgress("Uploaded successfully!");
       setSelectedImage(null);
       setImagePreview("");
-      setImageData({ designName: "", eventType: "", decorType: "", venueCustomer: "", venue: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+      setImageData({ designName: "", eventType: "", decorType: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
       loadImages();
       setTimeout(() => {
         setShowUploadModal(false);
@@ -394,7 +441,7 @@ function ImageManagement() {
         setUploadTab("single");
       }, 1500);
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -402,7 +449,7 @@ function ImageManagement() {
 
   const handleUploadExcel = async (e) => {
     e.preventDefault();
-    if (!selectedExcelFile) { alert("Please select an Excel file"); return; }
+    if (!selectedExcelFile) { showNotif("Please select an Excel file", "warning"); return; }
     setLoading(true);
     setUploadProgress("Uploading and processing Excel file...");
     try {
@@ -415,7 +462,7 @@ function ImageManagement() {
       loadImages();
       setTimeout(() => { setShowUploadModal(false); setUploadProgress(""); }, 2000);
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -429,7 +476,7 @@ function ImageManagement() {
       loadImages();
       if (showFavorites) loadFavorites(selectedFavFolder?.name);
     } catch (err) {
-      alert("Delete failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -444,11 +491,10 @@ function ImageManagement() {
         await ApiService.deleteImage(id);
       }
       setSelectedImageIds(new Set());
-      setSelectionMode(false);
       loadImages();
       if (showFavorites) loadFavorites(selectedFavFolder?.name);
     } catch (err) {
-      alert("Delete failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -475,6 +521,9 @@ function ImageManagement() {
       } else {
         await ApiService.addFavorite(imageId);
       }
+      if (lightboxImage && lightboxImage.id === imageId) {
+        setLightboxImage(prev => ({ ...prev, isFav: !isFavorite }));
+      }
       loadImages();
       if (showFavorites) {
         loadFavorites(selectedFavFolder?.name);
@@ -482,7 +531,7 @@ function ImageManagement() {
       }
       if (view === "images") loadAllImages();
     } catch (err) {
-      alert("Failed to update favorite: " + err.message);
+      showNotif("Something went wrong");
     }
   };
 
@@ -504,11 +553,10 @@ function ImageManagement() {
       }
       setSelectedImageIds(new Set());
       setShowMoveModal(false);
-      setSelectionMode(false);
       loadImages();
       if (showFavorites) loadFavorites(selectedFavFolder?.name);
     } catch (err) {
-      alert("Move failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -534,7 +582,7 @@ function ImageManagement() {
       setView("filtered");
     } catch (err) {
       console.error("Filter search failed:", err);
-      alert("Search failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -564,19 +612,22 @@ function ImageManagement() {
       setFilteredImages(data);
       setView("filtered");
     } catch (err) {
-      alert("Search failed: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
   const handleToggleFavorites = () => {
-    setShowFavorites(!showFavorites);
-    if (!showFavorites) {
+    const wasShowing = showFavorites;
+    setShowFavorites(!wasShowing);
+    if (!wasShowing) {
       loadFavorites();
       loadFavoriteFolders();
       setCurrentFolder(null);
       setFilteredImages([]);
+    } else if (!canViewFolders) {
+      loadAllImages();
     }
   };
 
@@ -592,14 +643,25 @@ function ImageManagement() {
 
   const handleCreateFavFolder = async (e) => {
     e.preventDefault();
-    if (!favFolderName.trim()) { alert("Please enter a folder name"); return; }
+    const missing = [];
+    if (isFieldRequired("folder_customerName") && !favCustName.trim()) missing.push("Customer Name");
+    if (isFieldRequired("folder_venue") && !favVenue.trim()) missing.push("Venue");
+    if (isFieldRequired("folder_eventDate") && !favEventDate) missing.push("Event Date");
+    if (missing.length > 0) {
+      showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
+      return;
+    }
+    const folderName = `${favCustName.trim()}_${favVenue.trim()}_${favEventDate}`;
     try {
-      await ApiService.createFavoriteFolder(favFolderName.trim());
-      setFavFolderName("");
+      await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim());
+      setFavCustName("");
+      setFavVenue("");
+      setFavEventDate("");
+      setFavFolderDesc("");
       setShowAddFavFolderModal(false);
       loadFavoriteFolders();
     } catch (err) {
-      alert("Failed to create folder: " + err.message);
+      showNotif("Something went wrong");
     }
   };
 
@@ -641,10 +703,93 @@ function ImageManagement() {
       if (showFavorites) loadFavorites(selectedFavFolder?.name);
       if (view === "images") loadAllImages();
     } catch (err) {
-      alert("Failed to update image: " + err.message);
+      showNotif("Something went wrong");
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const userList = await ApiService.getUsers();
+      setUsers(userList);
+    } catch (err) {
+      console.error("Failed to load users:", err);
+    }
+  };
+
+  const handleOpenUserModal = () => {
+    loadUsers();
+    setShowUserModal(true);
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    if (!userForm.username || !userForm.displayName || !userForm.role || !userForm.password) {
+      showNotif("All fields are required", "warning");
+      return;
+    }
+    setLoading(true);
+    try {
+      await ApiService.createUser(userForm);
+      setUserForm({ username: "", displayName: "", role: "", password: "" });
+      loadUsers();
+    } catch (err) {
+      showNotif("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditUser = (user) => {
+    setEditingUser(user);
+    setUserForm({
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      password: "",
+    });
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    if (!userForm.username || !userForm.displayName || !userForm.role) {
+      showNotif("Username, display name, and role are required", "warning");
+      return;
+    }
+    setLoading(true);
+    try {
+      await ApiService.updateUser(editingUser.id, userForm);
+      setEditingUser(null);
+      setUserForm({ username: "", displayName: "", role: "", password: "" });
+      loadUsers();
+    } catch (err) {
+      showNotif("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (id, username) => {
+    if (!window.confirm(`Delete user "${username}"?`)) return;
+    setLoading(true);
+    try {
+      await ApiService.deleteUser(id);
+      loadUsers();
+    } catch (err) {
+      showNotif("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
   };
 
   const handleSwitchToImagesView = async () => {
@@ -656,90 +801,181 @@ function ImageManagement() {
     loadAllImages();
   };
 
+  const renderImageCardDetails = (data) => {
+    if (!data) return null;
+    const sizeDisplay = data.sizeDisplay || buildSizeDisplay(data.sizeWidth, data.sizeLength, data.sizeHeight, data.sizeUnit);
+    const priceDisplay = formatPrice(data.priceMin, data.priceMax);
+    return (
+      <div className="image-card-details-inline">
+        {sizeDisplay && <span className="detail-item"><strong>Size:</strong> {sizeDisplay}</span>}
+        {priceDisplay && <span className="detail-item"><strong>Price:</strong> {priceDisplay}</span>}
+        {data.decorType && <span className="detail-item"><strong>Decor:</strong> {data.decorType}</span>}
+        {data.eventType && <span className="detail-item"><strong>Event:</strong> {data.eventType}</span>}
+        {data.flowerType && <span className="detail-item"><strong>Flower:</strong> {data.flowerType}</span>}
+        {data.venueCustomer && <span className="detail-item"><strong>Customer:</strong> {data.venueCustomer}</span>}
+        {data.venueName && <span className="detail-item"><strong>Venue:</strong> {data.venueName}</span>}
+        {data.venueDate && <span className="detail-item"><strong>Date:</strong> {data.venueDate}</span>}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!lightboxImage) return;
+      if (e.key === "ArrowLeft") {
+        const all = lightboxImage.allImages;
+        const idx = lightboxImage.currentIndex;
+        if (all && idx > 0) openLightbox(all, idx - 1);
+      } else if (e.key === "ArrowRight") {
+        const all = lightboxImage.allImages;
+        const idx = lightboxImage.currentIndex;
+        if (all && idx < all.length - 1) openLightbox(all, idx + 1);
+      } else if (e.key === "Escape") {
+        setLightboxImage(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxImage]);
+
   const handleLogout = async () => {
     await ApiService.logout();
     navigate("/", { replace: true });
   };
 
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const displayName = user?.displayName || user?.username || "User";
   const role = user?.role || "N/A";
 
+  const monthsShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const formatPillDate = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = monthsShort[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} · ${month} · ${year}`;
+  };
+
+  const formatEventDate = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const month = monthsShort[d.getMonth()];
+    const day = d.getDate();
+    const year = d.getFullYear();
+    return `${month} ${day} ${year}`;
+  };
+
+  const renderDatePill = (dateStr) => {
+    const formatted = formatPillDate(dateStr);
+    if (!formatted) return null;
+    return <div className="date-pill">{formatted}</div>;
+  };
+
   const renderFolderDate = (folder) => {
     const dateStr = folder.created_at || folder.createdAt;
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    const days = String(d.getDate()).padStart(2, "0");
-    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-    const month = months[d.getMonth()];
-    const year = d.getFullYear();
+    return renderDatePill(dateStr);
+  };
+
+  const parseFolderName = (name) => {
+    if (!name) return { customerName: "", venue: "", eventDate: "" };
+    const parts = name.split("_");
+    return {
+      customerName: parts[0] || "",
+      venue: parts[1] || "",
+      eventDate: parts.slice(2).join("_") || "",
+    };
+  };
+
+  const renderFolderNameDisplay = (folder) => {
+    const { customerName, venue, eventDate } = parseFolderName(folder.name);
     return (
-      <div className="folder-date-vertical">
-        <span className="folder-date-day">{days}</span>
-        <span className="folder-date-month">{month}</span>
-        <span className="folder-date-year">{year}</span>
+      <div className="folder-name-labels">
+        <div className="folder-label-row">{customerName}</div>
+        <div className="folder-label-row">{venue}</div>
+        {eventDate && <div className="folder-label-row">{formatEventDate(eventDate)}</div>}
       </div>
     );
+  };
+
+  const formatPrice = (min, max) => {
+    if (min && max) return `₹${min} - ₹${max}`;
+    if (min) return `₹${min}+`;
+    if (max) return `Up to ₹${max}`;
+    return "";
   };
 
   const renderImageCard = (image, index, imageArray) => {
     const imgUrl = image.image_data?.imageUrl ? `${IMAGE_BASE_URL}${image.image_data.imageUrl}` : "";
     const isFav = image.favourite;
     const isSelected = selectedImageIds.has(image.id);
+    const data = image.image_data || {};
+    const buildSizeLabeled = (w, l, h) => {
+      const parts = [];
+      if (w && w !== "0") parts.push(`w:${w}`);
+      if (l && l !== "0") parts.push(`L:${l}`);
+      if (h && h !== "0") parts.push(`H:${h}`);
+      return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
+    };
+    const sizeDisplay = data.sizeDisplay ? data.sizeDisplay.replace(/(\d+)x(\d+)x(\d+)/, "w:$1 L:$2 H:$3") : buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
+    const priceDisplay = formatPrice(data.priceMin, data.priceMax);
 
     return (
       <div
         key={image.id}
         className={`image-card ${isSelected ? "selected" : ""}`}
-        onClick={() => {
-          if (selectionMode) {
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            toggleImageSelection(image.id);
+          } else if (selectedImageIds.size > 0 && isSelected) {
             toggleImageSelection(image.id);
           } else {
             openLightbox(imageArray, index);
           }
         }}
       >
-        {selectionMode && (
-          <div className={`image-select-checkbox ${isSelected ? "selected" : ""}`}>
-            {isSelected ? "✓" : ""}
-          </div>
-        )}
-        <button
-          className={`favorite-btn-card ${isFav ? "active" : ""}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleToggleFavorite(image.id, isFav);
-          }}
-          title={isFav ? "Remove from Favorites" : "Add to Favorites"}
-        >
-          {isFav ? "★" : "☆"}
-        </button>
-        {imgUrl ? (
-          <img className="image-card-img" src={imgUrl} alt={image.image_data?.designName}
-            onError={(e) => { e.target.onerror = null; e.target.src = ""; e.target.style.background = "#e5e7eb"; }}
-          />
-        ) : (
-          <div className="image-card-placeholder">No Image</div>
-        )}
-        <div className="image-card-content">
-          <h3>{image.image_data?.designName || "Untitled"}</h3>
-          <ImageMeta data={image.image_data} />
-          {canUpload && (
-            <div className="image-card-actions">
-              <button
-                className="btn-image-edit"
-                onClick={(e) => { e.stopPropagation(); handleEditImage(image); }}
-              >
-                Edit
-              </button>
-              <button
-                className="btn-image-delete"
-                onClick={(e) => { e.stopPropagation(); handleDeleteImage(image.id); }}
-              >
-                Delete
-              </button>
+        <div className="image-card-img-wrap">
+          {(isSelected || selectedImageIds.size > 0) && (
+            <div className={`image-select-checkbox ${isSelected ? "selected" : ""}`}
+              onClick={(e) => { e.stopPropagation(); toggleImageSelection(image.id); }}>
+              {isSelected ? "✓" : ""}
             </div>
           )}
+          <button
+            className={`favorite-btn-card ${isFav ? "active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleFavorite(image.id, isFav);
+            }}
+            title={isFav ? "Remove from Favorites" : "Add to Favorites"}
+          >
+            {isFav ? "★" : "☆"}
+          </button>
+          {imgUrl ? (
+            <img className="image-card-img" src={imgUrl} alt={data.designName}
+              onError={(e) => { e.target.onerror = null; e.target.src = ""; e.target.style.background = "#e5e7eb"; }}
+            />
+          ) : (
+            <div className="image-card-placeholder">No Image</div>
+          )}
+          <div className="image-card-hover-actions">
+            {canUpload && (
+              <>
+                <button className="btn-image-edit" onClick={(e) => { e.stopPropagation(); handleEditImage(image); }}>Edit</button>
+                <button className="btn-image-delete" onClick={(e) => { e.stopPropagation(); handleDeleteImage(image.id); }}>Delete</button>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="image-card-info">
+          <div className="image-card-design"><span className="info-label">Design Name -</span> {data.designName || "Untitled"}</div>
+          {sizeDisplay && <div className="image-card-size"><span className="info-label">Size -</span> {sizeDisplay}</div>}
+          {priceDisplay && <div className="image-card-price"><span className="info-label">Price range -</span> {priceDisplay}</div>}
+          {data.venueDate && <div className="image-card-date"><span className="info-label">Event Date -</span> {formatEventDate(data.venueDate)}</div>}
         </div>
       </div>
     );
@@ -756,7 +992,7 @@ function ImageManagement() {
       <div className="folder-main-content">
         <div className="action-bar">
           <div className="action-bar-left">
-            <h2>Folders</h2>
+            {canViewFolders && <h2>{view === "images" ? "All Images" : "Folders"}</h2>}
             <div className="common-search-bar">
               <select
                 className="common-search-select"
@@ -784,13 +1020,15 @@ function ImageManagement() {
             </div>
           </div>
           <div className="action-bar-buttons">
-            <button
-              className={`btn btn-view-toggle ${view === "images" ? "active" : ""}`}
-              onClick={handleSwitchToImagesView}
-              title={view === "images" ? "Show Folder View" : "Show All Images"}
-            >
-              {view === "images" ? "📁 Folders" : "🖼 Images"}
-            </button>
+            {canViewFolders && (
+              <button
+                className={`btn btn-view-toggle ${view === "images" ? "active" : ""}`}
+                onClick={handleSwitchToImagesView}
+                title={view === "images" ? "Show Folder View" : "Show All Images"}
+              >
+                {view === "images" ? "📁 Folders" : "🖼 Images"}
+              </button>
+            )}
             <button
               className={`btn btn-favorites ${showFavorites ? "active" : ""}`}
               onClick={handleToggleFavorites}
@@ -806,11 +1044,6 @@ function ImageManagement() {
               </svg>
               Filters
             </button>
-            {canUpload && !showFavorites && (
-              <button className="btn btn-primary btn-add-folder" onClick={() => setShowAddFolderModal(true)}>
-                + Add Folder
-              </button>
-            )}
           </div>
         </div>
 
@@ -826,7 +1059,7 @@ function ImageManagement() {
 
         {showFavorites ? renderFavoritesContent() : (
           view === "filtered" ? renderFilteredContent() :
-          view === "images" ? renderAllImagesContent() :
+          view === "images" || !canViewFolders ? renderAllImagesContent() :
           renderFoldersContent()
         )}
       </div>
@@ -844,7 +1077,7 @@ function ImageManagement() {
           <h3>Search Results ({filteredImages.length})</h3>
           <button className="btn-clear-filters" onClick={handleClearFilters}>Clear Filters</button>
         </div>
-        {selectionMode && renderSelectionToolbar()}
+        {selectedImageIds.size > 0 && renderSelectionToolbar()}
         <div className="image-grid">
           {filteredImages.map((image, index) => renderImageCard(image, index, filteredImages))}
         </div>
@@ -862,7 +1095,7 @@ function ImageManagement() {
         <div className="filter-results-header">
           <h3>All Images ({allImages.length})</h3>
         </div>
-        {selectionMode && renderSelectionToolbar()}
+        {selectedImageIds.size > 0 && renderSelectionToolbar()}
         <div className="image-grid">
           {allImages.map((image, index) => renderImageCard(image, index, allImages))}
         </div>
@@ -871,16 +1104,21 @@ function ImageManagement() {
   );
 
   const renderFoldersContent = () => (
-    folders.length === 0 ? (
+    folders.length === 0 && !canUpload ? (
       <div className="empty-state">
         <p>No folders yet. Create one to get started!</p>
       </div>
     ) : (
       <div className="folder-grid">
-        {sortedFolders.map(folder => {
-          const nameParts = folder.name ? folder.name.split("_") : [];
-          const displayName = nameParts.slice(0, 2).join(" - ") || folder.name;
-          return (
+        {canUpload && (
+          <div className="upload-box-card add-folder-box" onClick={() => setShowAddFolderModal(true)}>
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            <span>Add Folder</span>
+          </div>
+        )}
+        {sortedFolders.map(folder => (
             <div
               key={folder.id}
               className="folder-item"
@@ -902,15 +1140,16 @@ function ImageManagement() {
                   <path d="M8 16h18l6 6H8z" fill="#FFB300" />
                 </svg>
               </div>
-              <span className="folder-name">{displayName}</span>
+              <div className="folder-name-labels-wrap">
+                {renderFolderNameDisplay(folder)}
+              </div>
               {canUpload && (
                 <button className="folder-delete" onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}>
                   ×
                 </button>
               )}
             </div>
-          );
-        })}
+          ))}
       </div>
     )
   );
@@ -918,39 +1157,52 @@ function ImageManagement() {
   const renderFavoritesContent = () => (
     <div className="favorites-view">
       <div className="action-bar">
-        <h2>{selectedFavFolder ? selectedFavFolder.name : "★ Favorites"}</h2>
+        <h2>{selectedFavFolder ? parseFolderName(selectedFavFolder.name).customerName || selectedFavFolder.name : "★ Favorites"}</h2>
         <div className="action-bar-buttons">
-          {selectedFavFolder ? (
+          <button className="btn btn-secondary" onClick={() => setShowFavorites(false)}>← Home</button>
+          {selectedFavFolder && (
             <button className="btn btn-secondary" onClick={handleBackFromFavFolder}>Back</button>
-          ) : (
-            canUpload && (
-              <button className="btn btn-primary btn-add-folder" onClick={() => setShowAddFavFolderModal(true)}>
-                + Add Folder
-              </button>
-            )
           )}
         </div>
       </div>
 
-      {!selectedFavFolder && favoriteFolders.length > 0 && (
+      {!selectedFavFolder && (
         <div className="favorites-folders-row">
-          {favoriteFolders.map(folder => (
-            <div
-              key={folder.id}
-              className="folder-item"
-              onClick={() => handleEnterFavoriteFolder(folder)}
-            >
-              {renderFolderDate(folder)}
-              <div className="folder-icon">
-                <svg viewBox="0 0 64 64" width="64" height="64">
-                  <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
-                  <path d="M8 22h48v28H8z" fill="#FFD54F" />
-                  <path d="M8 16h18l6 6H8z" fill="#FFB300" />
-                </svg>
-              </div>
-              <span className="folder-name">{folder.name}</span>
+          {canUpload && (
+            <div className="upload-box-card add-folder-box" onClick={() => setShowAddFavFolderModal(true)}>
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <span>Add Folder</span>
             </div>
-          ))}
+          )}
+          {favoriteFolders.map(folder => (
+              <div
+                key={folder.id}
+                className="folder-item"
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove("drag-over");
+                  const imageId = e.dataTransfer.getData("imageId");
+                  if (imageId) handleMoveImagesToFolder(folder.name);
+                }}
+                onClick={() => handleEnterFavoriteFolder(folder)}
+              >
+                {renderFolderDate(folder)}
+                <div className="folder-icon">
+                  <svg viewBox="0 0 64 64" width="64" height="64">
+                    <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
+                    <path d="M8 22h48v28H8z" fill="#FFD54F" />
+                    <path d="M8 16h18l6 6H8z" fill="#FFB300" />
+                  </svg>
+                </div>
+                <div className="folder-name-labels-wrap">
+                  {renderFolderNameDisplay(folder)}
+                </div>
+              </div>
+            ))}
         </div>
       )}
 
@@ -958,7 +1210,7 @@ function ImageManagement() {
         <div className="empty-state"><p>No favorites yet. Star images to add them here.</p></div>
       ) : (
         <>
-          {selectionMode && renderSelectionToolbar()}
+      {selectedImageIds.size > 0 && renderSelectionToolbar()}
           <div className="favorites-images-grid">
             {favoriteImages.map((image, index) => renderImageCard(image, index, favoriteImages))}
           </div>
@@ -970,7 +1222,7 @@ function ImageManagement() {
   const renderSelectionToolbar = () => (
     <div className="selection-toolbar">
       <span className="selection-count">{selectedImageIds.size} selected</span>
-      <button className="btn btn-secondary" onClick={() => { setSelectedImageIds(new Set()); setSelectionMode(false); }}>
+      <button className="btn btn-secondary" onClick={() => { setSelectedImageIds(new Set()); }}>
         Cancel
       </button>
       <button className="btn btn-secondary" onClick={() => setShowMoveModal(true)} disabled={selectedImageIds.size === 0}>
@@ -993,18 +1245,16 @@ function ImageManagement() {
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
         </button>
-        <h2>{currentFolder.name}</h2>
+        <div className="folder-header-info">
+          <h2>{parseFolderName(currentFolder.name).customerName || currentFolder.name}</h2>
+          <div className="folder-header-sub">{renderFolderNameDisplay(currentFolder)}</div>
+        </div>
         <div className="folder-header-actions">
-          <button
-            className={`btn btn-select-toggle ${selectionMode ? "active" : ""}`}
-            onClick={() => { setSelectionMode(!selectionMode); setSelectedImageIds(new Set()); }}
-          >
-            {selectionMode ? "Done" : "Select"}
-          </button>
+          <span className="ctrl-select-hint">Ctrl+Click to select images</span>
         </div>
       </div>
 
-      {selectionMode && renderSelectionToolbar()}
+      {selectedImageIds.size > 0 && renderSelectionToolbar()}
 
       {loading ? (
         <div className="loading-state"><div className="spinner"></div></div>
@@ -1012,7 +1262,7 @@ function ImageManagement() {
         <div className="empty-state"><p>No images in this folder.</p></div>
       ) : (
         <div className="image-grid">
-          {canUpload && !selectionMode && (
+          {canUpload && selectedImageIds.size === 0 && (
             <div className="upload-box-card" onClick={() => { setUploadTab("single"); setShowUploadModal(true); }}>
               <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14"/>
@@ -1037,10 +1287,18 @@ function ImageManagement() {
             <span className="user-display">User: <strong>{displayName}</strong></span>
             <span className="user-role">Role: <strong>{role}</strong></span>
           </div>
+          {canUpload && (
+            <button onClick={handleOpenUserModal} className="btn btn-favorites-nav">👥 Users</button>
+          )}
           <button onClick={handleLogout} className="btn btn-logout">Logout</button>
         </div>
       </nav>
 
+      {notification && (
+        <div className={`notification ${notification.type}`} onClick={() => setNotification(null)}>
+          {notification.message}
+        </div>
+      )}
       <div className="main-content">
         {showFavorites && !currentFolder ? renderFavoritesContent() :
          currentFolder ? renderFolderContent() :
@@ -1057,7 +1315,7 @@ function ImageManagement() {
             </div>
             <form onSubmit={handleAddFolder}>
               <div className="form-group">
-                <label className="label">Customer Name (max 15 characters)</label>
+                <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
@@ -1065,11 +1323,11 @@ function ImageManagement() {
                   onChange={(e) => setCustomerName(e.target.value.slice(0, 15))}
                   placeholder="Enter customer name"
                   maxLength={15}
-                  required
+                  required={isFieldRequired("folder_customerName")}
                 />
               </div>
               <div className="form-group">
-                <label className="label">Venue (max 15 characters)</label>
+                <label className="label">Venue (max 15 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
@@ -1077,27 +1335,28 @@ function ImageManagement() {
                   onChange={(e) => setVenueName(e.target.value.slice(0, 15))}
                   placeholder="Enter venue name"
                   maxLength={15}
-                  required
+                  required={isFieldRequired("folder_venue")}
                 />
               </div>
               <div className="form-group">
-                <label className="label">Event Date</label>
+                <label className="label">Event Date{isFieldRequired("folder_eventDate") && <span className="required">*</span>}</label>
                 <input
                   type="date"
                   className="input"
                   value={eventDate}
                   onChange={(e) => setEventDate(e.target.value)}
-                  required
+                  required={isFieldRequired("folder_eventDate")}
                 />
               </div>
               <div className="form-group">
-                <label className="label">Description (Optional)</label>
+                <label className="label">Description{isFieldRequired("folder_description") && <span className="required">*</span>}</label>
                 <textarea
                   className="input"
                   value={folderDescription}
                   onChange={(e) => setFolderDescription(e.target.value)}
                   placeholder="Enter folder description"
                   rows={3}
+                  required={isFieldRequired("folder_description")}
                 />
               </div>
               {customerName && venueName && eventDate && (
@@ -1126,16 +1385,55 @@ function ImageManagement() {
             </div>
             <form onSubmit={handleCreateFavFolder}>
               <div className="form-group">
-                <label className="label">Folder Name</label>
+                <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
-                  value={favFolderName}
-                  onChange={(e) => setFavFolderName(e.target.value)}
-                  placeholder="Enter folder name"
-                  required
+                  value={favCustName}
+                  onChange={(e) => setFavCustName(e.target.value.slice(0, 15))}
+                  placeholder="Enter customer name"
+                  maxLength={15}
+                  required={isFieldRequired("folder_customerName")}
                 />
               </div>
+              <div className="form-group">
+                <label className="label">Venue (max 15 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={favVenue}
+                  onChange={(e) => setFavVenue(e.target.value.slice(0, 15))}
+                  placeholder="Enter venue name"
+                  maxLength={15}
+                  required={isFieldRequired("folder_venue")}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Date{isFieldRequired("folder_eventDate") && <span className="required">*</span>}</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={favEventDate}
+                  onChange={(e) => setFavEventDate(e.target.value)}
+                  required={isFieldRequired("folder_eventDate")}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Description{isFieldRequired("folder_description") && <span className="required">*</span>}</label>
+                <textarea
+                  className="input"
+                  value={favFolderDesc}
+                  onChange={(e) => setFavFolderDesc(e.target.value)}
+                  placeholder="Enter folder description"
+                  rows={3}
+                  required={isFieldRequired("folder_description")}
+                />
+              </div>
+              {favCustName && favVenue && favEventDate && (
+                <div className="folder-name-preview">
+                  Folder will be: <strong>{favCustName}_{favVenue}_{favEventDate}</strong>
+                </div>
+              )}
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddFavFolderModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Create</button>
@@ -1181,24 +1479,37 @@ function ImageManagement() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="label">Design Name <span className="required">*</span></label>
-                  <input type="text" className="input" value={imageData.designName}
-                    onChange={(e) => setImageData({...imageData, designName: e.target.value})}
-                    placeholder="Enter design name" required />
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="label">Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}</label>
+                    <input type="text" className="input" value={imageData.designName}
+                      onChange={(e) => setImageData({...imageData, designName: e.target.value})}
+                      placeholder="Enter design name" required={isFieldRequired("image_designName")} />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Decoration Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</label>
+                    <input type="text" className="input" list="decorTypeList" value={imageData.decorType}
+                      onChange={(e) => setImageData({...imageData, decorType: e.target.value})}
+                      placeholder="Search and select decoration type" required={isFieldRequired("image_decorType")} />
+                    <datalist id="decorTypeList">
+                      {DECOR_TYPES.map(t => <option key={t} value={t} />)}
+                    </datalist>
+                  </div>
                 </div>
 
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="label">Event Type <span className="required">*</span></label>
-                    <select className="input" value={imageData.eventType}
-                      onChange={(e) => setImageData({...imageData, eventType: e.target.value})} required>
-                      <option value="">Select Event Type</option>
-                      {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    <label className="label">Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</label>
+                    <AutocompleteInput
+                      options={EVENT_TYPES}
+                      value={imageData.eventType}
+                      onChange={(val) => setImageData({...imageData, eventType: val})}
+                      placeholder="Type or select event type"
+                      required={isFieldRequired("image_eventType")}
+                    />
                   </div>
                   <div className="form-group">
-                    <label className="label">Flower Type <span className="required">*</span></label>
+                    <label className="label">Flower Type{isFieldRequired("image_flowerType") && <span className="required">*</span>}</label>
                     <div className="checkbox-group-horizontal">
                       {FLOWER_TYPES.map(t => (
                         <label key={t} className="checkbox-item-inline">
@@ -1212,81 +1523,56 @@ function ImageManagement() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="label">Decoration Type <span className="required">*</span></label>
-                  <input type="text" className="input" list="decorTypeList" value={imageData.decorType}
-                    onChange={(e) => setImageData({...imageData, decorType: e.target.value})}
-                    placeholder="Search and select decoration type" required />
-                  <datalist id="decorTypeList">
-                    {DECOR_TYPES.map(t => <option key={t} value={t} />)}
-                  </datalist>
-                </div>
-
-                <div className="form-group">
-                  <label className="label">Colour <span className="required">*</span></label>
-                  <ColorPicker
-                    selectedColors={imageData.colours}
-                    onChange={(colors) => setImageData({...imageData, colours: colors})}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="label">Size</label>
-                  <div className="size-input-group-upload">
-                    <input type="number" className="input size-input-sm" placeholder="Width"
-                      value={imageData.sizeWidth} min="0"
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => setImageData({...imageData, sizeWidth: e.target.value})} />
-                    <span className="size-sep">x</span>
-                    <input type="number" className="input size-input-sm" placeholder="Length"
-                      value={imageData.sizeLength} min="0"
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => setImageData({...imageData, sizeLength: e.target.value})} />
-                    <span className="size-sep">x</span>
-                    <input type="number" className="input size-input-sm" placeholder="Height"
-                      value={imageData.sizeHeight} min="0"
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => setImageData({...imageData, sizeHeight: e.target.value})} />
-                    <select className="input size-unit-input" value={imageData.sizeUnit}
-                      onChange={(e) => setImageData({...imageData, sizeUnit: e.target.value})}>
-                      {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="label">Colour{isFieldRequired("image_colours") && <span className="required">*</span>}</label>
+                    <ColorPicker
+                      selectedColors={imageData.colours}
+                      onChange={(colors) => setImageData({...imageData, colours: colors})}
+                    />
                   </div>
-                  {buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit) && (
-                    <div className="size-display-preview">
-                      Size: {buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit)}
+                  <div className="form-right-col">
+                    <div className="form-group">
+                      <label className="label">Size{isFieldRequired("image_size") && <span className="required">*</span>}</label>
+                      <div className="size-input-group-upload">
+                        <input type="number" className="input size-input-sm" placeholder="W"
+                          value={imageData.sizeWidth} min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onChange={(e) => setImageData({...imageData, sizeWidth: e.target.value})} />
+                        <span className="size-sep">x</span>
+                        <input type="number" className="input size-input-sm" placeholder="L"
+                          value={imageData.sizeLength} min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onChange={(e) => setImageData({...imageData, sizeLength: e.target.value})} />
+                        <span className="size-sep">x</span>
+                        <input type="number" className="input size-input-sm" placeholder="H"
+                          value={imageData.sizeHeight} min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onChange={(e) => setImageData({...imageData, sizeHeight: e.target.value})} />
+                        <select className="input size-unit-input" value={imageData.sizeUnit}
+                          onChange={(e) => setImageData({...imageData, sizeUnit: e.target.value})}>
+                          {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      {buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit) && (
+                        <div className="size-display-preview">
+                          Size: {buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="label">Customer Name</label>
-                    <input type="text" className="input" value={imageData.venueCustomer}
-                      onChange={(e) => setImageData({...imageData, venueCustomer: e.target.value})}
-                      placeholder="Customer name" />
-                  </div>
-                  <div className="form-group">
-                    <label className="label">Venue Name</label>
-                    <input type="text" className="input" value={imageData.venue}
-                      onChange={(e) => setImageData({...imageData, venue: e.target.value})}
-                      placeholder="Venue name" />
-                  </div>
-                </div>
-
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="label">Event Date</label>
-                    <input type="date" className="input" value={imageData.venueDate}
-                      onChange={(e) => setImageData({...imageData, venueDate: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label className="label">Price Range</label>
-                    <div className="flex-gap">
-                      <input type="number" className="input" placeholder="Min" value={imageData.priceMin}
-                        onChange={(e) => setImageData({...imageData, priceMin: e.target.value})} />
-                      <input type="number" className="input" placeholder="Max" value={imageData.priceMax}
-                        onChange={(e) => setImageData({...imageData, priceMax: e.target.value})} />
+                    <div className="form-group">
+                      <label className="label">Event Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}</label>
+                      <input type="date" className="input" value={imageData.venueDate}
+                        onChange={(e) => setImageData({...imageData, venueDate: e.target.value})} required={isFieldRequired("image_venueDate")} />
+                    </div>
+                    <div className="form-group">
+                      <label className="label">Price Range{isFieldRequired("image_price") && <span className="required">*</span>}</label>
+                      <div className="flex-gap">
+                        <input type="number" className="input" placeholder="Min" value={imageData.priceMin}
+                          onChange={(e) => setImageData({...imageData, priceMin: e.target.value})} required={isFieldRequired("image_price")} />
+                        <input type="number" className="input" placeholder="Max" value={imageData.priceMax}
+                          onChange={(e) => setImageData({...imageData, priceMax: e.target.value})} required={isFieldRequired("image_price")} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1322,8 +1608,6 @@ function ImageManagement() {
                             <th>Unit</th>
                             <th>Colours</th>
                             <th>Flower</th>
-                            <th>Customer</th>
-                            <th>Venue</th>
                             <th>Date</th>
                             <th>Min</th>
                             <th>Max</th>
@@ -1374,16 +1658,12 @@ function ImageManagement() {
                                   {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                               </td>
-                              <td><input type="text" className="batch-input-sm" value={row.venueCustomer}
-                                onChange={(e) => updateBatchRow(index, "venueCustomer", e.target.value)} placeholder="Cust" /></td>
-                              <td><input type="text" className="batch-input-sm" value={row.venueName}
-                                onChange={(e) => updateBatchRow(index, "venueName", e.target.value)} placeholder="Venue" /></td>
                               <td><input type="date" className="batch-input-date" value={row.venueDate}
                                 onChange={(e) => updateBatchRow(index, "venueDate", e.target.value)} /></td>
                               <td><input type="number" className="batch-input-tiny" value={row.priceMin}
-                                onChange={(e) => updateBatchRow(index, "priceMin", e.target.value)} placeholder="$" /></td>
+                                onChange={(e) => updateBatchRow(index, "priceMin", e.target.value)} placeholder="₹" /></td>
                               <td><input type="number" className="batch-input-tiny" value={row.priceMax}
-                                onChange={(e) => updateBatchRow(index, "priceMax", e.target.value)} placeholder="$" /></td>
+                                onChange={(e) => updateBatchRow(index, "priceMax", e.target.value)} placeholder="₹" /></td>
                               <td><button type="button" className="batch-remove-btn" onClick={() => removeBatchRow(index)}>×</button></td>
                             </tr>
                           ))}
@@ -1434,44 +1714,51 @@ function ImageManagement() {
       {lightboxImage && (
         <div className="lightbox" onClick={() => setLightboxImage(null)}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>X</button>
-          <div className="lightbox-nav">
-            <button className="lightbox-nav-btn prev" onClick={(e) => {
-              e.stopPropagation();
-              const all = lightboxImage.allImages;
-              const idx = lightboxImage.currentIndex;
-              if (all && idx > 0) openLightbox(all, idx - 1);
-            }} disabled={!lightboxImage.allImages || lightboxImage.currentIndex <= 0}>&lt;</button>
-            <button className="lightbox-nav-btn next" onClick={(e) => {
-              e.stopPropagation();
-              const all = lightboxImage.allImages;
-              const idx = lightboxImage.currentIndex;
-              if (all && idx < all.length - 1) openLightbox(all, idx + 1);
-            }} disabled={!lightboxImage.allImages || lightboxImage.currentIndex >= (lightboxImage.allImages?.length || 1) - 1}>&gt;</button>
-          </div>
+          {lightboxImage.allImages && lightboxImage.allImages.length > 1 && (
+            <>
+              <button className="lightbox-nav-btn lightbox-prev" onClick={(e) => {
+                e.stopPropagation();
+                const all = lightboxImage.allImages;
+                const idx = lightboxImage.currentIndex;
+                if (all && idx > 0) openLightbox(all, idx - 1);
+              }} disabled={lightboxImage.currentIndex <= 0}>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button className="lightbox-nav-btn lightbox-next" onClick={(e) => {
+                e.stopPropagation();
+                const all = lightboxImage.allImages;
+                const idx = lightboxImage.currentIndex;
+                if (all && idx < all.length - 1) openLightbox(all, idx + 1);
+              }} disabled={lightboxImage.currentIndex >= (lightboxImage.allImages?.length || 1) - 1}>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+              <div className="lightbox-counter">
+                {lightboxImage.currentIndex + 1} / {lightboxImage.allImages.length}
+              </div>
+            </>
+          )}
           {lightboxImage.url ? (
             <img className="lightbox-image" src={lightboxImage.url} alt={lightboxImage.data?.designName}
+              onClick={(e) => e.stopPropagation()}
               onError={(e) => { e.target.onerror = null; e.target.style.display = "none"; }} />
           ) : (
             <div className="lightbox-placeholder">Image not available</div>
           )}
-          <div className="lightbox-info">
+          <div className="lightbox-info" onClick={(e) => e.stopPropagation()}>
             <h3>{lightboxImage.data?.designName || "Untitled"}</h3>
-            <ImageMeta data={lightboxImage.data} />
+            {renderImageCardDetails(lightboxImage.data)}
             <div className="lightbox-actions">
-              <button className="btn btn-secondary btn-sm" onClick={(e) => {
-                e.stopPropagation();
+              <button className="btn btn-secondary btn-sm" onClick={() => {
                 handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
               }}>Edit</button>
-              <button className="btn btn-secondary btn-sm" onClick={(e) => {
-                e.stopPropagation();
+              <button className="btn btn-secondary btn-sm" onClick={() => {
                 ApiService.downloadImage(lightboxImage.id);
               }}>Download</button>
-              <button className={`btn btn-sm ${lightboxImage.data?.favourite ? "btn-fav-active" : "btn-secondary"}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleFavorite(lightboxImage.id, lightboxImage.data?.favourite);
+              <button className={`btn btn-sm ${lightboxImage.isFav ? "btn-fav-active" : "btn-secondary"}`}
+                onClick={() => {
+                  handleToggleFavorite(lightboxImage.id, lightboxImage.isFav);
                 }}>
-                {lightboxImage.data?.favourite ? "★ Unfavorite" : "☆ Favorite"}
+                {lightboxImage.isFav ? "★ Unfavorite" : "☆ Favorite"}
               </button>
             </div>
           </div>
@@ -1487,18 +1774,194 @@ function ImageManagement() {
               <button className="modal-close" onClick={() => setShowMoveModal(false)}>X</button>
             </div>
             <div className="move-folder-list">
-              {folders.length === 0 ? (
+              {(showFavorites ? favoriteFolders : folders).length === 0 ? (
                 <p className="empty-folder-message">No folders available.</p>
               ) : (
-                folders.map(folder => (
+                (showFavorites ? favoriteFolders : folders).map(folder => (
                   <button key={folder.id} className="move-folder-item"
                     onClick={() => handleMoveImagesToFolder(folder.name)}>
-                    <span className="folder-item-name">{folder.name}</span>
+                    <div className="folder-item-name">{renderFolderNameDisplay(folder)}</div>
                   </button>
                 ))
               )}
             </div>
             <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)} style={{ marginTop: "16px", width: "100%" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* User Management Modal */}
+      {showUserModal && (
+        <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
+          <div className="modal user-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">User Management</h2>
+              <button className="modal-close" onClick={() => setShowUserModal(false)}>×</button>
+            </div>
+
+            {editingUser ? (
+              <form onSubmit={handleUpdateUser}>
+                <div className="form-group">
+                  <label className="label">Username</label>
+                  <input type="text" className="input" value={userForm.username}
+                    onChange={(e) => setUserForm({...userForm, username: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Display Name</label>
+                  <input type="text" className="input" value={userForm.displayName}
+                    onChange={(e) => setUserForm({...userForm, displayName: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Role</label>
+                  <select className="input" value={userForm.role}
+                    onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
+                    <option value="">Select Role</option>
+                    <option value="Captain">Captain</option>
+                    <option value="ViceCaptain">ViceCaptain</option>
+                    <option value="Facilitator">Facilitator</option>
+                    <option value="TeamLead">TeamLead</option>
+                    <option value="TeamMember">TeamMember</option>
+                    <option value="Marketing">Marketing</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">Password (leave blank to keep current)</label>
+                  <input type="text" className="input" value={userForm.password}
+                    onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                    placeholder="Enter new password" />
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => { setEditingUser(null); setUserForm({ username: "", displayName: "", role: "", password: "" }); }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <form onSubmit={handleAddUser} className="user-add-form">
+                  <div className="user-form-row">
+                    <input type="text" className="input" placeholder="Username" value={userForm.username}
+                      onChange={(e) => setUserForm({...userForm, username: e.target.value})} required />
+                    <input type="text" className="input" placeholder="Display Name" value={userForm.displayName}
+                      onChange={(e) => setUserForm({...userForm, displayName: e.target.value})} required />
+                    <select className="input" value={userForm.role}
+                      onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
+                      <option value="">Role</option>
+                      <option value="Captain">Captain</option>
+                      <option value="ViceCaptain">ViceCaptain</option>
+                      <option value="Facilitator">Facilitator</option>
+                      <option value="TeamLead">TeamLead</option>
+                      <option value="TeamMember">TeamMember</option>
+                      <option value="Marketing">Marketing</option>
+                    </select>
+                    <input type="text" className="input" placeholder="Password" value={userForm.password}
+                      onChange={(e) => setUserForm({...userForm, password: e.target.value})} required />
+                    <button type="submit" className="btn btn-primary" disabled={loading}>
+                      {loading ? "Adding..." : "Add"}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="user-table-container">
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Password</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.length === 0 ? (
+                        <tr><td colSpan={4} className="empty-table">No users found.</td></tr>
+                      ) : (
+                        users.map(user => (
+                          <tr key={user.id}>
+                            <td>{user.username}</td>
+                            <td><span className={`role-badge ${user.role?.toLowerCase()}`}>{user.role}</span></td>
+                            <td className="password-cell">
+                              <div className="password-wrapper">
+                                <span className="password-text">
+                                  {visiblePasswords.has(user.id) ? user.password : "••••••••"}
+                                </span>
+                                <button
+                                  className="password-toggle-btn"
+                                  onClick={() => togglePasswordVisibility(user.id)}
+                                  title={visiblePasswords.has(user.id) ? "Hide password" : "Show password"}
+                                >
+                                  {visiblePasswords.has(user.id) ? (
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                      <line x1="1" y1="1" x2="23" y2="23"/>
+                                    </svg>
+                                  ) : (
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                      <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="actions-cell">
+                              <button className="icon-btn icon-btn-edit" onClick={() => handleEditUser(user)} title="Edit user">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                              </button>
+                              <button className="icon-btn icon-btn-delete" onClick={() => handleDeleteUser(user.id, user.username)} title="Delete user">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3 6 5 6 21 6"/>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                  <line x1="10" y1="11" x2="10" y2="17"/>
+                                  <line x1="14" y1="11" x2="14" y2="17"/>
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {canUpload && (
+                  <button className="btn btn-secondary" onClick={() => setShowFormSettings(!showFormSettings)} style={{ marginTop: "16px", width: "100%" }}>
+                    {showFormSettings ? "Close Form Settings" : "Form Settings"}
+                  </button>
+                )}
+
+                {showFormSettings && (
+                  <div className="form-settings-panel">
+                    <h3 className="form-settings-title">Mandatory Field Settings</h3>
+                    <p className="form-settings-hint">Toggle fields between mandatory (<span className="required-star">*</span>) and optional</p>
+                    <div className="form-settings-group">
+                      <h4>Add Folder</h4>
+                      <label className="form-settings-row"><span>Customer Name</span><input type="checkbox" checked={isFieldRequired("folder_customerName")} onChange={(e) => { const c = {...formConfig, folder_customerName: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("folder_venue")} onChange={(e) => { const c = {...formConfig, folder_venue: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("folder_eventDate")} onChange={(e) => { const c = {...formConfig, folder_eventDate: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Description</span><input type="checkbox" checked={isFieldRequired("folder_description")} onChange={(e) => { const c = {...formConfig, folder_description: e.target.checked}; saveFormConfig(c); }} /></label>
+                    </div>
+                    <div className="form-settings-group">
+                      <h4>Upload Image</h4>
+                      <label className="form-settings-row"><span>Design Name</span><input type="checkbox" checked={isFieldRequired("image_designName")} onChange={(e) => { const c = {...formConfig, image_designName: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Event Type</span><input type="checkbox" checked={isFieldRequired("image_eventType")} onChange={(e) => { const c = {...formConfig, image_eventType: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Decoration Type</span><input type="checkbox" checked={isFieldRequired("image_decorType")} onChange={(e) => { const c = {...formConfig, image_decorType: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Flower Type</span><input type="checkbox" checked={isFieldRequired("image_flowerType")} onChange={(e) => { const c = {...formConfig, image_flowerType: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Colour</span><input type="checkbox" checked={isFieldRequired("image_colours")} onChange={(e) => { const c = {...formConfig, image_colours: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Size</span><input type="checkbox" checked={isFieldRequired("image_size")} onChange={(e) => { const c = {...formConfig, image_size: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("image_venueDate")} onChange={(e) => { const c = {...formConfig, image_venueDate: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Price Range</span><input type="checkbox" checked={isFieldRequired("image_price")} onChange={(e) => { const c = {...formConfig, image_price: e.target.checked}; saveFormConfig(c); }} /></label>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1520,11 +1983,12 @@ function ImageManagement() {
               <div className="grid-2">
                 <div className="form-group">
                   <label className="label">Event Type</label>
-                  <select className="input" value={editData.eventType}
-                    onChange={(e) => setEditData({...editData, eventType: e.target.value})}>
-                    <option value="">Select</option>
-                    {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <AutocompleteInput
+                    options={EVENT_TYPES}
+                    value={editData.eventType}
+                    onChange={(val) => setEditData({...editData, eventType: val})}
+                    placeholder="Type or select event type"
+                  />
                 </div>
                 <div className="form-group">
                   <label className="label">Flower Type</label>

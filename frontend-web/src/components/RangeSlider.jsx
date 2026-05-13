@@ -28,8 +28,8 @@ function RangeSlider({ min = 0, max = 10000, step = 50, value = [0, 10000], onCh
   const maxPercent = getPercent(localValue[1]);
 
   const formatPrice = (val) => {
-    if (val >= max) return `$${max.toLocaleString()}+`;
-    return `$${val.toLocaleString()}`;
+    if (val >= max) return `₹${max.toLocaleString()}+`;
+    return `₹${val.toLocaleString()}`;
   };
 
   return (
@@ -64,8 +64,8 @@ function RangeSlider({ min = 0, max = 10000, step = 50, value = [0, 10000], onCh
         />
       </div>
       <div className="range-slider-labels">
-        <span>$0</span>
-        <span>$10,000+</span>
+        <span>₹0</span>
+        <span>₹10,000+</span>
       </div>
       <div className="range-slider-value">
         {formatPrice(localValue[0])} — {formatPrice(localValue[1])}

@@ -54,6 +54,7 @@ router.delete(
   "/:id",
   verifyToken,
   allowRoles(DELETE_ROLES),
+  verifyToken.verifyOwnership("image"),
   deleteImage
 );
 
@@ -62,6 +63,7 @@ router.put(
   "/:id/folder",
   verifyToken,
   allowRoles(UPLOAD_ROLES),
+  verifyToken.verifyOwnership("image"),
   updateImageFolder
 );
 
@@ -70,6 +72,7 @@ router.put(
   "/:id",
   verifyToken,
   allowRoles(UPLOAD_ROLES),
+  verifyToken.verifyOwnership("image"),
   updateImage
 );
 

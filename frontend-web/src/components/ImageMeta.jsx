@@ -12,7 +12,7 @@ function ImageMeta({ data, showFolder = false, folderName = "" }) {
     data.flowerType && { label: "Flower", value: data.flowerType },
     data.priceMin != null && data.priceMax != null && {
       label: "Price",
-      value: `Rs.${data.priceMin} - Rs.${data.priceMax}`
+      value: `₹${data.priceMin} - ₹${data.priceMax}`
     },
     data.venueCustomer && { label: "Customer", value: data.venueCustomer },
     data.venueName && { label: "Venue", value: data.venueName },
