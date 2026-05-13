@@ -183,12 +183,13 @@ const ApiService = {
     return data;
   },
 
-  async searchImages(filters) {
-    const params = new URLSearchParams();
+  async searchImages(filters, page = 1, limit = 200) {
+    const params = new URLSearchParams({ page, limit });
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.append(key, value);
     });
-    return request(`/images?${params.toString()}`);
+    const result = await request(`/images?${params.toString()}`);
+    return result.images || result;
   },
 
   async updateImageFolder(imageId, folderName) {
