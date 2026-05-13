@@ -75,17 +75,16 @@ const ApiService = {
   },
 
   async getUploadSignature() {
-    return request("/upload-signature");
+    return request(`/upload-signature?folder=${encodeURIComponent(folder)}`);
   },
 
-  async uploadDirectToCloudinary(file, signatureData, folder = "image_management") {
+  async uploadDirectToCloudinary(file, signatureData) {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("api_key", signatureData.apiKey);
     formData.append("timestamp", signatureData.timestamp);
     formData.append("signature", signatureData.signature);
-    formData.append("folder", `${signatureData.folder}/${folder}`);
-    formData.append("upload_preset", "unsigned");
+    formData.append("folder", signatureData.folder);
 
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${signatureData.cloudName}/image/upload`,

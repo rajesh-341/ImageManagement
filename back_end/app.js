@@ -150,11 +150,12 @@ app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
 app.get("/api/upload-signature", verifyToken, (req, res) => {
+  const folder = req.query.folder || "uncategorized";
+  const sanitizedFolder = folder.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
   const timestamp = Math.round(Date.now() / 1000);
   const params = {
     timestamp,
-    folder: "image_management",
-    source: "uw",
+    folder: `image_management/${sanitizedFolder}`,
   };
   const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET);
   res.json({
@@ -162,7 +163,7 @@ app.get("/api/upload-signature", verifyToken, (req, res) => {
     signature,
     apiKey: process.env.CLOUDINARY_API_KEY,
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    folder: "image_management",
+    folder: `image_management/${sanitizedFolder}`,
   });
 });
 

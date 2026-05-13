@@ -368,12 +368,12 @@ function ImageManagement() {
     let successCount = 0;
     let errorCount = 0;
     try {
-      const sig = await ApiService.getUploadSignature();
+      const sig = await ApiService.getUploadSignature(currentFolder.name);
       for (let i = 0; i < batchImages.length; i++) {
         const row = batchImages[i];
         setUploadProgress(`Uploading ${i + 1} of ${batchImages.length} images...`);
         try {
-          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig, currentFolder.name);
+          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
           const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
           const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
           const colours = Array.isArray(row.colours)
@@ -439,8 +439,8 @@ function ImageManagement() {
     setLoading(true);
     setUploadProgress("Uploading image...");
     try {
-      const sig = await ApiService.getUploadSignature();
-      const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig, currentFolder.name);
+      const sig = await ApiService.getUploadSignature(currentFolder.name);
+      const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig);
       const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
       const metaData = {
