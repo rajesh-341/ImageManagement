@@ -1,6 +1,5 @@
 const pool = require("../config/db");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
 const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES } = require("../config/constants");
 
 const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
@@ -247,9 +246,15 @@ const deleteImage = async (req, res) => {
     const imageData = selectResult.rows[0].image_data;
     const parsedData = typeof imageData === "string" ? JSON.parse(imageData) : imageData;
     if (parsedData && parsedData.imageUrl) {
-      const filePath = path.join(__dirname, "..", parsedData.imageUrl.replace(/^\//, ""));
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      const publicId = parsedData.imageUrl.split("/").pop().replace(/\.\w+$/, "");
+      const folderMatch = parsedData.imageUrl.match(/image_management\/([^/]+)/);
+      const fullPublicId = folderMatch
+        ? `image_management/${folderMatch[1]}/${publicId}`
+        : publicId;
+      try {
+        await cloudinary.uploader.destroy(fullPublicId);
+      } catch (cloudErr) {
+        console.log("[Cloudinary] Delete warning:", cloudErr.message);
       }
     }
 

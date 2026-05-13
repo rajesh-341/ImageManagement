@@ -4,8 +4,8 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const multer = require("multer");
+const cloudinary = require("./config/cloudinary");
 const path = require("path");
-const fs = require("fs");
 const sharp = require("sharp");
 require("dotenv").config();
 
@@ -90,22 +90,8 @@ app.use((req, res, next) => {
   next();
 });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads", "temp");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
@@ -128,24 +114,27 @@ app.post("/api/upload", verifyToken, upload.single("image"), async (req, res) =>
     const folderName = req.body.folderName || "uncategorized";
     const sanitizedFolder = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
-    const uploadDir = path.join(__dirname, "uploads", sanitizedFolder);
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const webpFilename = uniqueSuffix + ".webp";
-    const webpPath = path.join(uploadDir, webpFilename);
-
-    await sharp(req.file.path)
+    const processedBuffer = await sharp(req.file.buffer)
       .resize(1920, 1080, { fit: "inside", withoutEnlargement: true })
       .webp({ quality: 85 })
-      .toFile(webpPath);
+      .toBuffer();
 
-    fs.unlinkSync(req.file.path);
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: `image_management/${sanitizedFolder}`,
+          format: "webp",
+          public_id: Date.now() + "-" + Math.round(Math.random() * 1e9),
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.end(processedBuffer);
+    });
 
-    const imageUrl = `/uploads/${sanitizedFolder}/${webpFilename}`;
-    res.json({ imageUrl, filename: webpFilename });
+    res.json({ imageUrl: result.secure_url, filename: result.public_id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -160,11 +149,6 @@ app.post("/api/upload-excel", verifyToken, upload.array("files", 100), uploadExc
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
-// Serve uploaded images statically
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
 app.get("/api/download/:id", verifyToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT image_data FROM image_management WHERE id = $1", [req.params.id]);
@@ -174,22 +158,12 @@ app.get("/api/download/:id", verifyToken, async (req, res) => {
       ? JSON.parse(result.rows[0].image_data)
       : result.rows[0].image_data;
 
-    if (!imgData || !imgData.imageUrl) return res.status(404).json({ message: "Image file not found" });
+    if (!imgData || !imgData.imageUrl) return res.status(404).json({ message: "Image URL not found" });
 
-    const filePath = path.join(__dirname, imgData.imageUrl.replace(/^\//, ""));
-    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
-
-    const filename = path.basename(filePath);
-    res.download(filePath, filename);
+    res.redirect(imgData.imageUrl);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-
-app.use("/uploads", express.static(uploadsDir, {
-  setHeaders: (res, filePath) => {
-    res.set("Cache-Control", "public, max-age=86400");
-  },
-}));
 
 module.exports = app;

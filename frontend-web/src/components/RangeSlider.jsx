@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 
 function RangeSlider({ min = 0, max = 10000, step = 50, value = [0, 10000], onChange }) {
   const [localValue, setLocalValue] = useState(value);
-  const rangeRef = useRef(null);
 
   useEffect(() => {
     setLocalValue(value);

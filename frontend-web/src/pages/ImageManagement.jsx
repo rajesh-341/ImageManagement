@@ -49,7 +49,6 @@ function ImageManagement() {
   const [showFiltersSidebar, setShowFiltersSidebar] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [filters, setFilters] = useState({});
-  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState(new Set());
   const [showFavorites, setShowFavorites] = useState(false);
   const [favoriteImages, setFavoriteImages] = useState([]);
@@ -149,7 +148,7 @@ function ImageManagement() {
 
   useEffect(() => {
     if (currentFolder) loadImages();
-  }, [currentFolder]);
+  }, [currentFolder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadFolders = async () => {
     try {

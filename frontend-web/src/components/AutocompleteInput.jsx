@@ -45,6 +45,7 @@ function AutocompleteInput({ options = [], value, onChange, placeholder = "", re
         setActiveIdx((prev) => (prev > 0 ? prev - 1 : -1));
         break;
       case "Enter":
+      default:
         e.preventDefault();
         if (activeIdx >= 0 && filtered[activeIdx]) {
           select(filtered[activeIdx]);

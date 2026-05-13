@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import Accordion from "./Accordion";
 import RangeSlider from "./RangeSlider";
-import ColorPicker, { COLORS } from "./ColorPicker";
+import ColorPicker from "./ColorPicker";
 
 const DECOR_TYPES = [
   "Name board", "Stage Ceiling", "Hall side Decoration",
@@ -11,8 +11,6 @@ const DECOR_TYPES = [
   "Lighting work in Home", "Lighting work in Mahal", "Audio work",
 ];
 
-const SIZES = ["Small (1–50)", "Medium (51–200)", "Large (200+)", "Extra Large (500+)"];
-const EVENT_TIMES = ["Morning", "Afternoon", "Evening/Night"];
 const EVENT_TYPES = [
   "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
   "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
@@ -25,7 +23,6 @@ const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 
 function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
-  const [selectedVenues, setSelectedVenues] = useState(filters?.venues || []);
   const [selectedSizes, setSelectedSizes] = useState(filters?.sizes || []);
   const [selectedDecorTypes, setSelectedDecorTypes] = useState(filters?.decorTypes || []);
   const [selectedEventTimes, setSelectedEventTimes] = useState(filters?.eventTimes || []);
@@ -67,7 +64,6 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
 
   const handleClear = () => {
     setSelectedColors([]);
-    setSelectedVenues([]);
     setSelectedSizes([]);
     setSelectedDecorTypes([]);
     setSelectedEventTimes([]);
