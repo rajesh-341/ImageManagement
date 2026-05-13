@@ -16,8 +16,19 @@ const request = async (endpoint, options = {}, includeAuth = true) => {
     credentials: "include",
   };
 
-  const response = await fetch(url, config);
-  const data = await response.json();
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (err) {
+    throw new Error(`Network error: unable to reach server. Check that the backend is running and CORS is configured.`);
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(`Server returned non-JSON response (status ${response.status}). Check the backend logs.`);
+  }
 
   if (!response.ok) {
     throw new Error(data.message || "Request failed");
