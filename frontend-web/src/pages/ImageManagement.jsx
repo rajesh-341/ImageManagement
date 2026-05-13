@@ -205,7 +205,7 @@ function ImageManagement() {
   const openLightbox = (imageArray, index) => {
     const img = imageArray[index];
     setLightboxImage({
-      url: img.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "",
+      url: img.image_data?.imageUrl ? (img.image_data.imageUrl.startsWith("http") ? img.image_data.imageUrl : `${IMAGE_BASE_URL}${img.image_data.imageUrl}`) : "",
       data: img.image_data,
       id: img.id,
       isFav: img.favourite,
@@ -909,7 +909,7 @@ function ImageManagement() {
   };
 
   const renderImageCard = (image, index, imageArray) => {
-    const imgUrl = image.image_data?.imageUrl ? `${IMAGE_BASE_URL}${image.image_data.imageUrl}` : "";
+    const imgUrl = image.image_data?.imageUrl ? (image.image_data.imageUrl.startsWith("http") ? image.image_data.imageUrl : `${IMAGE_BASE_URL}${image.image_data.imageUrl}`) : "";
     const isFav = image.favourite;
     const isSelected = selectedImageIds.has(image.id);
     const data = image.image_data || {};
