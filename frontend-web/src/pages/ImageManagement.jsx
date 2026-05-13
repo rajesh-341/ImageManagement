@@ -1303,24 +1303,26 @@ function ImageManagement() {
       ) : !canUpload && images.length === 0 ? (
         <div className="empty-state"><p>No images in this folder.</p></div>
       ) : (
-        <div className="image-grid">
-          {canUpload && selectedImageIds.size === 0 && (
-            <div className="upload-box-card" onClick={() => { setUploadTab("single"); setShowUploadModal(true); }}>
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              <span>Upload Image</span>
+        <>
+          <div className="image-grid">
+            {canUpload && selectedImageIds.size === 0 && (
+              <div className="upload-box-card" onClick={() => { setUploadTab("single"); setShowUploadModal(true); }}>
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Upload Image</span>
+              </div>
+            )}
+            {images.map((image, index) => renderImageCard(image, index, images))}
+          </div>
+          {hasMore && (
+            <div className="load-more-wrap">
+              <button className="btn btn-load-more" onClick={loadMoreImages} disabled={loading}>
+                {loading ? "Loading..." : "Load More"}
+              </button>
             </div>
           )}
-          {images.map((image, index) => renderImageCard(image, index, images))}
-        </div>
-        {hasMore && (
-          <div className="load-more-wrap">
-            <button className="btn btn-load-more" onClick={loadMoreImages} disabled={loading}>
-              {loading ? "Loading..." : "Load More"}
-            </button>
-          </div>
-        )}
+        </>
       )}
     </div>
   );
