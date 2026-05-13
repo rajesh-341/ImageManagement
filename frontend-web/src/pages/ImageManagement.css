@@ -3506,3 +3506,29 @@
   border: 1px solid #d1d5db;
   border-radius: 4px;
 }
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 32px;
+}
+
+.btn-load-more {
+  padding: 10px 32px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-load-more:hover {
+  background: var(--primary-dark);
+}
+
+.btn-load-more:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

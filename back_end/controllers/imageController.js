@@ -8,9 +8,13 @@ const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.t
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 50 } = req.query;
     
-    let query = "SELECT * FROM image_management";
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    let whereClause = "";
     let params = [];
     let paramIndex = 1;
 
@@ -106,17 +110,21 @@ const getImages = async (req, res) => {
     }
 
     if (conditions.length > 0) {
-      query += " WHERE " + conditions.join(" AND ");
+      whereClause = " WHERE " + conditions.join(" AND ");
     }
 
-    query += " ORDER BY created_at DESC";
+    const countResult = await pool.query(`SELECT COUNT(*) FROM image_management${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count);
 
-    const result = await pool.query(query, params);
+    const result = await pool.query(
+      `SELECT * FROM image_management${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...params, limitNum, offset]
+    );
     const rows = result.rows.map(row => ({
       ...row,
       image_data: typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data,
     }));
-    res.json(rows);
+    res.json({ images: rows, total, page: pageNum, limit: limitNum, hasMore: offset + limitNum < total });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

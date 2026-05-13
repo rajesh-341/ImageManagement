@@ -50,6 +50,10 @@ function ImageManagement() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [filters, setFilters] = useState({});
   const [selectedImageIds, setSelectedImageIds] = useState(new Set());
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [allImagesPage, setAllImagesPage] = useState(1);
+  const [allImagesHasMore, setAllImagesHasMore] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
   const [favoriteImages, setFavoriteImages] = useState([]);
   const [favoriteFolders, setFavoriteFolders] = useState([]);
@@ -159,12 +163,18 @@ function ImageManagement() {
     }
   };
 
-  const loadImages = async () => {
+  const loadImages = async (pageNum = 1, append = false) => {
     if (!currentFolder) { setImages([]); return; }
     setLoading(true);
     try {
-      const imageList = await ApiService.getImages(currentFolder.name);
-      setImages(imageList);
+      const result = await ApiService.getImages(currentFolder.name, pageNum, 50);
+      if (append) {
+        setImages(prev => [...prev, ...result.images]);
+      } else {
+        setImages(result.images);
+      }
+      setPage(pageNum);
+      setHasMore(result.hasMore);
     } catch (err) {
       showNotif("Something went wrong");
     } finally {
@@ -172,15 +182,38 @@ function ImageManagement() {
     }
   };
 
-  const loadAllImages = async () => {
+  const loadMoreImages = () => {
+    if (!loading && hasMore) loadImages(page + 1, true);
+  };
+
+  const loadAllImages = async (pageNum = 1, append = false) => {
     setLoading(true);
     try {
-      const imageList = await ApiService.getImages();
-      setAllImages(imageList);
+      const result = await ApiService.getAllImages();
+      setAllImages(result.images);
+      setAllImagesHasMore(result.hasMore);
+      setAllImagesPage(pageNum);
     } catch (err) {
       console.error("Failed to load images:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreAllImages = async () => {
+    if (!loading && allImagesHasMore) {
+      const nextPage = allImagesPage + 1;
+      setLoading(true);
+      try {
+        const result = await ApiService.getImages(null, nextPage, 50);
+        setAllImages(prev => [...prev, ...result.images]);
+        setAllImagesPage(nextPage);
+        setAllImagesHasMore(result.hasMore);
+      } catch (err) {
+        console.error("Failed to load more images:", err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -335,11 +368,12 @@ function ImageManagement() {
     let successCount = 0;
     let errorCount = 0;
     try {
+      const sig = await ApiService.getUploadSignature();
       for (let i = 0; i < batchImages.length; i++) {
         const row = batchImages[i];
         setUploadProgress(`Uploading ${i + 1} of ${batchImages.length} images...`);
         try {
-          const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
+          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig, currentFolder.name);
           const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
           const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
           const colours = Array.isArray(row.colours)
@@ -347,7 +381,7 @@ function ImageManagement() {
             : row.colours.split(",").map(c => c.trim()).filter(c => c);
           const metaData = {
             folderName: currentFolder.name,
-            imageUrl: uploadResult.imageUrl,
+            imageUrl: cloudResult.secure_url,
             colourCombination: colours,
             sizeWidth: row.sizeWidth || null,
             sizeLength: row.sizeLength || null,
@@ -405,12 +439,13 @@ function ImageManagement() {
     setLoading(true);
     setUploadProgress("Uploading image...");
     try {
-      const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
+      const sig = await ApiService.getUploadSignature();
+      const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig, currentFolder.name);
       const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
       const metaData = {
         folderName: currentFolder.name,
-        imageUrl: uploadResult.imageUrl,
+        imageUrl: cloudResult.secure_url,
         colourCombination: imageData.colours,
         sizeWidth: imageData.sizeWidth || null,
         sizeLength: imageData.sizeLength || null,
@@ -909,7 +944,8 @@ function ImageManagement() {
   };
 
   const renderImageCard = (image, index, imageArray) => {
-    const imgUrl = image.image_data?.imageUrl ? (image.image_data.imageUrl.startsWith("http") ? image.image_data.imageUrl : `${IMAGE_BASE_URL}${image.image_data.imageUrl}`) : "";
+    const rawUrl = image.image_data?.imageUrl || "";
+    const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
     const isFav = image.favourite;
     const isSelected = selectedImageIds.has(image.id);
     const data = image.image_data || {};
@@ -955,7 +991,7 @@ function ImageManagement() {
             {isFav ? "★" : "☆"}
           </button>
           {imgUrl ? (
-            <img className="image-card-img" src={imgUrl} alt={data.designName}
+            <img className="image-card-img" src={imgUrl} alt={data.designName} loading="lazy"
               onError={(e) => { e.target.onerror = null; e.target.src = ""; e.target.style.background = "#e5e7eb"; }}
             />
           ) : (
@@ -1098,6 +1134,13 @@ function ImageManagement() {
         <div className="image-grid">
           {allImages.map((image, index) => renderImageCard(image, index, allImages))}
         </div>
+        {allImagesHasMore && (
+          <div className="load-more-wrap">
+            <button className="btn btn-load-more" onClick={loadMoreAllImages} disabled={loading}>
+              {loading ? "Loading..." : "Load More"}
+            </button>
+          </div>
+        )}
       </>
     )
   );
@@ -1271,6 +1314,13 @@ function ImageManagement() {
           )}
           {images.map((image, index) => renderImageCard(image, index, images))}
         </div>
+        {hasMore && (
+          <div className="load-more-wrap">
+            <button className="btn btn-load-more" onClick={loadMoreImages} disabled={loading}>
+              {loading ? "Loading..." : "Load More"}
+            </button>
+          </div>
+        )}
       )}
     </div>
   );

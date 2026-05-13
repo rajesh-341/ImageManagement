@@ -149,6 +149,23 @@ app.post("/api/upload-excel", verifyToken, upload.array("files", 100), uploadExc
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
+app.get("/api/upload-signature", verifyToken, (req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const params = {
+    timestamp,
+    folder: "image_management",
+    source: "uw",
+  };
+  const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET);
+  res.json({
+    timestamp,
+    signature,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    folder: "image_management",
+  });
+});
+
 app.get("/api/download/:id", verifyToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT image_data FROM image_management WHERE id = $1", [req.params.id]);

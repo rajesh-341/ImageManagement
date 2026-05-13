@@ -63,11 +63,37 @@ const ApiService = {
     return userData ? JSON.parse(userData) : null;
   },
 
-  async getImages(folder = null) {
-    const endpoint = folder
-      ? `/images?folder=${encodeURIComponent(folder)}`
-      : "/images";
-    return request(endpoint);
+  async getImages(folder = null, page = 1, limit = 50) {
+    const params = new URLSearchParams({ page, limit });
+    if (folder) params.set("folder", folder);
+    const result = await request(`/images?${params.toString()}`);
+    return { images: result.images || [], total: result.total || 0, hasMore: result.hasMore || false };
+  },
+
+  async getAllImages(folder = null) {
+    return this.getImages(folder, 1, 200);
+  },
+
+  async getUploadSignature() {
+    return request("/upload-signature");
+  },
+
+  async uploadDirectToCloudinary(file, signatureData, folder = "image_management") {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", signatureData.apiKey);
+    formData.append("timestamp", signatureData.timestamp);
+    formData.append("signature", signatureData.signature);
+    formData.append("folder", `${signatureData.folder}/${folder}`);
+    formData.append("upload_preset", "unsigned");
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${signatureData.cloudName}/image/upload`,
+      { method: "POST", body: formData }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "Cloudinary upload failed");
+    return data;
   },
 
   async getFolders(scope = "home") {
