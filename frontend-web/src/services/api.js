@@ -74,7 +74,7 @@ const ApiService = {
     return this.getImages(folder, 1, 200);
   },
 
-  async getUploadSignature() {
+  async getUploadSignature(folder = "uncategorized") {
     return request(`/upload-signature?folder=${encodeURIComponent(folder)}`);
   },
 
