@@ -1,6 +1,7 @@
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const DELETE_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMember", "Owner"];
+const DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
+const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin", "Owner"];
+const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 
 const UPLOAD_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
@@ -60,6 +61,7 @@ module.exports = {
   UPLOAD_ROLES,
   DELETE_ROLES,
   VIEW_ROLES,
+  FOLDER_VIEW_ROLES,
   UPLOAD_UNITS,
   FLOWER_TYPES,
   EVENT_TYPES,

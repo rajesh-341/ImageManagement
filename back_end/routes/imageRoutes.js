@@ -14,10 +14,11 @@ const {
   updateImage,
   VIEW_ROLES,
   UPLOAD_ROLES,
-  DELETE_ROLES
+  DELETE_ROLES,
+  FOLDER_VIEW_ROLES,
 } = require("../controllers/imageController");
 
-// Get all images - accessible by defined roles
+// Get all images - accessible by all roles
 router.get(
   "/",
   verifyToken,
@@ -49,30 +50,27 @@ router.post(
   uploadImage
 );
 
-// Delete image - Captain, ViceCaptain, Owner only
+// Delete image - accessible by edit/delete roles
 router.delete(
   "/:id",
   verifyToken,
   allowRoles(DELETE_ROLES),
-  verifyToken.verifyOwnership("image"),
   deleteImage
 );
 
-// Update image folder - Captain, ViceCaptain, Owner only
+// Update image folder - accessible by edit/delete roles
 router.put(
   "/:id/folder",
   verifyToken,
-  allowRoles(UPLOAD_ROLES),
-  verifyToken.verifyOwnership("image"),
+  allowRoles(DELETE_ROLES),
   updateImageFolder
 );
 
-// Update image metadata
+// Update image metadata - accessible by edit/delete roles
 router.put(
   "/:id",
   verifyToken,
-  allowRoles(UPLOAD_ROLES),
-  verifyToken.verifyOwnership("image"),
+  allowRoles(DELETE_ROLES),
   updateImage
 );
 

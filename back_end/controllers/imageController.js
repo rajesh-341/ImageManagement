@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const cloudinary = require("../config/cloudinary");
-const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES } = require("../config/constants");
+const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES, FOLDER_VIEW_ROLES } = require("../config/constants");
 
 const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
 
@@ -19,12 +19,6 @@ const getImages = async (req, res) => {
     let paramIndex = 1;
 
     const conditions = [];
-
-    if (!isAdmin(req.user.role)) {
-      conditions.push(`employee_id = $${paramIndex}`);
-      params.push(req.user.userId);
-      paramIndex++;
-    }
 
     if (searchText) {
       conditions.push(`(
@@ -295,7 +289,7 @@ const updateImageFolder = async (req, res) => {
     const role = req.user.role;
     const roleLower = role ? role.toLowerCase() : "";
     
-    const canUpdate = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
+    const canUpdate = DELETE_ROLES.map(r => r.toLowerCase()).includes(roleLower);
     
     if (!canUpdate) {
       return res.status(403).json({ message: "Update access denied" });
@@ -325,7 +319,7 @@ const updateImage = async (req, res) => {
   try {
     const role = req.user.role;
     const roleLower = role ? role.toLowerCase() : "";
-    const canUpdate = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
+    const canUpdate = DELETE_ROLES.map(r => r.toLowerCase()).includes(roleLower);
     if (!canUpdate) return res.status(403).json({ message: "Update access denied" });
 
     const { id } = req.params;
@@ -384,5 +378,6 @@ module.exports = {
   updateImage,
   UPLOAD_ROLES,
   DELETE_ROLES,
-  VIEW_ROLES
+  VIEW_ROLES,
+  FOLDER_VIEW_ROLES,
 };

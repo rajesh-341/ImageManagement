@@ -3,7 +3,7 @@ const router = express.Router();
 const verifyToken = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
 const { createFolder, getFolders, deleteFolder } = require("../controllers/folderController");
-const { UPLOAD_ROLES, VIEW_ROLES } = require("../controllers/imageController");
+const { UPLOAD_ROLES, FOLDER_VIEW_ROLES } = require("../controllers/imageController");
 
 router.post(
   "/",
@@ -15,7 +15,7 @@ router.post(
 router.get(
   "/",
   verifyToken,
-  allowRoles(VIEW_ROLES),
+  allowRoles(FOLDER_VIEW_ROLES),
   getFolders
 );
 

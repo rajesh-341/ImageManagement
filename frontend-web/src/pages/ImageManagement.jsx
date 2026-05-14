@@ -7,7 +7,8 @@ import AutocompleteInput from "../components/AutocompleteInput";
 import "./ImageManagement.css";
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin"];
+const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
+const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
@@ -871,6 +872,7 @@ function ImageManagement() {
   };
 
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const displayName = user?.displayName || user?.username || "User";
   const role = user?.role || "N/A";
@@ -991,7 +993,7 @@ function ImageManagement() {
             <div className="image-card-placeholder">No Image</div>
           )}
           <div className="image-card-hover-actions">
-            {canUpload && (
+            {canEditDelete && (
               <>
                 <button className="btn-image-edit" onClick={(e) => { e.stopPropagation(); handleEditImage(image); }}>Edit</button>
                 <button className="btn-image-delete" onClick={(e) => { e.stopPropagation(); handleDeleteImage(image.id); }}>Delete</button>
