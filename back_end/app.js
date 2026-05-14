@@ -178,7 +178,20 @@ app.get("/api/download/:id", verifyToken, async (req, res) => {
 
     if (!imgData || !imgData.imageUrl) return res.status(404).json({ message: "Image URL not found" });
 
-    res.redirect(imgData.imageUrl);
+    const imageResponse = await fetch(imgData.imageUrl);
+    if (!imageResponse.ok) return res.status(502).json({ message: "Failed to fetch image from storage" });
+
+    const contentType = imageResponse.headers.get("content-type") || "application/octet-stream";
+    const ext = contentType.split("/").pop() || "bin";
+    const urlParts = imgData.imageUrl.split("/");
+    let filename = urlParts[urlParts.length - 1].split("?")[0].replace(/\.\w+$/, "");
+    if (!filename) filename = `image_${req.params.id}`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.${ext}"`);
+    res.setHeader("Content-Type", contentType);
+
+    const buffer = Buffer.from(await imageResponse.arrayBuffer());
+    res.send(buffer);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

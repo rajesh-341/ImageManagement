@@ -536,15 +536,8 @@ function ImageManagement() {
 
   const handleBulkDownload = async () => {
     if (selectedImageIds.size === 0) return;
-    if (!window.confirm(`Download ${selectedImageIds.size} image(s)? Choose OK for default path or Cancel for custom path.`)) {
-      // Cancel = custom path - open save dialog for each
-      for (const id of selectedImageIds) {
-        await ApiService.downloadImage(id);
-      }
-    } else {
-      for (const id of selectedImageIds) {
-        await ApiService.downloadImage(id);
-      }
+    for (const id of selectedImageIds) {
+      await ApiService.downloadImage(id);
     }
   };
 
