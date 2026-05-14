@@ -426,24 +426,25 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  width: 140px;
-  padding: 12px 10px;
-  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
 }
 
 .folder-item:hover {
-  background: #f3f4f6;
   transform: translateY(-4px);
 }
 
 .folder-icon {
-  width: 64px;
-  height: 64px;
-  margin-bottom: 8px;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  border-radius: 8px;
   transition: transform 0.2s ease;
 }
 
@@ -455,12 +456,14 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }
 
-.folder-name-labels-wrap {
-  width: calc(100% + 20px);
-  margin-left: -10px;
-  padding: 10px 10px 6px;
-  margin-top: auto;
-  border-radius: 0 0 6px 6px;
+.folder-icon-text {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  color: #374151;
+  max-width: 100%;
+  line-height: 1.3;
+  overflow: hidden;
 }
 
 .folder-name-labels {
@@ -538,14 +541,9 @@
   background: #C45382;
 }
 
-.folder-item.drag-over {
-  background: #F6DCE7;
+.folder-item.drag-over .folder-icon {
   border: 2px dashed #DA87A9;
   transform: scale(1.05);
-}
-
-.folder-item.drag-over .folder-icon {
-  transform: scale(1.15);
 }
 
 .folder-drop-target {
@@ -679,8 +677,8 @@
 /* Image Grid */
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
 }
 
 /* Upload Box Card */
@@ -733,6 +731,7 @@
 .image-card-img-wrap {
   position: relative;
   overflow: hidden;
+  aspect-ratio: 1;
 }
 
 .image-card-img {
@@ -1559,23 +1558,19 @@
     padding: 16px;
   }
 
-  .folder-item {
-    width: 100px;
-    padding: 12px 8px;
+  .folder-icon {
+    width: 90px;
+    height: 90px;
   }
 
-  .folder-icon {
-    width: 48px;
-    height: 48px;
+  .folder-icon svg {
+    width: 36px;
+    height: 36px;
   }
 
   .image-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
-  }
-
-  .image-card-img {
-    height: 100px;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
   }
 
   .lightbox-image {
@@ -2743,7 +2738,7 @@
   white-space: nowrap;
 }
 
-.folder-item .date-pill {
+.folder-icon .date-pill {
   position: absolute;
   top: 6px;
   left: 6px;

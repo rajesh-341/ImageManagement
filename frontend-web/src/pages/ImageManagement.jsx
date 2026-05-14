@@ -1169,16 +1169,16 @@ function ImageManagement() {
               }}
               onClick={() => handleEnterFolder(folder)}
             >
-              {renderFolderDate(folder)}
               <div className="folder-icon">
-                <svg viewBox="0 0 64 64" width="64" height="64">
+                {renderFolderDate(folder)}
+                <svg viewBox="0 0 64 64" width="48" height="48">
                   <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
                   <path d="M8 22h48v28H8z" fill="#FFD54F" />
                   <path d="M8 16h18l6 6H8z" fill="#FFB300" />
                 </svg>
-              </div>
-              <div className="folder-name-labels-wrap">
-                {renderFolderNameDisplay(folder)}
+                <div className="folder-icon-text">
+                  {renderFolderNameDisplay(folder)}
+                </div>
               </div>
               {canUpload && (
                 <button className="folder-delete" onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}>
@@ -1227,16 +1227,16 @@ function ImageManagement() {
                 }}
                 onClick={() => handleEnterFavoriteFolder(folder)}
               >
-                {renderFolderDate(folder)}
                 <div className="folder-icon">
-                  <svg viewBox="0 0 64 64" width="64" height="64">
+                  {renderFolderDate(folder)}
+                  <svg viewBox="0 0 64 64" width="48" height="48">
                     <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
                     <path d="M8 22h48v28H8z" fill="#FFD54F" />
                     <path d="M8 16h18l6 6H8z" fill="#FFB300" />
                   </svg>
-                </div>
-                <div className="folder-name-labels-wrap">
-                  {renderFolderNameDisplay(folder)}
+                  <div className="folder-icon-text">
+                    {renderFolderNameDisplay(folder)}
+                  </div>
                 </div>
               </div>
             ))}
