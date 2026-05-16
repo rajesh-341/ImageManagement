@@ -7,31 +7,32 @@ const LOCKOUT_MINUTES = 10;
 const attempts = new Map();
 
 const login = async (req, res) => {
-  const { username, password } = req.body;
+  try {
+    const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ message: "Credentials required" });
-  }
-
-  const now = Date.now();
-  const record = attempts.get(username);
-
-  if (record) {
-    if (record.count >= MAX_ATTEMPTS) {
-      const elapsed = now - record.lockedAt;
-      const remaining = Math.ceil((LOCKOUT_MINUTES * 60 * 1000 - elapsed) / 1000);
-      if (remaining > 0) {
-        const mins = Math.ceil(remaining / 60);
-        return res.status(429).json({ message: `Too many failed attempts. Try again in ${mins} minute(s).` });
-      }
-      attempts.delete(username);
+    if (!username || !password) {
+      return res.status(400).json({ message: "Credentials required" });
     }
-  }
 
-  const empResult = await pool.query(
-    "SELECT * FROM employee_details WHERE employee_id = $1",
-    [username]
-  );
+    const now = Date.now();
+    const record = attempts.get(username);
+
+    if (record) {
+      if (record.count >= MAX_ATTEMPTS) {
+        const elapsed = now - record.lockedAt;
+        const remaining = Math.ceil((LOCKOUT_MINUTES * 60 * 1000 - elapsed) / 1000);
+        if (remaining > 0) {
+          const mins = Math.ceil(remaining / 60);
+          return res.status(429).json({ message: `Too many failed attempts. Try again in ${mins} minute(s).` });
+        }
+        attempts.delete(username);
+      }
+    }
+
+    const empResult = await pool.query(
+      "SELECT * FROM employee_details WHERE employee_id = $1",
+      [username]
+    );
 
   if (empResult.rows.length > 0) {
     const emp = empResult.rows[0];
@@ -57,10 +58,11 @@ const login = async (req, res) => {
       userId: emp.employee_id,
     });
 
+    const isProduction = process.env.NODE_ENV === "production";
     res.cookie("auth_token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
       path: "/",
     });
@@ -81,13 +83,18 @@ const login = async (req, res) => {
   attempts.set(username, rec);
 
   res.status(401).json({ message: "Invalid credentials" });
+  } catch (error) {
+    console.error("[Login] Error:", error.message);
+    res.status(500).json({ message: error.message || "Login failed" });
+  }
 };
 
 const logout = (req, res) => {
+  const isProduction = process.env.NODE_ENV === "production";
   res.clearCookie("auth_token", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "none",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     path: "/",
   });
   res.json({ success: true });

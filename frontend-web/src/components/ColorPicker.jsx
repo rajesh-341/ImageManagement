@@ -66,14 +66,13 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
       </div>
       <div className="color-swatches">
         {filtered.map((color) => (
-          <div key={color.name} className="color-swatch-container">
+          <div key={color.name} className="color-swatch-container" onClick={() => toggleColor(color.name)}>
             <button
               type="button"
               className={`color-swatch ${selectedColors.includes(color.name) ? "selected" : ""} ${
                 color.name === "White" || color.name === "Yellow" || color.name === "Amber" || color.name === "Lime" ? "light-color" : ""
               }`}
               style={{ backgroundColor: color.hex }}
-              onClick={() => toggleColor(color.name)}
               title={color.name}
             />
             <span className="color-swatch-name">{color.name}</span>

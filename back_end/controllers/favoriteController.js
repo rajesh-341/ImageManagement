@@ -1,17 +1,33 @@
 const pool = require("../config/db");
 
+const getFavImageIds = async (userId) => {
+  const result = await pool.query(
+    "SELECT favourite_images FROM employee_details WHERE employee_id = $1",
+    [userId]
+  );
+  if (result.rows.length === 0) return [];
+  let ids = result.rows[0].favourite_images || [];
+  if (typeof ids === "string") ids = JSON.parse(ids);
+  return ids.map(id => (typeof id === "string" ? parseInt(id, 10) : id)).filter(id => !isNaN(id));
+};
+
 const addFavorite = async (req, res) => {
   try {
     const { imageId } = req.body;
     if (!imageId) return res.status(400).json({ message: "Image ID required" });
 
-    const result = await pool.query(
-      "UPDATE image_management SET favourite = true WHERE id = $1 RETURNING *",
-      [imageId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Image not found" });
+    const ids = await getFavImageIds(req.user.userId);
+    if (!ids.includes(imageId)) ids.push(imageId);
 
-    const img = result.rows[0];
+    await pool.query(
+      "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
+      [JSON.stringify(ids), req.user.userId]
+    );
+
+    const imgResult = await pool.query("SELECT * FROM image_management WHERE id = $1", [imageId]);
+    if (imgResult.rows.length === 0) return res.status(404).json({ message: "Image not found" });
+
+    const img = imgResult.rows[0];
     img.image_data = typeof img.image_data === "string" ? JSON.parse(img.image_data) : img.image_data;
     res.json({ message: "Added to favorites", image: img });
   } catch (error) {
@@ -22,11 +38,15 @@ const addFavorite = async (req, res) => {
 const removeFavorite = async (req, res) => {
   try {
     const { imageId } = req.params;
-    const result = await pool.query(
-      "UPDATE image_management SET favourite = false WHERE id = $1 RETURNING *",
-      [imageId]
+    const imageIdNum = parseInt(imageId, 10);
+
+    const ids = await getFavImageIds(req.user.userId);
+    const filtered = ids.filter(id => id !== imageIdNum);
+
+    await pool.query(
+      "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
+      [JSON.stringify(filtered), req.user.userId]
     );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Image not found" });
 
     res.json({ message: "Removed from favorites" });
   } catch (error) {
@@ -37,11 +57,15 @@ const removeFavorite = async (req, res) => {
 const getFavorites = async (req, res) => {
   try {
     const { folder } = req.query;
-    let query = "SELECT * FROM image_management WHERE favourite = true";
-    const params = [];
+    const ids = await getFavImageIds(req.user.userId);
+
+    if (ids.length === 0) return res.json([]);
+
+    let query = "SELECT * FROM image_management WHERE id = ANY($1::int[])";
+    const params = [ids];
 
     if (folder) {
-      query += " AND folder_name = $1";
+      query += " AND folder_name = $2";
       params.push(folder);
     }
 

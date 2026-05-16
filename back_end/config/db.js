@@ -6,7 +6,7 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'image_metadata',
   password: process.env.DB_PASSWORD || '',
   port: parseInt(process.env.DB_PORT || '5432'),
-  ssl: { rejectUnauthorized: false },
+  ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
   family: 4,
 });
 

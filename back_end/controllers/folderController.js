@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const path = require("path");
 const fs = require("fs");
+const { deleteImage: deleteStorageImage, isLocal } = require("../config/storage");
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
 
@@ -79,9 +80,13 @@ const deleteFolder = async (req, res) => {
     for (const row of imagesResult.rows) {
       const imageData = typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data;
       if (imageData && imageData.imageUrl) {
-        const filePath = path.join(__dirname, "..", imageData.imageUrl.replace(/^\//, ""));
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+        if (isLocal()) {
+          const filePath = path.join(__dirname, "..", imageData.imageUrl.replace(/^\//, ""));
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } else {
+          await deleteStorageImage(imageData.imageUrl);
         }
       }
     }

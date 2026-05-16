@@ -32,7 +32,7 @@
 
 .navbar {
   background: linear-gradient(135deg, #7EC0CE, #D56493);
-  padding: 14px 32px;
+  padding: 12px 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -40,39 +40,45 @@
 }
 
 .navbar-brand {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #fff;
   letter-spacing: 0.5px;
 }
 
-.btn-back-folder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  border: none;
-  background: #f3f4f6;
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-back-folder:hover {
-  background: #e5e7eb;
-  color: #1a1a1a;
-}
-
-.btn-back-folder svg {
-  flex-shrink: 0;
-}
-
 .navbar-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-item {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.75);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 8px 16px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.3s ease, transform 0.3s ease;
+  text-transform: uppercase;
+}
+
+.nav-item:hover {
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.nav-item.active {
+  color: #fff;
 }
 
 .user-info {
@@ -81,58 +87,47 @@
   align-items: flex-end;
   font-size: 13px;
   color: #fff;
-  line-height: 1.4;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  line-height: 1.5;
 }
 
-.user-info strong {
-  color: #fff;
-  font-weight: 700;
+.user-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.7;
+  margin-right: 5px;
+}
+
+.user-display {
+  font-weight: 600;
 }
 
 .user-role {
-  font-size: 11px;
+  font-size: 12px;
+  opacity: 0.85;
 }
 
 .btn-logout {
-  background: rgba(255,255,255,0.9);
-  border: 2px solid rgba(255,255,255,0.5);
-  border-radius: 10px;
-  padding: 10px 20px;
-  font-size: 14px;
+  background: rgba(255,255,255,0.15);
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: #fff;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  letter-spacing: 0.3px;
 }
 
 .btn-logout:hover {
-  background: #fff;
-  border-color: #fff;
-  color: #D56493;
-}
-
-.btn-favorites-nav {
-  background: rgba(255,255,255,0.9);
-  border: 2px solid rgba(255,255,255,0.5);
-  border-radius: 10px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-favorites-nav:hover {
-  background: #fff;
+  background: rgba(255,255,255,0.95);
   border-color: #fff;
   color: #D56493;
 }
 
 /* Main Content */
 .main-content {
-  padding: 32px;
   width: 100%;
 }
 
@@ -480,7 +475,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: rgba(255, 255, 255, 0.3);
+  background: transparent;
 }
 
 .folder-label-row::before {
@@ -731,12 +726,12 @@
 .image-card-img-wrap {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
 }
 
 .image-card-img {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
   object-fit: cover;
   display: block;
   background: #f3f4f6;
@@ -744,7 +739,7 @@
 
 .image-card-placeholder {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -765,6 +760,7 @@
   opacity: 0;
   transition: opacity 0.2s ease;
   background: linear-gradient(transparent, rgba(0,0,0,0.6));
+  z-index: 2;
 }
 
 .image-card:hover .image-card-hover-actions {
@@ -805,8 +801,43 @@
   background: #C45382;
 }
 
+.image-card-hover-details {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(0,0,0,0.65);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  text-align: center;
+  z-index: 1;
+}
+
+.image-card-img-wrap:hover .image-card-hover-details {
+  opacity: 1;
+}
+
+.hover-detail {
+  font-size: 11px;
+  color: #fff;
+  line-height: 1.3;
+}
+
+.hover-detail span {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.65;
+  margin-bottom: 1px;
+}
+
 .image-card-info {
-  padding: 4px 6px;
+  padding: 6px 8px 8px;
   background: #fff;
   border-top: 1px solid #f0f0f0;
 }
@@ -818,13 +849,11 @@
 }
 
 .image-card-design {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #1a1a1a;
-  margin-bottom: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .image-card-size {
@@ -876,15 +905,15 @@
 
 .favorite-btn-card {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 32px;
-  height: 32px;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: none;
   background: rgba(255,255,255,0.9);
   color: #d1d5db;
-  font-size: 18px;
+  font-size: 11px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1094,7 +1123,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 3000;
 }
 
 .modal {
@@ -1320,8 +1349,14 @@
 }
 
 .upload-modal {
-  max-width: 700px !important;
-  width: 700px !important;
+  max-width: 95vw !important;
+  width: 95vw !important;
+}
+
+.upload-modal .modal {
+  max-width: 1400px;
+  width: 100%;
+  max-height: 90vh;
 }
 
 .upload-modal .drop-zone {
@@ -1391,6 +1426,8 @@
 
 .batch-table-container {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 50vh;
   margin-bottom: 16px;
   border-radius: 10px;
   border: 2px solid #e5e7eb;
@@ -1410,7 +1447,7 @@
 }
 
 .batch-table th {
-  padding: 10px 8px;
+  padding: 12px 10px;
   text-align: left;
   font-weight: 600;
   color: #374151;
@@ -1419,7 +1456,7 @@
 }
 
 .batch-table td {
-  padding: 8px;
+  padding: 10px;
   border-bottom: 1px solid #f3f4f6;
   vertical-align: middle;
 }
@@ -1460,7 +1497,7 @@
 
 .batch-input {
   width: 100%;
-  padding: 6px 10px;
+  padding: 8px 10px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   font-size: 13px;
@@ -1477,11 +1514,12 @@
 
 .batch-input-sm {
   width: 60px;
+  padding: 8px 6px;
 }
 
 .batch-select {
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 8px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   font-size: 13px;
@@ -1531,22 +1569,28 @@
 @media (max-width: 768px) {
   .navbar {
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px;
-  }
-
-  .navbar-left, .navbar-right {
-    width: 100%;
-    justify-content: center;
+    gap: 10px;
+    padding: 10px 16px;
   }
 
   .navbar-right {
-    justify-content: space-between;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .nav-menu {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
   }
 
   .user-info {
     align-items: center;
-    font-size: 12px;
+    font-size: 11px;
+    flex-direction: row;
+    gap: 8px;
   }
 
   .main-content {
@@ -1602,16 +1646,12 @@
 /* Filter Sidebar Layout */
 .folder-view-with-filters {
   display: flex;
-  gap: 24px;
-  min-height: calc(100vh - 200px);
+  min-height: calc(100vh - 60px);
 }
 
 .folder-main-content {
   flex: 1;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  padding: 24px;
+  padding: 24px 32px;
 }
 
 /* Filter Sidebar - Right Side Overlay */

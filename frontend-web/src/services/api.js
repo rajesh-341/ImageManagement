@@ -160,28 +160,6 @@ const ApiService = {
     return data;
   },
 
-  async uploadExcel(file, folderName) {
-    const formData = new FormData();
-    formData.append("files", file);
-    formData.append("folderName", folderName);
-
-    const url = `${API_BASE_URL}/upload-excel`;
-
-    const response = await fetch(url, {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || `Upload failed: ${response.status}`);
-    }
-
-    return data;
-  },
-
   async searchImages(filters, page = 1, limit = 200) {
     const params = new URLSearchParams({ page, limit });
     Object.entries(filters).forEach(([key, value]) => {

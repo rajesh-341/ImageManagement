@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const cloudinary = require("../config/cloudinary");
+const { deleteImage: deleteStorageImage } = require("../config/storage");
 const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES, FOLDER_VIEW_ROLES } = require("../config/constants");
 
 const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
@@ -245,19 +246,11 @@ const deleteImage = async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    const imageData = selectResult.rows[0].image_data;
-    const parsedData = typeof imageData === "string" ? JSON.parse(imageData) : imageData;
+    const parsedData = typeof selectResult.rows[0].image_data === "string"
+      ? JSON.parse(selectResult.rows[0].image_data)
+      : selectResult.rows[0].image_data;
     if (parsedData && parsedData.imageUrl) {
-      const publicId = parsedData.imageUrl.split("/").pop().replace(/\.\w+$/, "");
-      const folderMatch = parsedData.imageUrl.match(/image_management\/([^/]+)/);
-      const fullPublicId = folderMatch
-        ? `image_management/${folderMatch[1]}/${publicId}`
-        : publicId;
-      try {
-        await cloudinary.uploader.destroy(fullPublicId);
-      } catch (cloudErr) {
-        console.log("[Cloudinary] Delete warning:", cloudErr.message);
-      }
+      await deleteStorageImage(parsedData.imageUrl);
     }
 
     const query = "DELETE FROM image_management WHERE id = $1 RETURNING *";

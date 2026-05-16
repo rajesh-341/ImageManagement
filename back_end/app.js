@@ -5,8 +5,8 @@ const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const multer = require("multer");
 const cloudinary = require("./config/cloudinary");
+const { saveImage, isLocal } = require("./config/storage");
 const path = require("path");
-const sharp = require("sharp");
 require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
@@ -14,7 +14,6 @@ const imageRoutes = require("./routes/imageRoutes");
 const folderRoutes = require("./routes/folderRoutes");
 const favoriteRoutes = require("./routes/favoriteRoutes");
 const userRoutes = require("./routes/userRoutes");
-const { uploadExcel } = require("./controllers/excelController");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
 const pool = require("./config/db");
@@ -29,8 +28,8 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:", `${process.env.FRONTEND_URL || "http://localhost:3000"}`],
-      connectSrc: ["'self'", process.env.FRONTEND_URL || "http://localhost:3000"],
+      imgSrc: ["'self'", "data:", "blob:", "res.cloudinary.com", `${process.env.FRONTEND_URL || "http://localhost:3000"}`],
+      connectSrc: ["'self'", "res.cloudinary.com", process.env.FRONTEND_URL || "http://localhost:3000"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -49,7 +48,7 @@ app.use(express.json({ limit: "50mb" }));
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: process.env.NODE_ENV === "production" ? 10 : 100,
   message: { message: "Too many login attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -57,7 +56,7 @@ const loginLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === "production" ? 100 : 500,
   message: { message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -105,6 +104,10 @@ const upload = multer({
   },
 });
 
+if (isLocal()) {
+  app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+}
+
 app.post("/api/upload", verifyToken, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
@@ -112,29 +115,9 @@ app.post("/api/upload", verifyToken, upload.single("image"), async (req, res) =>
     }
 
     const folderName = req.body.folderName || "uncategorized";
-    const sanitizedFolder = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
+    const result = await saveImage(req.file.buffer, folderName);
 
-    const processedBuffer = await sharp(req.file.buffer)
-      .resize(1920, 1080, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 85 })
-      .toBuffer();
-
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: `image_management/${sanitizedFolder}`,
-          format: "webp",
-          public_id: Date.now() + "-" + Math.round(Math.random() * 1e9),
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      stream.end(processedBuffer);
-    });
-
-    res.json({ imageUrl: result.secure_url, filename: result.public_id });
+    res.json({ imageUrl: result.imageUrl, filename: result.filename });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -145,7 +128,6 @@ app.use("/api/images", imageRoutes);
 app.use("/api/folders", folderRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/users", userRoutes);
-app.post("/api/upload-excel", verifyToken, upload.array("files", 100), uploadExcel);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
@@ -195,6 +177,11 @@ app.get("/api/download/:id", verifyToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+app.use((err, req, res, next) => {
+  console.error("[Error]", err.message);
+  res.status(err.status || 500).json({ message: err.message || "Internal server error" });
 });
 
 module.exports = app;

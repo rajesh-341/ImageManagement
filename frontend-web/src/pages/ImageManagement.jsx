@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
 import FilterSidebar from "../components/FilterSidebar";
@@ -39,7 +39,6 @@ function ImageManagement() {
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadTab, setUploadTab] = useState("single");
-  const [selectedExcelFile, setSelectedExcelFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [batchImages, setBatchImages] = useState([]);
   const [imagePreview, setImagePreview] = useState("");
@@ -114,9 +113,9 @@ function ImageManagement() {
   });
 
   const navigate = useNavigate();
-  const excelFileRef = useRef(null);
   const batchImageRef = useRef(null);
   const imageFileRef = useRef(null);
+  const formSettingsRef = useRef(null);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -143,6 +142,7 @@ function ImageManagement() {
   useEffect(() => {
     if (user) {
       loadFolders();
+      loadFavorites();
       const isFolderViewUser = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
       if (!isFolderViewUser) {
         setView("images");
@@ -152,7 +152,10 @@ function ImageManagement() {
   }, [user]);
 
   useEffect(() => {
-    if (currentFolder) loadImages();
+    if (currentFolder) {
+      loadImages();
+      loadFavorites();
+    }
   }, [currentFolder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadFolders = async () => {
@@ -236,17 +239,17 @@ function ImageManagement() {
     }
   };
 
-  const openLightbox = (imageArray, index) => {
+  const openLightbox = useCallback((imageArray, index) => {
     const img = imageArray[index];
     setLightboxImage({
       url: img.image_data?.imageUrl ? (img.image_data.imageUrl.startsWith("http") ? img.image_data.imageUrl : `${IMAGE_BASE_URL}${img.image_data.imageUrl}`) : "",
       data: img.image_data,
       id: img.id,
-      isFav: img.favourite,
+      isFav: favoriteImages.some(fav => fav.id === img.id),
       allImages: imageArray,
       currentIndex: index,
     });
-  };
+  }, [favoriteImages]);
 
   const handleAddFolder = async (e) => {
     e.preventDefault();
@@ -254,7 +257,6 @@ function ImageManagement() {
     if (isFieldRequired("folder_customerName") && !customerName.trim()) missing.push("Customer Name");
     if (isFieldRequired("folder_venue") && !venueName.trim()) missing.push("Venue");
     if (isFieldRequired("folder_eventDate") && !eventDate) missing.push("Event Date");
-    if (isFieldRequired("folder_description") && !folderDescription.trim()) missing.push("Description");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
       return;
@@ -300,14 +302,17 @@ function ImageManagement() {
     setFilteredImages([]);
   };
 
+  const resetUploadForm = () => {
+    setImageData({ designName: "", eventType: "", decorType: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+    setSelectedImage(null);
+    setImagePreview("");
+    setBatchImages([]);
+    setUploadProgress("");
+  };
+
   const handleBackToFolders = () => {
     setCurrentFolder(null);
     setImages([]);
-  };
-
-  const handleExcelSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) setSelectedExcelFile(file);
   };
 
   const handleImageSelect = (e) => {
@@ -364,17 +369,45 @@ function ImageManagement() {
   const handleUploadBatch = async (e) => {
     e.preventDefault();
     if (batchImages.length === 0) { showNotif("Please select at least one image", "warning"); return; }
+
+    const missingRows = [];
+    batchImages.forEach((row, idx) => {
+      const missing = [];
+      if (isFieldRequired("image_designName") && !row.designName) missing.push("Design Name");
+      if (isFieldRequired("image_eventType") && !row.eventType) missing.push("Event Type");
+      if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
+      if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
+      if (isFieldRequired("image_flowerType") && !row.flowerType) missing.push("Flower Type");
+      if (isFieldRequired("image_venueDate") && !row.venueDate) missing.push("Event Date");
+      if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
+      if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
+    });
+
+    if (missingRows.length > 0) {
+      const msg = missingRows.map(r => `Row ${r.row}: ${r.fields.join(", ")}`).join(" | ");
+      showNotif(`Please fill required fields - ${msg}`, "warning");
+      return;
+    }
+
     setLoading(true);
     setUploadProgress(`Uploading 0 of ${batchImages.length} images...`);
     let successCount = 0;
     let errorCount = 0;
     try {
-      const sig = await ApiService.getUploadSignature(currentFolder.name);
+      const isLocalDev = window.location.hostname === "localhost";
       for (let i = 0; i < batchImages.length; i++) {
         const row = batchImages[i];
         setUploadProgress(`Uploading ${i + 1} of ${batchImages.length} images...`);
         try {
-          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
+          let imageUrl;
+          if (isLocalDev) {
+            const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
+            imageUrl = uploadResult.imageUrl;
+          } else {
+            const sig = await ApiService.getUploadSignature(currentFolder.name);
+            const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
+            imageUrl = cloudResult.secure_url;
+          }
           const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
           const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
           const colours = Array.isArray(row.colours)
@@ -382,7 +415,7 @@ function ImageManagement() {
             : row.colours.split(",").map(c => c.trim()).filter(c => c);
           const metaData = {
             folderName: currentFolder.name,
-            imageUrl: cloudResult.secure_url,
+            imageUrl,
             colourCombination: colours,
             sizeWidth: row.sizeWidth || null,
             sizeLength: row.sizeLength || null,
@@ -411,9 +444,8 @@ function ImageManagement() {
       setBatchImages([]);
       loadImages();
       setTimeout(() => {
+        resetUploadForm();
         setShowUploadModal(false);
-        setUploadProgress("");
-        setUploadTab("single");
       }, 2000);
     } catch (err) {
       showNotif("Something went wrong");
@@ -440,13 +472,23 @@ function ImageManagement() {
     setLoading(true);
     setUploadProgress("Uploading image...");
     try {
-      const sig = await ApiService.getUploadSignature(currentFolder.name);
-      const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig);
+      const isLocalDev = window.location.hostname === "localhost";
+      let imageUrl;
+
+      if (isLocalDev) {
+        const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
+        imageUrl = uploadResult.imageUrl;
+      } else {
+        const sig = await ApiService.getUploadSignature(currentFolder.name);
+        const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig);
+        imageUrl = cloudResult.secure_url;
+      }
+
       const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
       const metaData = {
         folderName: currentFolder.name,
-        imageUrl: cloudResult.secure_url,
+        imageUrl,
         colourCombination: imageData.colours,
         sizeWidth: imageData.sizeWidth || null,
         sizeLength: imageData.sizeLength || null,
@@ -471,31 +513,9 @@ function ImageManagement() {
       setImageData({ designName: "", eventType: "", decorType: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
       loadImages();
       setTimeout(() => {
+        resetUploadForm();
         setShowUploadModal(false);
-        setUploadProgress("");
-        setUploadTab("single");
       }, 1500);
-    } catch (err) {
-      showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUploadExcel = async (e) => {
-    e.preventDefault();
-    if (!selectedExcelFile) { showNotif("Please select an Excel file", "warning"); return; }
-    setLoading(true);
-    setUploadProgress("Uploading and processing Excel file...");
-    try {
-      const result = await ApiService.uploadExcel(selectedExcelFile, currentFolder.name);
-      setUploadProgress(`Success! ${result.uploaded} images uploaded`);
-      if (result.errors && result.errors.length > 0) {
-        setUploadProgress(prev => prev + `\nErrors: ${result.errors.join(", ")}`);
-      }
-      setSelectedExcelFile(null);
-      loadImages();
-      setTimeout(() => { setShowUploadModal(false); setUploadProgress(""); }, 2000);
     } catch (err) {
       showNotif("Something went wrong");
     } finally {
@@ -553,10 +573,8 @@ function ImageManagement() {
         setLightboxImage(prev => ({ ...prev, isFav: !isFavorite }));
       }
       loadImages();
-      if (showFavorites) {
-        loadFavorites(selectedFavFolder?.name);
-        loadFavoriteFolders();
-      }
+      loadFavorites();
+      if (showFavorites) loadFavoriteFolders();
       if (view === "images") loadAllImages();
     } catch (err) {
       showNotif("Something went wrong");
@@ -643,19 +661,6 @@ function ImageManagement() {
       showNotif("Something went wrong");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleToggleFavorites = () => {
-    const wasShowing = showFavorites;
-    setShowFavorites(!wasShowing);
-    if (!wasShowing) {
-      loadFavorites();
-      loadFavoriteFolders();
-      setCurrentFolder(null);
-      setFilteredImages([]);
-    } else if (!canViewFolders) {
-      loadAllImages();
     }
   };
 
@@ -820,15 +825,6 @@ function ImageManagement() {
     });
   };
 
-  const handleSwitchToImagesView = async () => {
-    if (view === "images") { setView("folders"); return; }
-    setView("images");
-    setCurrentFolder(null);
-    setFilteredImages([]);
-    setShowFavorites(false);
-    loadAllImages();
-  };
-
   const renderImageCardDetails = (data) => {
     if (!data) return null;
     const sizeDisplay = data.sizeDisplay || buildSizeDisplay(data.sizeWidth, data.sizeLength, data.sizeHeight, data.sizeUnit);
@@ -864,7 +860,7 @@ function ImageManagement() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lightboxImage]);
+  }, [lightboxImage, openLightbox]);
 
   const handleLogout = async () => {
     await ApiService.logout();
@@ -941,7 +937,7 @@ function ImageManagement() {
   const renderImageCard = (image, index, imageArray) => {
     const rawUrl = image.image_data?.imageUrl || "";
     const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
-    const isFav = image.favourite;
+    const isFav = favoriteImages.some(fav => fav.id === image.id);
     const isSelected = selectedImageIds.has(image.id);
     const data = image.image_data || {};
     const buildSizeLabeled = (w, l, h) => {
@@ -1000,12 +996,14 @@ function ImageManagement() {
               </>
             )}
           </div>
+          <div className="image-card-hover-details">
+            {sizeDisplay && <div className="hover-detail"><span>Size</span> {sizeDisplay}</div>}
+            {priceDisplay && <div className="hover-detail"><span>Price range</span> {priceDisplay}</div>}
+            {data.venueDate && <div className="hover-detail"><span>Event Date</span> {formatEventDate(data.venueDate)}</div>}
+          </div>
         </div>
         <div className="image-card-info">
           <div className="image-card-design"><span className="info-label">Design Name -</span> {data.designName || "Untitled"}</div>
-          {sizeDisplay && <div className="image-card-size"><span className="info-label">Size -</span> {sizeDisplay}</div>}
-          {priceDisplay && <div className="image-card-price"><span className="info-label">Price range -</span> {priceDisplay}</div>}
-          {data.venueDate && <div className="image-card-date"><span className="info-label">Event Date -</span> {formatEventDate(data.venueDate)}</div>}
         </div>
       </div>
     );
@@ -1050,21 +1048,6 @@ function ImageManagement() {
             </div>
           </div>
           <div className="action-bar-buttons">
-            {canViewFolders && (
-              <button
-                className={`btn btn-view-toggle ${view === "images" ? "active" : ""}`}
-                onClick={handleSwitchToImagesView}
-                title={view === "images" ? "Show Folder View" : "Show All Images"}
-              >
-                {view === "images" ? "📁 Folders" : "🖼 Images"}
-              </button>
-            )}
-            <button
-              className={`btn btn-favorites ${showFavorites ? "active" : ""}`}
-              onClick={handleToggleFavorites}
-            >
-              ★ Favorites
-            </button>
             <button
               className={`btn btn-filter-toggle ${showFiltersSidebar ? "active" : ""}`}
               onClick={() => setShowFiltersSidebar(!showFiltersSidebar)}
@@ -1072,7 +1055,7 @@ function ImageManagement() {
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
-              Filters
+              Advanced Filter
             </button>
           </div>
         </div>
@@ -1301,7 +1284,7 @@ function ImageManagement() {
         <>
           <div className="image-grid">
             {canUpload && selectedImageIds.size === 0 && (
-              <div className="upload-box-card" onClick={() => { setUploadTab("single"); setShowUploadModal(true); }}>
+              <div className="upload-box-card" onClick={() => { resetUploadForm(); setUploadTab("single"); setShowUploadModal(true); }}>
                 <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
@@ -1325,18 +1308,21 @@ function ImageManagement() {
   return (
     <div className="image-management">
       <nav className="navbar">
-        <div className="navbar-left">
-          <div className="navbar-brand">Event Management</div>
-        </div>
+        <div className="navbar-brand">Event Management</div>
         <div className="navbar-right">
-          <div className="user-info">
-            <span className="user-display">User: <strong>{displayName}</strong></span>
-            <span className="user-role">Role: <strong>{role}</strong></span>
+          <div className="nav-menu">
+            <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
+            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}>IMAGES</button>
+            <button className={`nav-item ${currentFolder && !showFavorites ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}>FOLDERS</button>
+            {canUpload && (
+              <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
+            )}
           </div>
-          {canUpload && (
-            <button onClick={handleOpenUserModal} className="btn btn-favorites-nav">👥 Users</button>
-          )}
-          <button onClick={handleLogout} className="btn btn-logout">Logout</button>
+          <div className="user-info">
+            <span className="user-display"><span className="user-label">User</span> {displayName}</span>
+            <span className="user-role"><span className="user-label">Role</span> {role}</span>
+          </div>
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 
@@ -1353,7 +1339,7 @@ function ImageManagement() {
 
       {/* Add Folder Modal */}
       {showAddFolderModal && (
-        <div className="modal-overlay" onClick={() => setShowAddFolderModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Folder</h2>
@@ -1395,14 +1381,13 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Description{isFieldRequired("folder_description") && <span className="required">*</span>}</label>
+                <label className="label">Description</label>
                 <textarea
                   className="input"
                   value={folderDescription}
                   onChange={(e) => setFolderDescription(e.target.value)}
                   placeholder="Enter folder description"
                   rows={3}
-                  required={isFieldRequired("folder_description")}
                 />
               </div>
               {customerName && venueName && eventDate && (
@@ -1423,7 +1408,7 @@ function ImageManagement() {
 
       {/* Add Favourite Folder Modal */}
       {showAddFavFolderModal && (
-        <div className="modal-overlay" onClick={() => setShowAddFavFolderModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Folder in Favorites</h2>
@@ -1465,14 +1450,13 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Description{isFieldRequired("folder_description") && <span className="required">*</span>}</label>
+                <label className="label">Description</label>
                 <textarea
                   className="input"
                   value={favFolderDesc}
                   onChange={(e) => setFavFolderDesc(e.target.value)}
                   placeholder="Enter folder description"
                   rows={3}
-                  required={isFieldRequired("folder_description")}
                 />
               </div>
               {favCustName && favVenue && favEventDate && (
@@ -1491,17 +1475,16 @@ function ImageManagement() {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
+        <div className="modal-overlay">
           <div className="modal upload-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Upload Images</h2>
-              <button className="modal-close" onClick={() => setShowUploadModal(false)}>×</button>
+              <button className="modal-close" onClick={() => { resetUploadForm(); setShowUploadModal(false); }}>×</button>
             </div>
 
             <div className="upload-tabs">
               <button className={`upload-tab ${uploadTab === "single" ? "active" : ""}`} onClick={() => setUploadTab("single")}>Single Image</button>
               <button className={`upload-tab ${uploadTab === "batch" ? "active" : ""}`} onClick={() => setUploadTab("batch")}>Batch Upload</button>
-              <button className={`upload-tab ${uploadTab === "excel" ? "active" : ""}`} onClick={() => setUploadTab("excel")}>Excel Upload</button>
             </div>
 
             {uploadTab === "single" && (
@@ -1534,12 +1517,13 @@ function ImageManagement() {
                   </div>
                   <div className="form-group">
                     <label className="label">Decoration Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</label>
-                    <input type="text" className="input" list="decorTypeList" value={imageData.decorType}
-                      onChange={(e) => setImageData({...imageData, decorType: e.target.value})}
-                      placeholder="Search and select decoration type" required={isFieldRequired("image_decorType")} />
-                    <datalist id="decorTypeList">
-                      {DECOR_TYPES.map(t => <option key={t} value={t} />)}
-                    </datalist>
+                    <AutocompleteInput
+                      options={DECOR_TYPES}
+                      value={imageData.decorType}
+                      onChange={(val) => setImageData({...imageData, decorType: val})}
+                      placeholder="Search and select decoration type"
+                      required={isFieldRequired("image_decorType")}
+                    />
                   </div>
                 </div>
 
@@ -1624,9 +1608,12 @@ function ImageManagement() {
                 </div>
 
                 {uploadProgress && <div className="upload-progress">{uploadProgress}</div>}
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? "Uploading..." : "Upload Image"}
-                </button>
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => { resetUploadForm(); setShowUploadModal(false); }}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? "Uploading..." : "Upload Image"}
+                  </button>
+                </div>
               </form>
             )}
 
@@ -1647,16 +1634,16 @@ function ImageManagement() {
                         <thead>
                           <tr>
                             <th>Image</th>
-                            <th>Design Name</th>
-                            <th>Event Type</th>
-                            <th>Decor Type</th>
-                            <th>Size</th>
+                            <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}</th>
+                            <th>Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</th>
+                            <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</th>
+                            <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}</th>
                             <th>Unit</th>
-                            <th>Colours</th>
-                            <th>Flower</th>
-                            <th>Date</th>
-                            <th>Min</th>
-                            <th>Max</th>
+                            <th>Colours{isFieldRequired("image_colours") && <span className="required">*</span>}</th>
+                            <th>Flower{isFieldRequired("image_flowerType") && <span className="required">*</span>}</th>
+                            <th>Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}</th>
+                            <th>Min{isFieldRequired("image_price") && <span className="required">*</span>}</th>
+                            <th>Max{isFieldRequired("image_price") && <span className="required">*</span>}</th>
                             <th></th>
                           </tr>
                         </thead>
@@ -1673,9 +1660,12 @@ function ImageManagement() {
                                   {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                               </td>
-                              <td><input type="text" className="batch-input" list="batchDecorList" value={row.decorType}
-                                onChange={(e) => updateBatchRow(index, "decorType", e.target.value)} placeholder="Decor" />
-                                <datalist id="batchDecorList">{DECOR_TYPES.map(t => <option key={t} value={t} />)}</datalist>
+                              <td>
+                                <select className="batch-select" value={row.decorType}
+                                  onChange={(e) => updateBatchRow(index, "decorType", e.target.value)}>
+                                  <option value="">Decor</option>
+                                  {DECOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
                               </td>
                               <td>
                                 <div className="batch-size-row">
@@ -1725,33 +1715,13 @@ function ImageManagement() {
                     <button type="submit" className="btn btn-primary" disabled={loading || batchImages.length === 0}>
                       {loading ? "Uploading..." : `Upload ${batchImages.length} Image(s)`}
                     </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => { resetUploadForm(); setShowUploadModal(false); }}>Cancel</button>
                   </div>
                 </div>
               </form>
             )}
 
-            {uploadTab === "excel" && (
-              <form onSubmit={handleUploadExcel}>
-                <div className="form-group">
-                  <label className="label">Select Excel File</label>
-                  <div className="drop-zone" onClick={() => excelFileRef.current?.click()}>
-                    <input ref={excelFileRef} type="file" accept=".xlsx,.xls" onChange={handleExcelSelect} style={{ display: "none" }} />
-                    {selectedExcelFile ? (
-                      <p>{selectedExcelFile.name}</p>
-                    ) : (
-                      <div className="drop-text">
-                        <p>Click to select Excel file</p>
-                        <p className="drop-hint">Supports: .xlsx, .xls</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {uploadProgress && <div className="upload-progress">{uploadProgress}</div>}
-                <button type="submit" className="btn btn-primary" disabled={loading || !selectedExcelFile}>
-                  {loading ? "Uploading..." : "Upload Excel"}
-                </button>
-              </form>
-            )}
+
           </div>
         </div>
       )}
@@ -1813,7 +1783,7 @@ function ImageManagement() {
 
       {/* Move to Folder Modal */}
       {showMoveModal && (
-        <div className="modal-overlay" onClick={() => setShowMoveModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Move to Folder</h2>
@@ -1838,7 +1808,7 @@ function ImageManagement() {
 
       {/* User Management Modal */}
       {showUserModal && (
-        <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
+        <div className="modal-overlay">
           <div className="modal user-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">User Management</h2>
@@ -1977,13 +1947,17 @@ function ImageManagement() {
                 </div>
 
                 {canUpload && (
-                  <button className="btn btn-secondary" onClick={() => setShowFormSettings(!showFormSettings)} style={{ marginTop: "16px", width: "100%" }}>
+                  <button className="btn btn-secondary" onClick={() => {
+                    const next = !showFormSettings;
+                    setShowFormSettings(next);
+                    if (next) setTimeout(() => formSettingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                  }} style={{ marginTop: "16px", width: "100%" }}>
                     {showFormSettings ? "Close Form Settings" : "Form Settings"}
                   </button>
                 )}
 
                 {showFormSettings && (
-                  <div className="form-settings-panel">
+                  <div className="form-settings-panel" ref={formSettingsRef}>
                     <h3 className="form-settings-title">Mandatory Field Settings</h3>
                     <p className="form-settings-hint">Toggle fields between mandatory (<span className="required-star">*</span>) and optional</p>
                     <div className="form-settings-group">
@@ -1991,7 +1965,6 @@ function ImageManagement() {
                       <label className="form-settings-row"><span>Customer Name</span><input type="checkbox" checked={isFieldRequired("folder_customerName")} onChange={(e) => { const c = {...formConfig, folder_customerName: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("folder_venue")} onChange={(e) => { const c = {...formConfig, folder_venue: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("folder_eventDate")} onChange={(e) => { const c = {...formConfig, folder_eventDate: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Description</span><input type="checkbox" checked={isFieldRequired("folder_description")} onChange={(e) => { const c = {...formConfig, folder_description: e.target.checked}; saveFormConfig(c); }} /></label>
                     </div>
                     <div className="form-settings-group">
                       <h4>Upload Image</h4>
@@ -2014,7 +1987,7 @@ function ImageManagement() {
 
       {/* Edit Modal */}
       {showEditModal && editingImage && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+        <div className="modal-overlay">
           <div className="modal edit-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Edit Image</h2>
@@ -2047,9 +2020,12 @@ function ImageManagement() {
               </div>
               <div className="form-group">
                 <label className="label">Decoration Type</label>
-                <input type="text" className="input" list="editDecorList" value={editData.decorType}
-                  onChange={(e) => setEditData({...editData, decorType: e.target.value})} />
-                <datalist id="editDecorList">{DECOR_TYPES.map(t => <option key={t} value={t} />)}</datalist>
+                <AutocompleteInput
+                  options={DECOR_TYPES}
+                  value={editData.decorType}
+                  onChange={(val) => setEditData({...editData, decorType: val})}
+                  placeholder="Search and select decoration type"
+                />
               </div>
               <div className="form-group">
                 <label className="label">Colours</label>
