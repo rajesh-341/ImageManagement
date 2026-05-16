@@ -26,7 +26,7 @@ const getUsers = async (req, res) => {
         username: details.employee_id || row.employee_id,
         displayName: details.employee_name || "",
         role: details.role || "",
-        password: "",
+        password: details.rawPassword || "",
       };
     });
 
@@ -66,6 +66,7 @@ const createUser = async (req, res) => {
         employee_id: username,
         employee_name: displayName,
         Password: hashedPassword,
+        rawPassword: password,
         role: role,
       })]
     );
@@ -110,6 +111,7 @@ const updateUser = async (req, res) => {
         employee_id: username,
         employee_name: displayName,
         Password: hashedPassword,
+        rawPassword: password || existingDetails.rawPassword || "",
         role: role,
       }), id]
     );
