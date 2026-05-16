@@ -81,6 +81,10 @@
   color: #fff;
 }
 
+.nav-fav-btn.active {
+  color: #FFD700;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
@@ -3316,32 +3320,11 @@
   padding: 24px;
 }
 
-.password-cell .password-wrapper {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.password-text {
+.password-masked {
   font-family: monospace;
   font-size: 14px;
-  color: #374151;
-  min-width: 80px;
-}
-
-.password-toggle-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-  transition: color 0.2s;
-}
-
-.password-toggle-btn:hover {
-  color: #D56493;
+  color: #9ca3af;
+  letter-spacing: 2px;
 }
 
 .actions-cell {

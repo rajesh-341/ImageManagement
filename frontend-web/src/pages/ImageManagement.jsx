@@ -90,8 +90,6 @@ function ImageManagement() {
   const [users, setUsers] = useState([]);
   const [userForm, setUserForm] = useState({ username: "", displayName: "", role: "", password: "" });
   const [editingUser, setEditingUser] = useState(null);
-  const [visiblePasswords, setVisiblePasswords] = useState(new Set());
-
   const [customerName, setCustomerName] = useState("");
   const [venueName, setVenueName] = useState("");
   const [eventDate, setEventDate] = useState("");
@@ -664,6 +662,17 @@ function ImageManagement() {
     }
   };
 
+  const handleToggleFavorites = () => {
+    const wasShowing = showFavorites;
+    setShowFavorites(!wasShowing);
+    if (!wasShowing) {
+      loadFavorites();
+      loadFavoriteFolders();
+      setCurrentFolder(null);
+      setFilteredImages([]);
+    }
+  };
+
   const handleEnterFavoriteFolder = (folder) => {
     setSelectedFavFolder(folder);
     loadFavorites(folder.name);
@@ -814,15 +823,6 @@ function ImageManagement() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const togglePasswordVisibility = (userId) => {
-    setVisiblePasswords(prev => {
-      const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
-      return next;
-    });
   };
 
   const renderImageCardDetails = (data) => {
@@ -1318,6 +1318,13 @@ function ImageManagement() {
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
           </div>
+          <button
+            className={`nav-item nav-fav-btn ${showFavorites ? "active" : ""}`}
+            onClick={handleToggleFavorites}
+            title="Favorites"
+          >
+            ★ FAVOURITES
+          </button>
           <div className="user-info">
             <span className="user-display"><span className="user-label">User</span> {displayName}</span>
             <span className="user-role"><span className="user-label">Role</span> {role}</span>
@@ -1900,28 +1907,7 @@ function ImageManagement() {
                             <td>{user.username}</td>
                             <td><span className={`role-badge ${user.role?.toLowerCase()}`}>{user.role}</span></td>
                             <td className="password-cell">
-                              <div className="password-wrapper">
-                                <span className="password-text">
-                                  {visiblePasswords.has(user.id) ? user.password : "••••••••"}
-                                </span>
-                                <button
-                                  className="password-toggle-btn"
-                                  onClick={() => togglePasswordVisibility(user.id)}
-                                  title={visiblePasswords.has(user.id) ? "Hide password" : "Show password"}
-                                >
-                                  {visiblePasswords.has(user.id) ? (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                                      <line x1="1" y1="1" x2="23" y2="23"/>
-                                    </svg>
-                                  ) : (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                      <circle cx="12" cy="12" r="3"/>
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
+                              <span className="password-masked">••••••••</span>
                             </td>
                             <td className="actions-cell">
                               <button className="icon-btn icon-btn-edit" onClick={() => handleEditUser(user)} title="Edit user">
