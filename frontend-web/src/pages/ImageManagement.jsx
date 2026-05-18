@@ -335,8 +335,6 @@ function ImageManagement() {
 
   const handleBatchImageSelect = (e) => {
     const files = Array.from(e.target.files);
-    const prev = batchImages;
-    const lastRow = prev.length > 0 ? prev[prev.length - 1] : null;
     const newRows = files.map((file) => {
       const keepSame = {};
       SAME_FIELDS.forEach(f => { keepSame[f] = false; });
