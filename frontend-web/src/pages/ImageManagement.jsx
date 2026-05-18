@@ -331,52 +331,36 @@ function ImageManagement() {
     }
   };
 
+  const SAME_FIELDS = ["designName","eventType","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","venueDate","priceMin","priceMax"];
+
   const handleBatchImageSelect = (e) => {
     const files = Array.from(e.target.files);
     const prev = batchImages;
     const lastRow = prev.length > 0 ? prev[prev.length - 1] : null;
-    const newRows = files.map((file, idx) => {
-      const usePrev = lastRow && idx === 0;
+    const newRows = files.map((file) => {
+      const keepSame = {};
+      SAME_FIELDS.forEach(f => { keepSame[f] = false; });
       return {
         file, preview: URL.createObjectURL(file),
-        designName: usePrev ? lastRow.designName : "",
-        eventType: usePrev ? lastRow.eventType : "",
-        decorType: usePrev ? lastRow.decorType : "",
-        venueDate: usePrev ? lastRow.venueDate : "",
-        sizeWidth: usePrev ? lastRow.sizeWidth : "",
-        sizeLength: usePrev ? lastRow.sizeLength : "",
-        sizeHeight: usePrev ? lastRow.sizeHeight : "",
-        sizeUnit: usePrev ? lastRow.sizeUnit : "sq.ft",
-        colours: usePrev ? lastRow.colours : "",
-        flowerType: usePrev ? lastRow.flowerType : "",
-        priceMin: usePrev ? lastRow.priceMin : "",
-        priceMax: usePrev ? lastRow.priceMax : "",
-        keepSame: usePrev,
+        designName: "", eventType: "", decorType: "",
+        venueDate: "",
+        sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
+        colours: "", flowerType: "", priceMin: "", priceMax: "",
+        keepSame,
       };
     });
     setBatchImages(prev => [...prev, ...newRows]);
     e.target.value = "";
   };
 
-  const toggleKeepSame = (index) => {
+  const toggleKeepSameField = (index, field) => {
     setBatchImages(prev => {
       const updated = [...prev];
       const row = updated[index];
-      row.keepSame = !row.keepSame;
-      if (row.keepSame && index > 0) {
-        const prevRow = updated[index - 1];
-        row.designName = prevRow.designName;
-        row.eventType = prevRow.eventType;
-        row.decorType = prevRow.decorType;
-        row.venueDate = prevRow.venueDate;
-        row.sizeWidth = prevRow.sizeWidth;
-        row.sizeLength = prevRow.sizeLength;
-        row.sizeHeight = prevRow.sizeHeight;
-        row.sizeUnit = prevRow.sizeUnit;
-        row.colours = prevRow.colours;
-        row.flowerType = prevRow.flowerType;
-        row.priceMin = prevRow.priceMin;
-        row.priceMax = prevRow.priceMax;
+      const newVal = !row.keepSame[field];
+      row.keepSame = { ...row.keepSame, [field]: newVal };
+      if (newVal && index > 0) {
+        row[field] = updated[index - 1][field];
       }
       return updated;
     });
@@ -386,9 +370,9 @@ function ImageManagement() {
     setBatchImages(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
-      if (field !== "keepSame") {
+      if (SAME_FIELDS.includes(field)) {
         for (let i = index + 1; i < updated.length; i++) {
-          if (updated[i].keepSame) {
+          if (updated[i].keepSame[field]) {
             updated[i] = { ...updated[i], [field]: value };
           }
         }
@@ -1388,7 +1372,7 @@ function ImageManagement() {
         <div className="navbar-right">
           <div className="nav-menu">
             <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
-            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}>IMAGES</button>
+            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); loadAllImages(); }}>IMAGES</button>
             {canUpload && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
@@ -1722,17 +1706,16 @@ function ImageManagement() {
                         <thead>
                           <tr>
                             <th>Image</th>
-                            <th>Same</th>
-                            <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}</th>
-                            <th>Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</th>
-                            <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</th>
-                            <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}</th>
-                            <th>Unit</th>
-                            <th>Colours{isFieldRequired("image_colours") && <span className="required">*</span>}</th>
-                            <th>Flower{isFieldRequired("image_flowerType") && <span className="required">*</span>}</th>
-                            <th>Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}</th>
-                            <th>Min{isFieldRequired("image_price") && <span className="required">*</span>}</th>
-                            <th>Max{isFieldRequired("image_price") && <span className="required">*</span>}</th>
+                            <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Unit<span className="batch-same-hdr">S</span></th>
+                            <th>Colours{isFieldRequired("image_colours") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Flower{isFieldRequired("image_flowerType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Min{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Max{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th></th>
                           </tr>
                         </thead>
@@ -1741,67 +1724,110 @@ function ImageManagement() {
                             <tr key={index}>
                               <td><div className="batch-thumbnail"><img src={row.preview} alt="" /></div></td>
                               <td>
-                                <label className="batch-keep-same" title="Use same values as previous row">
-                                  <input type="checkbox" checked={!!row.keepSame}
-                                    onChange={() => toggleKeepSame(index)}
-                                    disabled={index === 0} />
-                                </label>
-                              </td>
-                              <td><input type="text" className="batch-input" value={row.designName}
-                                onChange={(e) => updateBatchRow(index, "designName", e.target.value)} placeholder="Design" /></td>
-                              <td>
-                                <div className="batch-autocomplete-cell">
-                                  <AutocompleteInput
-                                    options={EVENT_TYPES}
-                                    value={row.eventType}
-                                    onChange={(val) => updateBatchRow(index, "eventType", val)}
-                                    placeholder="Event Type"
-                                  />
+                                <div className="batch-field-with-same">
+                                  <input type="text" className="batch-input" value={row.designName}
+                                    onChange={(e) => updateBatchRow(index, "designName", e.target.value)} placeholder="Design" />
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.designName ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "designName")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
-                                <div className="batch-autocomplete-cell">
-                                  <AutocompleteInput
-                                    options={DECOR_TYPES}
-                                    value={row.decorType}
-                                    onChange={(val) => updateBatchRow(index, "decorType", val)}
-                                    placeholder="Decor Type"
-                                  />
+                                <div className="batch-field-with-same">
+                                  <div className="batch-autocomplete-cell">
+                                    <AutocompleteInput
+                                      options={EVENT_TYPES}
+                                      value={row.eventType}
+                                      onChange={(val) => updateBatchRow(index, "eventType", val)}
+                                      placeholder="Event Type"
+                                    />
+                                  </div>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.eventType ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "eventType")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
-                                <div className="batch-size-row">
-                                  <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth}
-                                    onChange={(e) => updateBatchRow(index, "sizeWidth", e.target.value)} />
-                                  <span>x</span>
-                                  <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength}
-                                    onChange={(e) => updateBatchRow(index, "sizeLength", e.target.value)} />
-                                  <span>x</span>
-                                  <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight}
-                                    onChange={(e) => updateBatchRow(index, "sizeHeight", e.target.value)} />
+                                <div className="batch-field-with-same">
+                                  <div className="batch-autocomplete-cell">
+                                    <AutocompleteInput
+                                      options={DECOR_TYPES}
+                                      value={row.decorType}
+                                      onChange={(val) => updateBatchRow(index, "decorType", val)}
+                                      placeholder="Decor Type"
+                                    />
+                                  </div>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.decorType ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "decorType")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
-                                <select className="batch-select-sm" value={row.sizeUnit}
-                                  onChange={(e) => updateBatchRow(index, "sizeUnit", e.target.value)}>
-                                  {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
+                                <div className="batch-field-with-same">
+                                  <div className="batch-size-row">
+                                    <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth}
+                                      onChange={(e) => updateBatchRow(index, "sizeWidth", e.target.value)} />
+                                    <span>x</span>
+                                    <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength}
+                                      onChange={(e) => updateBatchRow(index, "sizeLength", e.target.value)} />
+                                    <span>x</span>
+                                    <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight}
+                                      onChange={(e) => updateBatchRow(index, "sizeHeight", e.target.value)} />
+                                  </div>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeWidth || row.keepSame.sizeLength || row.keepSame.sizeHeight ? "active" : ""}`}
+                                    onClick={() => { toggleKeepSameField(index, "sizeWidth"); toggleKeepSameField(index, "sizeLength"); toggleKeepSameField(index, "sizeHeight"); }} title="Same as previous row">S</button>}
+                                </div>
                               </td>
-                              <td><input type="text" className="batch-input" value={row.colours}
-                                onChange={(e) => updateBatchRow(index, "colours", e.target.value)} placeholder="Red,Gold" /></td>
                               <td>
-                                <select className="batch-select" value={row.flowerType}
-                                  onChange={(e) => updateBatchRow(index, "flowerType", e.target.value)}>
-                                  <option value="">Flower</option>
-                                  {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
+                                <div className="batch-field-with-same">
+                                  <select className="batch-select-sm" value={row.sizeUnit}
+                                    onChange={(e) => updateBatchRow(index, "sizeUnit", e.target.value)}>
+                                    {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                  </select>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeUnit ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "sizeUnit")} title="Same as previous row">S</button>}
+                                </div>
                               </td>
-                              <td><input type="date" className="batch-input-date" value={row.venueDate}
-                                onChange={(e) => updateBatchRow(index, "venueDate", e.target.value)} /></td>
-                              <td><input type="number" className="batch-input-tiny" value={row.priceMin}
-                                onChange={(e) => updateBatchRow(index, "priceMin", e.target.value)} placeholder="₹" /></td>
-                              <td><input type="number" className="batch-input-tiny" value={row.priceMax}
-                                onChange={(e) => updateBatchRow(index, "priceMax", e.target.value)} placeholder="₹" /></td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <input type="text" className="batch-input" value={row.colours}
+                                    onChange={(e) => updateBatchRow(index, "colours", e.target.value)} placeholder="Red,Gold" />
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.colours ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "colours")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <select className="batch-select" value={row.flowerType}
+                                    onChange={(e) => updateBatchRow(index, "flowerType", e.target.value)}>
+                                    <option value="">Flower</option>
+                                    {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.flowerType ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "flowerType")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <input type="date" className="batch-input-date" value={row.venueDate}
+                                    onChange={(e) => updateBatchRow(index, "venueDate", e.target.value)} />
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.venueDate ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "venueDate")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <input type="number" className="batch-input-tiny" value={row.priceMin}
+                                    onChange={(e) => updateBatchRow(index, "priceMin", e.target.value)} placeholder="₹" />
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMin ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "priceMin")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <input type="number" className="batch-input-tiny" value={row.priceMax}
+                                    onChange={(e) => updateBatchRow(index, "priceMax", e.target.value)} placeholder="₹" />
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMax ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "priceMax")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
                               <td><button type="button" className="batch-remove-btn" onClick={() => removeBatchRow(index)}>×</button></td>
                             </tr>
                           ))}

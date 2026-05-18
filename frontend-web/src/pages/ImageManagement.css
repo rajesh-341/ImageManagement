@@ -3260,19 +3260,56 @@
   width: 60px;
 }
 
-.batch-keep-same {
+.batch-field-with-same {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.batch-same-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #9ca3af;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  height: 100%;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
-.batch-keep-same input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #7EC0CE;
-  cursor: pointer;
+.batch-same-btn:hover {
+  border-color: #7EC0CE;
+  color: #7EC0CE;
+  background: #F6DCE7;
+}
+
+.batch-same-btn.active {
+  background: #7EC0CE;
+  border-color: #7EC0CE;
+  color: #fff;
+}
+
+.batch-same-hdr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: #e5e7eb;
+  color: #6b7280;
+  font-size: 8px;
+  font-weight: 700;
+  vertical-align: middle;
 }
 
 /* Filter sidebar size inputs */
