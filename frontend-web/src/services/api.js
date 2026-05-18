@@ -2,6 +2,13 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api
 
 const getHeaders = (includeAuth = true) => {
   const headers = { "Content-Type": "application/json" };
+  if (includeAuth) {
+    const token = document.cookie.replace(/(?:(?:^|.*;\s*)auth_token\s*=\s*([^;]*).*$)|^.*$/, "$1");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+      headers["X-Requested-With"] = "XMLHttpRequest";
+    }
+  }
   return headers;
 };
 
@@ -144,11 +151,13 @@ const ApiService = {
     }
 
     const url = `${API_BASE_URL}/upload`;
+    const token = document.cookie.replace(/(?:(?:^|.*;\s*)auth_token\s*=\s*([^;]*).*$)|^.*$/, "$1");
 
     const response = await fetch(url, {
       method: "POST",
       body: formData,
       credentials: "include",
+      headers: token ? { "Authorization": `Bearer ${token}`, "X-Requested-With": "XMLHttpRequest" } : { "X-Requested-With": "XMLHttpRequest" },
     });
 
     const data = await response.json();

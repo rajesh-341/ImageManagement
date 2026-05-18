@@ -9,7 +9,7 @@ const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.t
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 50 } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 50 } = req.query;
     
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
@@ -71,6 +71,25 @@ const getImages = async (req, res) => {
       conditions.push(`(image_data->>'venueCustomer' ILIKE $${paramIndex} OR image_data->>'venueName' ILIKE $${paramIndex})`);
       params.push(`%${placeOfEvent}%`);
       paramIndex++;
+    }
+    const venueConditions = [];
+    if (venueCustomer) {
+      venueConditions.push(`image_data->>'venueCustomer' ILIKE $${paramIndex}`);
+      params.push(`%${venueCustomer}%`);
+      paramIndex++;
+    }
+    if (venueName) {
+      venueConditions.push(`image_data->>'venueName' ILIKE $${paramIndex}`);
+      params.push(`%${venueName}%`);
+      paramIndex++;
+    }
+    if (venueDate) {
+      venueConditions.push(`image_data->>'venueDate' ILIKE $${paramIndex}`);
+      params.push(`%${venueDate}%`);
+      paramIndex++;
+    }
+    if (venueConditions.length > 0) {
+      conditions.push(`(${venueConditions.join(" OR ")})`);
     }
 
     if (eventName) {

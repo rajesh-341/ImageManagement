@@ -67,14 +67,18 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
       <div className="color-swatches">
         {filtered.map((color) => (
           <div key={color.name} className="color-swatch-container" onClick={() => toggleColor(color.name)}>
-            <button
-              type="button"
-              className={`color-swatch ${selectedColors.includes(color.name) ? "selected" : ""} ${
-                color.name === "White" || color.name === "Yellow" || color.name === "Amber" || color.name === "Lime" ? "light-color" : ""
-              }`}
-              style={{ backgroundColor: color.hex }}
-              title={color.name}
-            />
+              <button
+                  type="button"
+                  className={`color-swatch ${selectedColors.includes(color.name) ? "selected" : ""} ${
+                    color.name === "White" || color.name === "Yellow" || color.name === "Amber" || color.name === "Lime" ? "light-color" : ""
+                  }`}
+                  style={{ backgroundColor: color.hex, borderColor: selectedColors.includes(color.name) ? color.hex : undefined }}
+                  title={color.name}
+                >
+                  {selectedColors.includes(color.name) && (
+                    <span className="color-swatch-check" style={{ color: ["White","Yellow","Amber","Lime"].includes(color.name) ? "#374151" : "#fff" }}>✓</span>
+                  )}
+                </button>
             <span className="color-swatch-name">{color.name}</span>
           </div>
         ))}

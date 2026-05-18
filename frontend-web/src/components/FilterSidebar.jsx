@@ -30,7 +30,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [selectedFlowerTypes, setSelectedFlowerTypes] = useState(filters?.flowerTypes || []);
   const [priceRange, setPriceRange] = useState(filters?.priceRange || [0, 10000]);
   const [sizeFilters, setSizeFilters] = useState(filters?.sizeFilters || { width: "", length: "", height: "", unit: "sq.ft" });
-  const [venueFilter, setVenueFilter] = useState(filters?.venueFilter || "");
+  const [venueCustomer, setVenueCustomer] = useState(filters?.venueCustomer || "");
+  const [venueName, setVenueName] = useState(filters?.venueName || "");
+  const [venueDate, setVenueDate] = useState(filters?.venueDate || "");
   const [decorTypeSearch, setDecorTypeSearch] = useState("");
 
   const toggleCheckbox = (value, selected, setSelected) => {
@@ -50,7 +52,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
       searchText: filters?.searchText || "",
       designName: filters?.designName || "",
       colors: selectedColors,
-      venueFilter,
+      venueCustomer,
+      venueName,
+      venueDate,
       sizes: selectedSizes,
       sizeFilters,
       decorTypes: selectedDecorTypes,
@@ -71,7 +75,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     setSelectedFlowerTypes([]);
     setPriceRange([0, 10000]);
     setSizeFilters({ width: "", length: "", height: "", unit: "sq.ft" });
-    setVenueFilter("");
+    setVenueCustomer("");
+    setVenueName("");
+    setVenueDate("");
     setDecorTypeSearch("");
     onClear && onClear();
   };
@@ -176,33 +182,25 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 className="venue-input"
                 placeholder="Customer Name (max 15)"
                 maxLength={15}
-                value={venueFilter.split("_")[0] || ""}
-                onChange={(e) => {
-                  const parts = venueFilter.split("_");
-                  setVenueFilter(`${e.target.value.slice(0, 15)}_${parts[1] || ""}_${parts[2] || ""}`);
-                }}
+                value={venueCustomer}
+                onChange={(e) => setVenueCustomer(e.target.value.slice(0, 15))}
               />
               <input
                 type="text"
                 className="venue-input"
                 placeholder="Venue (max 12)"
                 maxLength={12}
-                value={venueFilter.split("_")[1] || ""}
-                onChange={(e) => {
-                  const parts = venueFilter.split("_");
-                  setVenueFilter(`${parts[0] || ""}_${e.target.value.slice(0, 12)}_${parts[2] || ""}`);
-                }}
+                value={venueName}
+                onChange={(e) => setVenueName(e.target.value.slice(0, 12))}
               />
               <input
                 type="date"
                 className="venue-input venue-date"
-                value={venueFilter.split("_")[2] || ""}
-                onChange={(e) => {
-                  const parts = venueFilter.split("_");
-                  setVenueFilter(`${parts[0] || ""}_${parts[1] || ""}_${e.target.value}`);
-                }}
+                value={venueDate}
+                onChange={(e) => setVenueDate(e.target.value)}
               />
             </div>
+            <p className="venue-filter-hint">Filter by any one or more fields</p>
           </div>
         </Accordion>
 

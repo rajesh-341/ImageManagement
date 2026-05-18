@@ -68,8 +68,13 @@ function ImageManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
   const [editData, setEditData] = useState({});
+  const getFormConfigKey = () => {
+    const u = ApiService.getCurrentUser();
+    return u ? `formConfig_${u.username || u.displayName || "default"}` : "formConfig";
+  };
+
   const [formConfig, setFormConfig] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("formConfig")) || {}; } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem(getFormConfigKey())) || {}; } catch { return {}; }
   });
   const [showFormSettings, setShowFormSettings] = useState(false);
   const [visiblePasswords, setVisiblePasswords] = useState(new Set());
@@ -82,7 +87,7 @@ function ImageManagement() {
 
   const saveFormConfig = (config) => {
     setFormConfig(config);
-    localStorage.setItem("formConfig", JSON.stringify(config));
+    localStorage.setItem(getFormConfigKey(), JSON.stringify(config));
   };
 
   const isFieldRequired = (fieldKey) => formConfig[fieldKey] !== false;
@@ -328,21 +333,66 @@ function ImageManagement() {
 
   const handleBatchImageSelect = (e) => {
     const files = Array.from(e.target.files);
-    const newRows = files.map(file => ({
-      file, preview: URL.createObjectURL(file),
-      designName: "", eventType: "", decorType: "",
-      venueDate: "",
-      sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
-      colours: "", flowerType: "", priceMin: "", priceMax: "",
-    }));
+    const prev = batchImages;
+    const lastRow = prev.length > 0 ? prev[prev.length - 1] : null;
+    const newRows = files.map((file, idx) => {
+      const usePrev = lastRow && idx === 0;
+      return {
+        file, preview: URL.createObjectURL(file),
+        designName: usePrev ? lastRow.designName : "",
+        eventType: usePrev ? lastRow.eventType : "",
+        decorType: usePrev ? lastRow.decorType : "",
+        venueDate: usePrev ? lastRow.venueDate : "",
+        sizeWidth: usePrev ? lastRow.sizeWidth : "",
+        sizeLength: usePrev ? lastRow.sizeLength : "",
+        sizeHeight: usePrev ? lastRow.sizeHeight : "",
+        sizeUnit: usePrev ? lastRow.sizeUnit : "sq.ft",
+        colours: usePrev ? lastRow.colours : "",
+        flowerType: usePrev ? lastRow.flowerType : "",
+        priceMin: usePrev ? lastRow.priceMin : "",
+        priceMax: usePrev ? lastRow.priceMax : "",
+        keepSame: usePrev,
+      };
+    });
     setBatchImages(prev => [...prev, ...newRows]);
     e.target.value = "";
+  };
+
+  const toggleKeepSame = (index) => {
+    setBatchImages(prev => {
+      const updated = [...prev];
+      const row = updated[index];
+      row.keepSame = !row.keepSame;
+      if (row.keepSame && index > 0) {
+        const prevRow = updated[index - 1];
+        row.designName = prevRow.designName;
+        row.eventType = prevRow.eventType;
+        row.decorType = prevRow.decorType;
+        row.venueDate = prevRow.venueDate;
+        row.sizeWidth = prevRow.sizeWidth;
+        row.sizeLength = prevRow.sizeLength;
+        row.sizeHeight = prevRow.sizeHeight;
+        row.sizeUnit = prevRow.sizeUnit;
+        row.colours = prevRow.colours;
+        row.flowerType = prevRow.flowerType;
+        row.priceMin = prevRow.priceMin;
+        row.priceMax = prevRow.priceMax;
+      }
+      return updated;
+    });
   };
 
   const updateBatchRow = (index, field, value) => {
     setBatchImages(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      if (field !== "keepSame") {
+        for (let i = index + 1; i < updated.length; i++) {
+          if (updated[i].keepSame) {
+            updated[i] = { ...updated[i], [field]: value };
+          }
+        }
+      }
       return updated;
     });
   };
@@ -617,7 +667,9 @@ function ImageManagement() {
       if (filterData.decorTypes && filterData.decorTypes.length > 0) searchFilters.decorType = filterData.decorTypes.join(",");
       if (filterData.colors && filterData.colors.length > 0) searchFilters.colors = filterData.colors.join(",");
       if (filterData.flowerTypes && filterData.flowerTypes.length > 0) searchFilters.flowerType = filterData.flowerTypes.join(",");
-      if (filterData.venueFilter) searchFilters.placeOfEvent = filterData.venueFilter;
+      if (filterData.venueCustomer) searchFilters.venueCustomer = filterData.venueCustomer;
+      if (filterData.venueName) searchFilters.venueName = filterData.venueName;
+      if (filterData.venueDate) searchFilters.venueDate = filterData.venueDate;
       if (filterData.priceRange) {
         searchFilters.priceMin = filterData.priceRange[0];
         searchFilters.priceMax = filterData.priceRange[1];
@@ -682,6 +734,17 @@ function ImageManagement() {
   const handleBackFromFavFolder = () => {
     setSelectedFavFolder(null);
     loadFavorites();
+  };
+
+  const handleDeleteFavoriteFolder = async (id, name, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete folder "${name}" from Favorites?`)) return;
+    try {
+      await ApiService.deleteFolder(id);
+      loadFavoriteFolders();
+    } catch (err) {
+      showNotif("Something went wrong");
+    }
   };
 
   const handleCreateFavFolder = async (e) => {
@@ -1231,6 +1294,9 @@ function ImageManagement() {
                     {renderFolderNameDisplay(folder)}
                   </div>
                 </div>
+                <button className="folder-delete" onClick={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}>
+                  ×
+                </button>
               </div>
             ))}
         </div>
@@ -1323,7 +1389,6 @@ function ImageManagement() {
           <div className="nav-menu">
             <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
             <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}>IMAGES</button>
-            <button className={`nav-item ${currentFolder && !showFavorites ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}>FOLDERS</button>
             {canUpload && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
@@ -1566,6 +1631,12 @@ function ImageManagement() {
                           <span>{t}</span>
                         </label>
                       ))}
+                      <label className="checkbox-item-inline">
+                        <input type="radio" name="flowerType" value=""
+                          checked={imageData.flowerType === ""}
+                          onChange={(e) => setImageData({...imageData, flowerType: ""})} />
+                        <span>None</span>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1651,6 +1722,7 @@ function ImageManagement() {
                         <thead>
                           <tr>
                             <th>Image</th>
+                            <th>Same</th>
                             <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}</th>
                             <th>Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</th>
                             <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</th>
@@ -1668,21 +1740,34 @@ function ImageManagement() {
                           {batchImages.map((row, index) => (
                             <tr key={index}>
                               <td><div className="batch-thumbnail"><img src={row.preview} alt="" /></div></td>
+                              <td>
+                                <label className="batch-keep-same" title="Use same values as previous row">
+                                  <input type="checkbox" checked={!!row.keepSame}
+                                    onChange={() => toggleKeepSame(index)}
+                                    disabled={index === 0} />
+                                </label>
+                              </td>
                               <td><input type="text" className="batch-input" value={row.designName}
                                 onChange={(e) => updateBatchRow(index, "designName", e.target.value)} placeholder="Design" /></td>
                               <td>
-                                <select className="batch-select" value={row.eventType}
-                                  onChange={(e) => updateBatchRow(index, "eventType", e.target.value)}>
-                                  <option value="">Event</option>
-                                  {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
+                                <div className="batch-autocomplete-cell">
+                                  <AutocompleteInput
+                                    options={EVENT_TYPES}
+                                    value={row.eventType}
+                                    onChange={(val) => updateBatchRow(index, "eventType", val)}
+                                    placeholder="Event Type"
+                                  />
+                                </div>
                               </td>
                               <td>
-                                <select className="batch-select" value={row.decorType}
-                                  onChange={(e) => updateBatchRow(index, "decorType", e.target.value)}>
-                                  <option value="">Decor</option>
-                                  {DECOR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
+                                <div className="batch-autocomplete-cell">
+                                  <AutocompleteInput
+                                    options={DECOR_TYPES}
+                                    value={row.decorType}
+                                    onChange={(val) => updateBatchRow(index, "decorType", val)}
+                                    placeholder="Decor Type"
+                                  />
+                                </div>
                               </td>
                               <td>
                                 <div className="batch-size-row">
@@ -1801,23 +1886,31 @@ function ImageManagement() {
       {/* Move to Folder Modal */}
       {showMoveModal && (
         <div className="modal-overlay">
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal move-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Move to Folder</h2>
               <button className="modal-close" onClick={() => setShowMoveModal(false)}>X</button>
             </div>
-            <div className="move-folder-list">
-              {(showFavorites ? favoriteFolders : folders).length === 0 ? (
-                <p className="empty-folder-message">No folders available.</p>
-              ) : (
-                (showFavorites ? favoriteFolders : folders).map(folder => (
-                  <button key={folder.id} className="move-folder-item"
-                    onClick={() => handleMoveImagesToFolder(folder.name)}>
-                    <div className="folder-item-name">{renderFolderNameDisplay(folder)}</div>
-                  </button>
-                ))
-              )}
-            </div>
+            {(showFavorites ? favoriteFolders : folders).length === 0 ? (
+              <p className="empty-folder-message">No folders available.</p>
+            ) : (
+              <div className="move-folder-list">
+                {(showFavorites ? favoriteFolders : folders).map(folder => {
+                  const { customerName, venue, eventDate } = parseFolderName(folder.name);
+                  return (
+                    <button key={folder.id} className="move-folder-item"
+                      onClick={() => handleMoveImagesToFolder(folder.name)}>
+                      <svg className="move-folder-icon" viewBox="0 0 24 24" width="18" height="18" fill="#F5C842" stroke="#e6a800" strokeWidth="0.5">
+                        <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/>
+                      </svg>
+                      <span className="move-folder-name">{customerName || folder.name}</span>
+                      {venue && <span className="move-folder-venue"> - {venue}</span>}
+                      {eventDate && <span className="move-folder-date">{formatEventDate(eventDate) ? ` (${formatEventDate(eventDate)})` : ""}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)} style={{ marginTop: "16px", width: "100%" }}>Cancel</button>
           </div>
         </div>
