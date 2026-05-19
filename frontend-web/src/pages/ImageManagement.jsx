@@ -8,7 +8,7 @@ import FolderCard from "../components/FolderCard";
 import {
   UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
-  BATCH_COLORS, MAX_BATCH_UPLOAD, SAME_FIELDS,
+  BATCH_COLORS, SAME_FIELDS,
 } from "../constants";
 import "./ImageManagement.css";
 
@@ -419,7 +419,6 @@ function ImageManagement() {
     let errorCount = 0;
     const batchStartTime = Date.now();
     let perImageTimes = [];
-    const BATCH_SIZE = 10;
     try {
       const isLocalDev = window.location.hostname === "localhost";
       for (let i = 0; i < totalImages; i++) {
