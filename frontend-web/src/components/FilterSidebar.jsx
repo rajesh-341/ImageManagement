@@ -2,24 +2,7 @@ import React, { useState } from "react";
 import Accordion from "./Accordion";
 import RangeSlider from "./RangeSlider";
 import ColorPicker from "./ColorPicker";
-
-const DECOR_TYPES = [
-  "Name board", "Stage Ceiling", "Hall side Decoration",
-  "Hall ceiling work", "Hall Entrance", "Receiption Area",
-  "Pathway", "Main Entrance", "Orchestra Stage", "Car Decoration",
-  "Selfie Area", "Bedroom Decoration", "Home Decoration",
-  "Lighting work in Home", "Lighting work in Mahal", "Audio work",
-];
-
-const EVENT_TYPES = [
-  "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
-  "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
-  "Shashtiabdapoorti", "Surprise Gift", "Salagai Poojai", "Annual Day",
-  "Labour Day", "Naming Ceremony", "Holy Communion", "Farewell",
-  "Kari Virundhu", "Get Together"
-];
-const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
-const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
+import { DECOR_TYPES, EVENT_TYPES, FLOWER_TYPES, SIZE_UNITS } from "../constants";
 
 function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);

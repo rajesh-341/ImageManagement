@@ -245,7 +245,7 @@ const ApiService = {
     });
   },
 
-  async downloadImage(imageId) {
+  async downloadImage(imageId, useCustomPath = false) {
     const url = `${API_BASE_URL}/download/${imageId}`;
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) {
@@ -259,6 +259,26 @@ const ApiService = {
       const match = contentDisposition.match(/filename="?(.+?)"?$/);
       if (match) filename = match[1];
     }
+
+    if (useCustomPath && window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{
+            description: "Image file",
+            accept: { "image/*": [".webp", ".jpg", ".png", ".jpeg"] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return { success: true, path: handle.name };
+      } catch (err) {
+        if (err.name === "AbortError") return { success: false, cancelled: true };
+        throw new Error("Failed to save file: " + err.message);
+      }
+    }
+
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = downloadUrl;

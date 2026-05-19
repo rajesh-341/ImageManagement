@@ -3564,3 +3564,142 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Batch Colour Picker */
+.batch-colour-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.batch-colour-picker-btn {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  min-width: 60px;
+  text-align: center;
+  font-size: 12px;
+  transition: border-color 0.2s;
+}
+
+.batch-colour-picker-btn:hover {
+  border-color: var(--primary);
+}
+
+.batch-colour-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.batch-colour-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #d1d5db;
+}
+
+.batch-colour-count {
+  font-size: 11px;
+  color: #6b7280;
+  margin-left: 2px;
+  font-weight: 600;
+}
+
+.batch-colour-placeholder {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.batch-colour-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 10px;
+  min-width: 200px;
+  margin-top: 4px;
+}
+
+.batch-colour-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.batch-colour-popup-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0;
+  line-height: 1;
+}
+
+.batch-colour-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.batch-colour-option {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #e5e7eb;
+  cursor: pointer;
+  font-size: 12px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.batch-colour-option:hover {
+  transform: scale(1.15);
+}
+
+.batch-colour-option.selected {
+  border-color: #1a1a1a;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1a1a1a;
+}
+
+.batch-colour-popup-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.batch-colour-clear-btn,
+.batch-colour-done-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.batch-colour-clear-btn {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.batch-colour-done-btn {
+  background: var(--primary);
+  color: #fff;
+}

@@ -14,11 +14,18 @@ export const DECOR_TYPES = [
 ];
 
 export const VENUES = ["Indoor", "Outdoor", "Ballroom", "Garden", "Historic", "Industrial"];
-export const EVENT_TYPES = ["Wedding", "Corporate", "Birthday", "Gala", "Conference", "Social"];
+export const EVENT_TYPES = [
+  "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
+  "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
+  "Shashtiabdapoorti", "Surprise Gift", "Salagai Poojai", "Annual Day",
+  "Labour Day", "Naming Ceremony", "Holy Communion", "Farewell",
+  "Kari Virundhu", "Get Together",
+];
 
 export const COLORS = [
   "Red", "Blue", "Green", "Yellow", "White", "Gold",
   "Pink", "Purple", "Orange", "Silver", "Black", "Multicolor",
+  "Peach", "Cream", "Lavender", "Teal", "Maroon", "Brown",
 ];
 
-export const SIZE_UNIT_OPTIONS = ["inch", "cm", "meter", "sq.ft", "feet"];
+export const SIZE_UNIT_OPTIONS = ["sq.ft", "feet", "inch", "cm", "m"];

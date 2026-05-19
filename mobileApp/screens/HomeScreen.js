@@ -450,6 +450,11 @@ function HomeScreen({ navigation }) {
                   launchImageLibrary({ mediaType: "photo", quality: 0.8, selectionLimit: 0 }, (res) => {
                     if (res.didCancel) return;
                     if (res.assets) {
+                      const totalAfterAdd = batchImages.length + res.assets.length;
+                      if (totalAfterAdd > 100) {
+                        Alert.alert("Limit Reached", `Maximum 100 images allowed per batch. You can add ${100 - batchImages.length} more.`);
+                        return;
+                      }
                       setBatchImages(prev => [...prev, ...res.assets.map(f => ({
                         file: f, preview: f.uri, designName: "", size: "",
                         sizeUnit: "inch", colours: "", placeOfEvent: "", decorType: "", eventName: "",
@@ -481,6 +486,7 @@ function HomeScreen({ navigation }) {
                   <TouchableOpacity style={[styles.primaryBtn, styles.fullBtn]} onPress={async () => {
                     setLoading(true);
                     let success = 0, errors = 0;
+                    const batchStartTime = Date.now();
                     for (let i = 0; i < batchImages.length; i++) {
                       try {
                         const row = batchImages[i];
@@ -495,13 +501,15 @@ function HomeScreen({ navigation }) {
                           size: row.size, sizeUnit: row.sizeUnit,
                           designName: row.designName, placeOfEvent: row.placeOfEvent,
                           decorType: row.decorType, eventName: row.eventName,
+                          flowerType: null,
                         });
                         success++;
                       } catch { errors++; }
                     }
+                    const totalTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
                     setBatchImages([]);
                     setLoading(false);
-                    Alert.alert("Upload Complete", `${success} uploaded, ${errors} failed`);
+                    Alert.alert("Upload Complete", `${success} uploaded, ${errors} failed in ${totalTime}s`);
                     setShowUploadModal(false);
                   }} disabled={loading}>
                     <Text style={styles.primaryBtnText}>{loading ? "Uploading..." : `Upload ${batchImages.length} Image(s)`}</Text>

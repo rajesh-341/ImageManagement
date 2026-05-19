@@ -50,7 +50,28 @@ const getFolders = async (req, res) => {
     }
     query += " ORDER BY created_at DESC";
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    const folders = result.rows;
+
+    const orphanResult = await pool.query(
+      `SELECT DISTINCT im.folder_name FROM image_management im
+       LEFT JOIN folders f ON im.folder_name = f.name AND (f.scope = 'home' OR f.scope IS NULL)
+       WHERE f.id IS NULL AND ($1 = 'home' OR $1 IS NULL OR $1 = '')`,
+      [scope || 'home']
+    );
+    for (const row of orphanResult.rows) {
+      if (!folders.some(f => f.name === row.folder_name)) {
+        const newFolder = await pool.query(
+          `INSERT INTO folders (name, description, scope) VALUES ($1, 'Auto-created', 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING RETURNING *`,
+          [row.folder_name]
+        );
+        if (newFolder.rows.length > 0) {
+          folders.push(newFolder.rows[0]);
+        }
+      }
+    }
+
+    folders.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    res.json(folders);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

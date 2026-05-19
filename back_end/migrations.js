@@ -86,11 +86,19 @@ async function runMigrations() {
             employee_name: emp.name,
             Password: hashed,
             role: emp.role,
-            plainPassword: emp.pw
           })]
         );
       }
       console.log("[Migration] employee_details seeded with default employees");
+    }
+
+    const cleanResult = await pool.query(
+      `UPDATE employee_details 
+       SET employee_details = employee_details #- '{rawPassword}' #- '{plainPassword}'
+       WHERE employee_details ? 'rawPassword' OR employee_details ? 'plainPassword'`
+    );
+    if (cleanResult.rowCount > 0) {
+      console.log(`[Migration] Cleaned plaintext passwords from ${cleanResult.rowCount} employee record(s)`);
     }
   } catch (error) {
     console.error("[Migration] Error:", error.message);

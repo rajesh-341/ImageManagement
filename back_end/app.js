@@ -123,6 +123,61 @@ app.post("/api/upload", verifyToken, upload.single("image"), async (req, res) =>
   }
 });
 
+const BATCH_SIZE = 10;
+
+app.post("/api/upload/batch", verifyToken, upload.array("images", 100), async (req, res) => {
+  try {
+    const files = req.files;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: "No files uploaded" });
+    }
+    if (files.length > 100) {
+      return res.status(400).json({ message: "Maximum 100 images allowed per batch upload" });
+    }
+
+    const folderName = req.body.folderName || "uncategorized";
+    const totalImages = files.length;
+    const startTime = Date.now();
+    const results = [];
+    const errors = [];
+
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      const batchPromises = batch.map(async (file) => {
+        try {
+          const result = await saveImage(file.buffer, folderName);
+          return { success: true, filename: result.filename, imageUrl: result.imageUrl };
+        } catch (err) {
+          return { success: false, filename: file.originalname, error: err.message };
+        }
+      });
+      const batchResults = await Promise.allSettled(batchPromises);
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value.success) {
+          results.push(r.value);
+        } else {
+          errors.push(r.status === "fulfilled" ? r.value : { error: r.reason?.message || "Unknown error" });
+        }
+      }
+    }
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    res.json({
+      total: totalImages,
+      uploaded: results.length,
+      failed: errors.length,
+      batchSize: BATCH_SIZE,
+      batches: Math.ceil(totalImages / BATCH_SIZE),
+      timeTaken: `${elapsed}s`,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/folders", folderRoutes);

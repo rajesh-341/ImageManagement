@@ -5,30 +5,15 @@ import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
 import AutocompleteInput from "../components/AutocompleteInput";
 import FolderCard from "../components/FolderCard";
+import {
+  UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES,
+  SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
+  BATCH_COLORS, MAX_BATCH_UPLOAD, SAME_FIELDS,
+} from "../constants";
 import "./ImageManagement.css";
 
-const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
-const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
-
-const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
-const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
-const EVENT_TYPES = [
-  "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
-  "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
-  "Shashtiabdapoorti", "Surprise Gift", "Salagai Poojai", "Annual Day",
-  "Labour Day", "Naming Ceremony", "Holy Communion", "Farewell",
-  "Kari Virundhu", "Get Together"
-];
-const DECOR_TYPES = [
-  "Name board", "Stage Ceiling", "Hall side Decoration",
-  "Hall ceiling work", "Hall Entrance", "Receiption Area",
-  "Pathway", "Main Entrance", "Orchestra Stage", "Car Decoration",
-  "Selfie Area", "Bedroom Decoration", "Home Decoration",
-  "Lighting work in Home", "Lighting work in Mahal", "Audio work",
-];
 
 function ImageManagement() {
   const [folders, setFolders] = useState([]);
@@ -80,6 +65,7 @@ function ImageManagement() {
   const [showFormSettings, setShowFormSettings] = useState(false);
   const [visiblePasswords, setVisiblePasswords] = useState(new Set());
   const [notification, setNotification] = useState(null);
+  const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
 
   const showNotif = (message, type = "error") => {
     setNotification({ message, type });
@@ -332,10 +318,16 @@ function ImageManagement() {
     }
   };
 
-  const SAME_FIELDS = ["designName","eventType","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","venueDate","priceMin","priceMax"];
+  
 
   const handleBatchImageSelect = (e) => {
     const files = Array.from(e.target.files);
+    const totalAfterAdd = batchImages.length + files.length;
+    if (totalAfterAdd > 100) {
+      showNotif(`Maximum 100 images allowed per batch. You can add ${100 - batchImages.length} more.`, "warning");
+      e.target.value = "";
+      return;
+    }
     const newRows = files.map((file) => {
       const keepSame = {};
       SAME_FIELDS.forEach(f => { keepSame[f] = false; });
@@ -409,7 +401,6 @@ function ImageManagement() {
       if (isFieldRequired("image_eventType") && !row.eventType) missing.push("Event Type");
       if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
       if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
-      if (isFieldRequired("image_flowerType") && !row.flowerType) missing.push("Flower Type");
       if (isFieldRequired("image_venueDate") && !row.venueDate) missing.push("Event Date");
       if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
       if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
@@ -422,14 +413,19 @@ function ImageManagement() {
     }
 
     setLoading(true);
-    setUploadProgress(`Uploading 0 of ${batchImages.length} images...`);
+    const totalImages = batchImages.length;
+    setUploadProgress(`Uploading 0 of ${totalImages} images...`);
     let successCount = 0;
     let errorCount = 0;
+    const batchStartTime = Date.now();
+    let perImageTimes = [];
+    const BATCH_SIZE = 10;
     try {
       const isLocalDev = window.location.hostname === "localhost";
-      for (let i = 0; i < batchImages.length; i++) {
+      for (let i = 0; i < totalImages; i++) {
         const row = batchImages[i];
-        setUploadProgress(`Uploading ${i + 1} of ${batchImages.length} images...`);
+        const imageStartTime = Date.now();
+        setUploadProgress(`Uploading ${i + 1} of ${totalImages} images...`);
         try {
           let imageUrl;
           if (isLocalDev) {
@@ -460,7 +456,7 @@ function ImageManagement() {
             venueCustomer: folderCustomer,
             venueName: folderVenue,
             venueDate: row.venueDate,
-            flowerType: row.flowerType,
+            flowerType: row.flowerType || null,
             priceMin: row.priceMin,
             priceMax: row.priceMax,
           };
@@ -470,8 +466,17 @@ function ImageManagement() {
           console.error(`Failed to upload image ${i + 1}:`, err);
           errorCount++;
         }
+        const elapsed = ((Date.now() - imageStartTime) / 1000).toFixed(1);
+        perImageTimes.push(elapsed);
+        const avgTime = perImageTimes.reduce((a, b) => a + parseFloat(b), 0) / perImageTimes.length;
+        const remaining = Math.max(0, totalImages - i - 1);
+        const estRemaining = (avgTime * remaining).toFixed(1);
+        if (i < totalImages - 1) {
+          setUploadProgress(`Uploading ${i + 1} of ${totalImages} images... (${elapsed}s | ~${estRemaining}s remaining)`);
+        }
       }
-      setUploadProgress(`Successfully uploaded ${successCount} images!${errorCount > 0 ? ` (${errorCount} failed)` : ""}`);
+      const totalTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
+      setUploadProgress(`Successfully uploaded ${successCount} images in ${totalTime}s!${errorCount > 0 ? ` (${errorCount} failed)` : ""}`);
       batchImages.forEach(row => URL.revokeObjectURL(row.preview));
       setBatchImages([]);
       loadImages();
@@ -494,7 +499,6 @@ function ImageManagement() {
     if (isFieldRequired("image_eventType") && !imageData.eventType) missing.push("Event Type");
     if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
-    if (isFieldRequired("image_flowerType") && !imageData.flowerType) missing.push("Flower Type");
     if (isFieldRequired("image_venueDate") && !imageData.venueDate) missing.push("Event Date");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
     if (missing.length > 0) {
@@ -589,9 +593,23 @@ function ImageManagement() {
 
   const handleBulkDownload = async () => {
     if (selectedImageIds.size === 0) return;
+    const useCustom = await promptDownloadMode();
     for (const id of selectedImageIds) {
-      await ApiService.downloadImage(id);
+      try {
+        await ApiService.downloadImage(id, useCustom);
+      } catch (err) {
+        showNotif(`Failed to download image ${id}: ${err.message}`);
+      }
     }
+  };
+
+  const promptDownloadMode = () => {
+    return new Promise((resolve) => {
+      const mode = window.confirm(
+        "Click OK to choose save location for each image (custom path).\n\nClick Cancel to use default browser download folder."
+      );
+      resolve(mode);
+    });
   };
 
   const handleToggleFavorite = async (imageId, isFavorite) => {
@@ -1723,8 +1741,64 @@ function ImageManagement() {
                               </td>
                               <td>
                                 <div className="batch-field-with-same">
-                                  <input type="text" className="batch-input" value={row.colours}
-                                    onChange={(e) => updateBatchRow(index, "colours", e.target.value)} placeholder="Red,Gold" />
+                                  <div className="batch-colour-cell">
+                                    <button type="button" className="batch-colour-picker-btn"
+                                      onClick={() => setBatchColorPickerIndex(batchColorPickerIndex === index ? null : index)}
+                                      title="Select colours">
+                                      <span className="batch-colour-swatches">
+                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours) : []).slice(0, 3).map((c, ci) => (
+                                          <span key={ci} className="batch-colour-dot" style={{ backgroundColor: c.toLowerCase() }} />
+                                        ))}
+                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours).length : 0) > 0 && <span className="batch-colour-count">{typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()).length : row.colours.length}</span>}
+                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours).length : 0) === 0 && <span className="batch-colour-placeholder">🎨</span>}
+                                      </span>
+                                    </button>
+                                    {batchColorPickerIndex === index && (
+                                      <div className="batch-colour-popup">
+                                        <div className="batch-colour-popup-header">
+                                          <span>Select Colours</span>
+                                          <button type="button" className="batch-colour-popup-close" onClick={() => setBatchColorPickerIndex(null)}>×</button>
+                                        </div>
+                                        <div className="batch-colour-popup-grid">
+                                          {BATCH_COLORS.map(color => {
+                                            const currentColors = row.colours ? (typeof row.colours === "string" ? row.colours.split(",").map(c => c.trim()).filter(c => c) : row.colours) : [];
+                                            const isSelected = currentColors.includes(color);
+                                            return (
+                                              <button
+                                                key={color}
+                                                type="button"
+                                                className={`batch-colour-option ${isSelected ? "selected" : ""}`}
+                                                style={{ backgroundColor: color.toLowerCase() }}
+                                                onClick={() => {
+                                                  let updated = currentColors;
+                                                  if (isSelected) {
+                                                    updated = updated.filter(c => c !== color);
+                                                  } else {
+                                                    if (updated.length >= 3) { return; }
+                                                    updated = [...updated, color];
+                                                  }
+                                                  updateBatchRow(index, "colours", updated.join(","));
+                                                }}
+                                                title={color}
+                                              >
+                                                {isSelected && "✓"}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                        <div className="batch-colour-popup-footer">
+                                          <button type="button" className="batch-colour-clear-btn"
+                                            onClick={() => { updateBatchRow(index, "colours", ""); setBatchColorPickerIndex(null); }}>
+                                            Clear
+                                          </button>
+                                          <button type="button" className="batch-colour-done-btn"
+                                            onClick={() => setBatchColorPickerIndex(null)}>
+                                            Done
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.colours ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "colours")} title="Same as previous row">S</button>}
                                 </div>
@@ -1831,8 +1905,9 @@ function ImageManagement() {
               <button className="btn btn-secondary btn-sm" onClick={() => {
                 handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
               }}>Edit</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => {
-                ApiService.downloadImage(lightboxImage.id);
+              <button className="btn btn-secondary btn-sm" onClick={async () => {
+                const useCustom = await promptDownloadMode();
+                ApiService.downloadImage(lightboxImage.id, useCustom).catch(err => showNotif(err.message));
               }}>Download</button>
               <button className={`btn btn-sm ${lightboxImage.isFav ? "btn-fav-active" : "btn-secondary"}`}
                 onClick={() => {

@@ -207,9 +207,6 @@ const uploadImage = async (req, res) => {
     if (!colourCombination || colourCombination.length === 0) {
       return res.status(400).json({ message: "Missing required field: Colour" });
     }
-    if (!flowerType) {
-      return res.status(400).json({ message: "Missing required field: Flower Type" });
-    }
 
     const imageData = {
       imageUrl,
@@ -225,11 +222,16 @@ const uploadImage = async (req, res) => {
       venueCustomer: venueCustomer || null,
       venueName: venueName || null,
       venueDate: venueDate || null,
-      flowerType,
+      flowerType: flowerType || null,
       priceMin: priceMin ? parseFloat(priceMin) : null,
       priceMax: priceMax ? parseFloat(priceMax) : null,
       uploadedAt: new Date().toISOString()
     };
+
+    await pool.query(
+      `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', $2, 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING`,
+      [folderName, req.user.userId]
+    );
 
     const query = `
       INSERT INTO image_management (folder_name, image_data, employee_id)
