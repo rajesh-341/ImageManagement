@@ -4,6 +4,7 @@ import ApiService from "../services/api";
 import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
 import AutocompleteInput from "../components/AutocompleteInput";
+import FolderCard from "../components/FolderCard";
 import "./ImageManagement.css";
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
@@ -930,16 +931,6 @@ function ImageManagement() {
 
   const monthsShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  const formatPillDate = (dateStr) => {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = monthsShort[d.getMonth()];
-    const year = d.getFullYear();
-    return `${day} · ${month} · ${year}`;
-  };
-
   const formatEventDate = (dateStr) => {
     if (!dateStr) return "";
     const d = new Date(dateStr);
@@ -948,17 +939,6 @@ function ImageManagement() {
     const day = d.getDate();
     const year = d.getFullYear();
     return `${month} ${day} ${year}`;
-  };
-
-  const renderDatePill = (dateStr) => {
-    const formatted = formatPillDate(dateStr);
-    if (!formatted) return null;
-    return <div className="date-pill">{formatted}</div>;
-  };
-
-  const renderFolderDate = (folder) => {
-    const dateStr = folder.created_at || folder.createdAt;
-    return renderDatePill(dateStr);
   };
 
   const parseFolderName = (name) => {
@@ -1184,7 +1164,7 @@ function ImageManagement() {
         <p>No folders yet. Create one to get started!</p>
       </div>
     ) : (
-      <div className="folder-grid">
+      <div className="folder-card-grid">
         {canUpload && (
           <div className="upload-box-card add-folder-box" onClick={() => setShowAddFolderModal(true)}>
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1194,37 +1174,15 @@ function ImageManagement() {
           </div>
         )}
         {sortedFolders.map(folder => (
-            <div
-              key={folder.id}
-              className="folder-item"
-              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
-              onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.currentTarget.classList.remove("drag-over");
-                const imageId = e.dataTransfer.getData("imageId");
-                if (imageId) handleMoveImagesToFolder(folder.name);
-              }}
-              onClick={() => handleEnterFolder(folder)}
-            >
-              <div className="folder-icon">
-                {renderFolderDate(folder)}
-                <svg viewBox="0 0 64 64" width="48" height="48">
-                  <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
-                  <path d="M8 22h48v28H8z" fill="#FFD54F" />
-                  <path d="M8 16h18l6 6H8z" fill="#FFB300" />
-                </svg>
-                <div className="folder-icon-text">
-                  {renderFolderNameDisplay(folder)}
-                </div>
-              </div>
-              {canUpload && (
-                <button className="folder-delete" onClick={(e) => handleDeleteFolder(folder.id, folder.name, e)}>
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
+          <FolderCard
+            key={folder.id}
+            folder={folder}
+            canDelete={canUpload}
+            onMoveToFolder={handleMoveImagesToFolder}
+            onClick={() => handleEnterFolder(folder)}
+            onDelete={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+          />
+        ))}
       </div>
     )
   );
@@ -1242,7 +1200,7 @@ function ImageManagement() {
       </div>
 
       {!selectedFavFolder && (
-        <div className="favorites-folders-row">
+        <div className="folder-card-grid favorites-folders-grid">
           {canUpload && (
             <div className="upload-box-card add-folder-box" onClick={() => setShowAddFavFolderModal(true)}>
               <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1252,35 +1210,15 @@ function ImageManagement() {
             </div>
           )}
           {favoriteFolders.map(folder => (
-              <div
-                key={folder.id}
-                className="folder-item"
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
-                onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.currentTarget.classList.remove("drag-over");
-                  const imageId = e.dataTransfer.getData("imageId");
-                  if (imageId) handleMoveImagesToFolder(folder.name);
-                }}
-                onClick={() => handleEnterFavoriteFolder(folder)}
-              >
-                <div className="folder-icon">
-                  {renderFolderDate(folder)}
-                  <svg viewBox="0 0 64 64" width="48" height="48">
-                    <path d="M8 16h18l6 6h24v32H8z" fill="#F5C842" />
-                    <path d="M8 22h48v28H8z" fill="#FFD54F" />
-                    <path d="M8 16h18l6 6H8z" fill="#FFB300" />
-                  </svg>
-                  <div className="folder-icon-text">
-                    {renderFolderNameDisplay(folder)}
-                  </div>
-                </div>
-                <button className="folder-delete" onClick={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}>
-                  ×
-                </button>
-              </div>
-            ))}
+            <FolderCard
+              key={folder.id}
+              folder={folder}
+              canDelete={canUpload}
+              onMoveToFolder={handleMoveImagesToFolder}
+              onClick={() => handleEnterFavoriteFolder(folder)}
+              onDelete={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}
+            />
+          ))}
         </div>
       )}
 
