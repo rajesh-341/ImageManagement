@@ -66,6 +66,8 @@ function ImageManagement() {
   const [visiblePasswords, setVisiblePasswords] = useState(new Set());
   const [notification, setNotification] = useState(null);
   const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadResolve, setDownloadResolve] = useState(null);
 
   const showNotif = (message, type = "error") => {
     setNotification({ message, type });
@@ -590,9 +592,25 @@ function ImageManagement() {
     }
   };
 
+  const openDownloadModal = () => {
+    return new Promise((resolve) => {
+      setDownloadResolve(() => resolve);
+      setShowDownloadModal(true);
+    });
+  };
+
+  const handleDownloadChoice = (useCustom) => {
+    setShowDownloadModal(false);
+    if (downloadResolve) {
+      downloadResolve(useCustom);
+      setDownloadResolve(null);
+    }
+  };
+
   const handleBulkDownload = async () => {
     if (selectedImageIds.size === 0) return;
-    const useCustom = await promptDownloadMode();
+    const useCustom = await openDownloadModal();
+    if (useCustom === undefined) return;
     for (const id of selectedImageIds) {
       try {
         await ApiService.downloadImage(id, useCustom);
@@ -600,15 +618,6 @@ function ImageManagement() {
         showNotif(`Failed to download image ${id}: ${err.message}`);
       }
     }
-  };
-
-  const promptDownloadMode = () => {
-    return new Promise((resolve) => {
-      const mode = window.confirm(
-        "Click OK to choose save location for each image (custom path).\n\nClick Cancel to use default browser download folder."
-      );
-      resolve(mode);
-    });
   };
 
   const handleToggleFavorite = async (imageId, isFavorite) => {
@@ -1905,7 +1914,8 @@ function ImageManagement() {
                 handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
               }}>Edit</button>
               <button className="btn btn-secondary btn-sm" onClick={async () => {
-                const useCustom = await promptDownloadMode();
+                const useCustom = await openDownloadModal();
+                if (useCustom === undefined) return;
                 ApiService.downloadImage(lightboxImage.id, useCustom).catch(err => showNotif(err.message));
               }}>Download</button>
               <button className={`btn btn-sm ${lightboxImage.isFav ? "btn-fav-active" : "btn-secondary"}`}
@@ -2232,6 +2242,44 @@ function ImageManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Download Modal */}
+      {showDownloadModal && (
+        <div className="modal-overlay" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>
+          <div className="modal download-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Download Image</h2>
+              <button className="modal-close" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="download-modal-desc">Choose how you want to save the image:</p>
+              <div className="download-options">
+                <button className="download-option-btn" onClick={() => handleDownloadChoice(true)}>
+                  <span className="download-option-icon">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M21 21H3M18 13l-6 6-6-6M12 3v16"/>
+                    </svg>
+                  </span>
+                  <span className="download-option-label">Custom Path</span>
+                  <span className="download-option-desc">Choose where to save the file</span>
+                </button>
+                <button className="download-option-btn" onClick={() => handleDownloadChoice(false)}>
+                  <span className="download-option-icon">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                  </span>
+                  <span className="download-option-label">Default Path</span>
+                  <span className="download-option-desc">Save to browser's default download folder</span>
+                </button>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>Cancel</button>
+            </div>
           </div>
         </div>
       )}

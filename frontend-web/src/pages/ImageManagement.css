@@ -3703,3 +3703,58 @@
   background: var(--primary);
   color: #fff;
 }
+
+/* Download Modal */
+.download-modal {
+  max-width: 440px;
+}
+
+.download-modal-desc {
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.download-options {
+  display: flex;
+  gap: 16px;
+}
+
+.download-option-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.download-option-btn:hover {
+  border-color: var(--primary);
+  background: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(126, 192, 206, 0.2);
+}
+
+.download-option-icon {
+  color: var(--primary);
+}
+
+.download-option-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.download-option-desc {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+  line-height: 1.3;
+}
