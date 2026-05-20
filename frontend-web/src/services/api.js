@@ -320,7 +320,14 @@ const ApiService = {
     a.remove();
     window.URL.revokeObjectURL(downloadUrl);
     return { success: true };
-  }
+  },
+
+  async destroyCloudinaryImage(imageUrl) {
+    return request("/destroy-cloudinary", {
+      method: "POST",
+      body: JSON.stringify({ imageUrl }),
+    });
+  },
 };
 
 export default ApiService;

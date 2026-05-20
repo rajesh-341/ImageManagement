@@ -272,8 +272,8 @@ app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
     if (!allowed) return res.status(403).json({ message: "Access denied" });
 
     const { action } = req.body;
-    if (!action || !["dry-run", "cleanup"].includes(action)) {
-      return res.status(400).json({ message: "action must be 'dry-run' or 'cleanup'" });
+    if (!action || !["dry-run", "cleanup", "import"].includes(action)) {
+      return res.status(400).json({ message: "action must be 'dry-run', 'cleanup', or 'import'" });
     }
 
     const result = await cloudinary.api.resources({
@@ -306,14 +306,67 @@ app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
       }
     }
 
+    let imported = [];
+    if (action === "import" && orphaned.length > 0) {
+      for (const asset of orphaned) {
+        try {
+          const pathParts = asset.public_id.split("/");
+          const folderName = pathParts.length >= 2 ? pathParts[1] : "uncategorized";
+          const displayName = pathParts[pathParts.length - 1]?.replace(/\.\w+$/, "")?.replace(/[_-]/g, " ") || "Untitled";
+
+          await pool.query(
+            `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', 'system', 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING`,
+            [folderName]
+          );
+
+          const imageData = {
+            imageUrl: asset.secure_url,
+            colourCombination: [],
+            designName: displayName,
+            eventType: "Other",
+            decorType: "Other",
+            uploadedAt: asset.created_at,
+          };
+          const insertResult = await pool.query(
+            `INSERT INTO image_management (folder_name, image_data, employee_id) VALUES ($1, $2, 'system') RETURNING id`,
+            [folderName, JSON.stringify(imageData)]
+          );
+
+          imported.push({
+            public_id: asset.public_id,
+            url: asset.secure_url,
+            folder: folderName,
+            db_id: insertResult.rows[0].id,
+            created_at: asset.created_at,
+          });
+        } catch (importErr) {
+          console.error(`[Sync] Failed to import ${asset.public_id}:`, importErr.message);
+        }
+      }
+    }
+
     res.json({
       totalCloudinary: result.resources.length,
       totalDb: dbUrls.size,
       orphanedCount: orphaned.length,
-      orphaned,
+      orphaned: action === "dry-run" ? orphaned : undefined,
       cleanedCount: cleaned.length,
-      cleaned,
+      cleaned: action === "cleanup" ? cleaned : undefined,
+      importedCount: imported.length,
+      imported: action === "import" ? imported : undefined,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/destroy-cloudinary", verifyToken, async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    if (!imageUrl) return res.status(400).json({ message: "imageUrl required" });
+    const { deleteImage } = require("./config/storage");
+    await deleteImage(imageUrl);
+    res.json({ message: "Deleted" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

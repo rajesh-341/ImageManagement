@@ -461,8 +461,8 @@ function ImageManagement() {
         const row = batchImages[i];
         const imageStartTime = Date.now();
         setUploadProgress(`Uploading ${i + 1} of ${totalImages} images...`);
+        let imageUrl;
         try {
-          let imageUrl;
           if (isLocalDev) {
             const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
             imageUrl = uploadResult.imageUrl;
@@ -498,6 +498,9 @@ function ImageManagement() {
           await ApiService.uploadImage(metaData);
           successCount++;
         } catch (err) {
+          if (imageUrl && !isLocalDev) {
+            ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
+          }
           console.error(`Failed to upload image ${i + 1}:`, err);
           errorCount++;
         }
@@ -542,9 +545,9 @@ function ImageManagement() {
     }
     setLoading(true);
     setUploadProgress("Uploading image...");
+    let imageUrl;
     try {
       const isLocalDev = window.location.hostname === "localhost";
-      let imageUrl;
 
       if (isLocalDev) {
         const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
@@ -588,6 +591,9 @@ function ImageManagement() {
         setShowUploadModal(false);
       }, 1500);
     } catch (err) {
+      if (imageUrl && !window.location.hostname.includes("localhost")) {
+        ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
+      }
       showNotif("Something went wrong");
     } finally {
       setLoading(false);
