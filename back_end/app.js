@@ -274,15 +274,16 @@ const importCloudinaryAssets = async () => {
   isImporting = true;
   const stats = { totalCloudinary: 0, totalDb: 0, importedCount: 0, skippedCount: 0, errorCount: 0, imported: [], errors: [] };
 
+  console.log('[Auto-Sync] Starting Cloudinary import...');
   try {
     const dbResult = await pool.query("SELECT image_data FROM image_management");
-    const dbUrls = new Set(
+    const dbUrlsAndFolders = new Map(
       dbResult.rows.map(r => {
         const d = typeof r.image_data === "string" ? JSON.parse(r.image_data) : r.image_data;
-        return d?.imageUrl;
-      }).filter(Boolean)
+        return [d?.imageUrl, d];
+      }).filter(([url]) => url)
     );
-    stats.totalDb = dbUrls.size;
+    stats.totalDb = dbUrlsAndFolders.size;
 
     let cursor = null;
     let allAssets = [];
@@ -296,30 +297,52 @@ const importCloudinaryAssets = async () => {
     } while (cursor);
 
     stats.totalCloudinary = allAssets.length;
+    console.log(`[Auto-Sync] Cloudinary has ${allAssets.length} assets, DB has ${dbUrlsAndFolders.size} records`);
+
+    const seenPublicIds = new Set();
 
     for (const asset of allAssets) {
-      if (dbUrls.has(asset.secure_url)) {
+      if (dbUrlsAndFolders.has(asset.secure_url)) {
         stats.skippedCount++;
         continue;
       }
+      if (seenPublicIds.has(asset.public_id)) {
+        stats.skippedCount++;
+        continue;
+      }
+      seenPublicIds.add(asset.public_id);
+
       try {
         const pathParts = asset.public_id.split("/");
         const folderName = pathParts.length >= 2 ? pathParts[1] : "uncategorized";
         const rawName = pathParts[pathParts.length - 1]?.replace(/\.\w+$/, "") || "";
-        const displayName = rawName.replace(/[_-]/g, " ").replace(/\d{13,}/g, "").trim() || "Imported Image";
+        const dateStr = asset.created_at ? new Date(asset.created_at).toISOString().split("T")[0] : "";
+        let displayName = rawName
+          .replace(/[_-]/g, " ")
+          .replace(/\d{13,}/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!displayName || displayName.replace(/\d+/g, "").trim().length < 2) {
+          displayName = dateStr ? `Image ${dateStr}` : "Imported Image";
+        }
 
-        await pool.query(
-          `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', 'system', 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING`,
-          [folderName]
-        );
+        try {
+          await pool.query(
+            `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', 'system', 'home') ON CONFLICT (name) DO NOTHING`,
+            [folderName]
+          );
+        } catch (folderErr) {
+          stats.errors.push({ public_id: asset.public_id, step: 'folder_insert', error: folderErr.message });
+        }
 
         const imageData = {
           imageUrl: asset.secure_url,
           colourCombination: [],
-          designName: displayName,
+          designName: displayName.charAt(0).toUpperCase() + displayName.slice(1),
           eventType: "Other",
           decorType: "Other",
           uploadedAt: asset.created_at,
+          cloudinaryPublicId: asset.public_id,
         };
 
         const insertResult = await pool.query(
@@ -328,18 +351,23 @@ const importCloudinaryAssets = async () => {
         );
 
         stats.importedCount++;
-        stats.imported.push({
-          public_id: asset.public_id,
-          url: asset.secure_url,
-          folder: folderName,
-          db_id: insertResult.rows[0].id,
-        });
+        if (stats.importedCount <= 20) {
+          stats.imported.push({
+            public_id: asset.public_id,
+            url: asset.secure_url,
+            folder: folderName,
+            db_id: insertResult.rows[0].id,
+          });
+        }
       } catch (importErr) {
         stats.errorCount++;
         stats.errors.push({ public_id: asset.public_id, error: importErr.message });
       }
     }
+
+    console.log(`[Auto-Sync] Imported ${stats.importedCount}, skipped ${stats.skippedCount}, errors ${stats.errorCount}`);
   } catch (err) {
+    console.error('[Auto-Sync] Fatal error:', err.message);
     stats.error = err.message;
   } finally {
     isImporting = false;
@@ -405,6 +433,68 @@ app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
 
 app.get("/api/sync/cloudinary/status", verifyToken, async (req, res) => {
   res.json({ isImporting, lastImportResult });
+});
+
+app.get("/api/sync/cloudinary/diagnose", verifyToken, async (req, res) => {
+  try {
+    const SYNC_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
+    const allowed = SYNC_ROLES.map(r => r.toLowerCase()).includes(userRole);
+    if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+    const allAssets = [];
+    let cursor = null;
+    do {
+      const params = { type: 'upload', prefix: 'image_management/', max_results: 500 };
+      if (cursor) params.next_cursor = cursor;
+      const page = await cloudinary.api.resources(params);
+      allAssets.push(...page.resources);
+      cursor = page.next_cursor;
+    } while (cursor);
+
+    const dbResult = await pool.query("SELECT image_data, folder_name FROM image_management");
+    const dbByUrl = new Map();
+    const dbFolders = new Set();
+    for (const r of dbResult.rows) {
+      const d = typeof r.image_data === "string" ? JSON.parse(r.image_data) : r.image_data;
+      if (d?.imageUrl) dbByUrl.set(d.imageUrl, r.folder_name);
+      dbFolders.add(r.folder_name);
+    }
+
+    const cloudFolders = {};
+    for (const asset of allAssets) {
+      const pathParts = asset.public_id.split("/");
+      const folder = pathParts.length >= 2 ? pathParts[1] : "uncategorized";
+      if (!cloudFolders[folder]) cloudFolders[folder] = { cloudinary: 0, inDb: 0, missing: [] };
+      cloudFolders[folder].cloudinary++;
+      if (dbByUrl.has(asset.secure_url)) {
+        cloudFolders[folder].inDb++;
+      } else {
+        cloudFolders[folder].missing.push({
+          public_id: asset.public_id,
+          url: asset.secure_url,
+          created_at: asset.created_at,
+        });
+      }
+    }
+
+    const dbOnlyFolders = [];
+    for (const f of dbFolders) {
+      if (!cloudFolders[f]) {
+        dbOnlyFolders.push(f);
+      }
+    }
+
+    res.json({
+      totalCloudinary: allAssets.length,
+      totalDb: dbByUrl.size,
+      cloudFolders,
+      dbOnlyFolders,
+      missingTotal: allAssets.length - dbByUrl.size,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 app.post("/api/destroy-cloudinary", verifyToken, async (req, res) => {

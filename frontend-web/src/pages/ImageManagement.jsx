@@ -1000,9 +1000,16 @@ function ImageManagement() {
     setSyncing(true);
     try {
       const result = await ApiService.syncCloudinary("import");
-      showNotif(`Sync complete: ${result.importedCount} imported, ${result.errorCount} errors`, result.errorCount > 0 ? "warning" : "success");
+      let msg = `Sync complete: ${result.importedCount} imported`;
+      if (result.skippedCount > 0) msg += `, ${result.skippedCount} skipped`;
+      if (result.errorCount > 0) msg += `, ${result.errorCount} errors`;
+      if (result.totalCloudinary > 0) msg += ` (Cloudinary: ${result.totalCloudinary})`;
+      showNotif(msg, result.errorCount > 0 ? "warning" : "success");
+      if (result.errors && result.errors.length > 0) {
+        console.error("[Sync errors]", result.errors.slice(0, 10));
+      }
       loadFolders();
-      loadAllImages();
+      if (view === "images") loadAllImages();
     } catch (err) {
       showNotif("Sync failed: " + err.message);
     } finally {
