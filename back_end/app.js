@@ -264,6 +264,91 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
   }
 });
 
+let isImporting = false;
+let lastImportResult = null;
+
+const importCloudinaryAssets = async () => {
+  if (isImporting) return { status: 'skipped', reason: 'already running' };
+  if (!process.env.CLOUDINARY_CLOUD_NAME) return { status: 'skipped', reason: 'no cloudinary config' };
+
+  isImporting = true;
+  const stats = { totalCloudinary: 0, totalDb: 0, importedCount: 0, skippedCount: 0, errorCount: 0, imported: [], errors: [] };
+
+  try {
+    const dbResult = await pool.query("SELECT image_data FROM image_management");
+    const dbUrls = new Set(
+      dbResult.rows.map(r => {
+        const d = typeof r.image_data === "string" ? JSON.parse(r.image_data) : r.image_data;
+        return d?.imageUrl;
+      }).filter(Boolean)
+    );
+    stats.totalDb = dbUrls.size;
+
+    let cursor = null;
+    let allAssets = [];
+
+    do {
+      const params = { type: 'upload', prefix: 'image_management/', max_results: 500 };
+      if (cursor) params.next_cursor = cursor;
+      const page = await cloudinary.api.resources(params);
+      allAssets = allAssets.concat(page.resources);
+      cursor = page.next_cursor;
+    } while (cursor);
+
+    stats.totalCloudinary = allAssets.length;
+
+    for (const asset of allAssets) {
+      if (dbUrls.has(asset.secure_url)) {
+        stats.skippedCount++;
+        continue;
+      }
+      try {
+        const pathParts = asset.public_id.split("/");
+        const folderName = pathParts.length >= 2 ? pathParts[1] : "uncategorized";
+        const rawName = pathParts[pathParts.length - 1]?.replace(/\.\w+$/, "") || "";
+        const displayName = rawName.replace(/[_-]/g, " ").replace(/\d{13,}/g, "").trim() || "Imported Image";
+
+        await pool.query(
+          `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', 'system', 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING`,
+          [folderName]
+        );
+
+        const imageData = {
+          imageUrl: asset.secure_url,
+          colourCombination: [],
+          designName: displayName,
+          eventType: "Other",
+          decorType: "Other",
+          uploadedAt: asset.created_at,
+        };
+
+        const insertResult = await pool.query(
+          `INSERT INTO image_management (folder_name, image_data, employee_id) VALUES ($1, $2, 'system') RETURNING id`,
+          [folderName, JSON.stringify(imageData)]
+        );
+
+        stats.importedCount++;
+        stats.imported.push({
+          public_id: asset.public_id,
+          url: asset.secure_url,
+          folder: folderName,
+          db_id: insertResult.rows[0].id,
+        });
+      } catch (importErr) {
+        stats.errorCount++;
+        stats.errors.push({ public_id: asset.public_id, error: importErr.message });
+      }
+    }
+  } catch (err) {
+    stats.error = err.message;
+  } finally {
+    isImporting = false;
+    lastImportResult = { ...stats, finishedAt: new Date().toISOString() };
+  }
+
+  return stats;
+};
+
 app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
   try {
     const SYNC_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
@@ -272,15 +357,25 @@ app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
     if (!allowed) return res.status(403).json({ message: "Access denied" });
 
     const { action } = req.body;
-    if (!action || !["dry-run", "cleanup", "import"].includes(action)) {
-      return res.status(400).json({ message: "action must be 'dry-run', 'cleanup', or 'import'" });
+    if (!action || !["dry-run", "import"].includes(action)) {
+      return res.status(400).json({ message: "action must be 'dry-run' or 'import'" });
     }
 
-    const result = await cloudinary.api.resources({
-      type: 'upload',
-      prefix: 'image_management/',
-      max_results: 500,
-    });
+    if (action === "import") {
+      if (isImporting) return res.status(409).json({ message: "Import already in progress" });
+      const stats = await importCloudinaryAssets();
+      return res.json({ message: "Import completed", ...stats });
+    }
+
+    const allAssets = [];
+    let cursor = null;
+    do {
+      const params = { type: 'upload', prefix: 'image_management/', max_results: 500 };
+      if (cursor) params.next_cursor = cursor;
+      const page = await cloudinary.api.resources(params);
+      allAssets.push(...page.resources);
+      cursor = page.next_cursor;
+    } while (cursor);
 
     const dbResult = await pool.query("SELECT image_data FROM image_management");
     const dbUrls = new Set(
@@ -290,74 +385,26 @@ app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
       }).filter(Boolean)
     );
 
-    const orphaned = [];
-    for (const asset of result.resources) {
-      const assetUrl = asset.secure_url;
-      if (!dbUrls.has(assetUrl)) {
-        orphaned.push({ public_id: asset.public_id, url: assetUrl, created_at: asset.created_at });
-      }
-    }
-
-    const cleaned = [];
-    if (action === "cleanup" && orphaned.length > 0) {
-      for (const asset of orphaned) {
-        const destroyResult = await cloudinary.uploader.destroy(asset.public_id, { invalidate: true });
-        cleaned.push({ public_id: asset.public_id, result: destroyResult.result });
-      }
-    }
-
-    let imported = [];
-    if (action === "import" && orphaned.length > 0) {
-      for (const asset of orphaned) {
-        try {
-          const pathParts = asset.public_id.split("/");
-          const folderName = pathParts.length >= 2 ? pathParts[1] : "uncategorized";
-          const displayName = pathParts[pathParts.length - 1]?.replace(/\.\w+$/, "")?.replace(/[_-]/g, " ") || "Untitled";
-
-          await pool.query(
-            `INSERT INTO folders (name, description, created_by, scope) VALUES ($1, '', 'system', 'home') ON CONFLICT (name) WHERE (scope = 'home' OR scope IS NULL) DO NOTHING`,
-            [folderName]
-          );
-
-          const imageData = {
-            imageUrl: asset.secure_url,
-            colourCombination: [],
-            designName: displayName,
-            eventType: "Other",
-            decorType: "Other",
-            uploadedAt: asset.created_at,
-          };
-          const insertResult = await pool.query(
-            `INSERT INTO image_management (folder_name, image_data, employee_id) VALUES ($1, $2, 'system') RETURNING id`,
-            [folderName, JSON.stringify(imageData)]
-          );
-
-          imported.push({
-            public_id: asset.public_id,
-            url: asset.secure_url,
-            folder: folderName,
-            db_id: insertResult.rows[0].id,
-            created_at: asset.created_at,
-          });
-        } catch (importErr) {
-          console.error(`[Sync] Failed to import ${asset.public_id}:`, importErr.message);
-        }
-      }
-    }
+    const orphaned = allAssets.filter(a => !dbUrls.has(a.secure_url)).map(a => ({
+      public_id: a.public_id,
+      url: a.secure_url,
+      folder: a.public_id.split("/").slice(0, -1).join("/"),
+      created_at: a.created_at,
+    }));
 
     res.json({
-      totalCloudinary: result.resources.length,
+      totalCloudinary: allAssets.length,
       totalDb: dbUrls.size,
       orphanedCount: orphaned.length,
-      orphaned: action === "dry-run" ? orphaned : undefined,
-      cleanedCount: cleaned.length,
-      cleaned: action === "cleanup" ? cleaned : undefined,
-      importedCount: imported.length,
-      imported: action === "import" ? imported : undefined,
+      orphaned,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+app.get("/api/sync/cloudinary/status", verifyToken, async (req, res) => {
+  res.json({ isImporting, lastImportResult });
 });
 
 app.post("/api/destroy-cloudinary", verifyToken, async (req, res) => {
@@ -408,3 +455,4 @@ app.use((err, req, res, next) => {
 });
 
 module.exports = app;
+module.exports.importCloudinaryAssets = importCloudinaryAssets;

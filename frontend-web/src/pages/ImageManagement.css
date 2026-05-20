@@ -2480,6 +2480,37 @@
   flex-shrink: 0;
 }
 
+.btn-sync-cloudinary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-sync-cloudinary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.btn-sync-cloudinary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-sync-cloudinary svg {
+  flex-shrink: 0;
+}
+
 /* Price Range Inputs */
 .price-range-inputs {
   display: flex;

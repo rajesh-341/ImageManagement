@@ -994,6 +994,21 @@ function ImageManagement() {
   const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canDownloadAll = user && DOWNLOAD_ALL_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncCloudinary = async () => {
+    setSyncing(true);
+    try {
+      const result = await ApiService.syncCloudinary("import");
+      showNotif(`Sync complete: ${result.importedCount} imported, ${result.errorCount} errors`, result.errorCount > 0 ? "warning" : "success");
+      loadFolders();
+      loadAllImages();
+    } catch (err) {
+      showNotif("Sync failed: " + err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
   const displayName = user?.displayName || user?.username || "User";
   const role = user?.role || "N/A";
 
@@ -1176,6 +1191,16 @@ function ImageManagement() {
                   <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
                 Download All
+              </button>
+            )}
+            {canDownloadAll && (
+              <button className="btn btn-sync-cloudinary" onClick={handleSyncCloudinary} disabled={syncing}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 4v6h-6"/>
+                  <path d="M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                {syncing ? "Syncing..." : "Sync Cloudinary"}
               </button>
             )}
           </div>

@@ -328,6 +328,13 @@ const ApiService = {
       body: JSON.stringify({ imageUrl }),
     });
   },
+
+  async syncCloudinary(action = "import") {
+    return request("/sync/cloudinary", {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+  },
 };
 
 export default ApiService;
