@@ -113,6 +113,13 @@ const ApiService = {
     });
   },
 
+  async updateFolder(id, name) {
+    return request(`/folders/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  },
+
   async deleteFolder(id) {
     return request(`/folders/${id}`, {
       method: "DELETE",

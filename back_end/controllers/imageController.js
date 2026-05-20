@@ -21,6 +21,10 @@ const getImages = async (req, res) => {
 
     const conditions = [];
 
+    if (!folder) {
+      conditions.push(`folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL)`);
+    }
+
     if (searchText) {
       conditions.push(`(
         image_data->>'designName' ILIKE $${paramIndex} OR

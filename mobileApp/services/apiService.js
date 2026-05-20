@@ -77,6 +77,13 @@ class ApiService {
     });
   }
 
+  async updateFolder(id, name) {
+    return this.request(`/folders/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+  }
+
   async deleteFolder(id) {
     return this.request(`/folders/${id}`, {
       method: "DELETE",

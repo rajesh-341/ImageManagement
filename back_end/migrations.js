@@ -57,6 +57,7 @@ async function runMigrations() {
         [JSON.stringify({
           UserName: "admin",
           Password: hashedPassword,
+          plainPassword: "admin123",
           Role: "Owner",
           OwnerUniqueId: "owner_01"
         })]
@@ -85,6 +86,7 @@ async function runMigrations() {
             employee_id: emp.id,
             employee_name: emp.name,
             Password: hashed,
+            plainPassword: emp.pw,
             role: emp.role,
           })]
         );

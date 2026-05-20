@@ -77,6 +77,57 @@ const getFolders = async (req, res) => {
   }
 };
 
+const updateFolder = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const roleLower = role ? role.toLowerCase() : "";
+    const canEdit = UPLOAD_ROLES.map(r => r.toLowerCase()).includes(roleLower);
+
+    if (!canEdit) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Folder name is required" });
+    }
+
+    const folderResult = await pool.query("SELECT * FROM folders WHERE id = $1", [id]);
+    if (folderResult.rows.length === 0) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+
+    const oldName = folderResult.rows[0].name;
+    const folderScope = folderResult.rows[0].scope;
+    const newName = name.trim();
+
+    const existing = await pool.query(
+      "SELECT id FROM folders WHERE name = $1 AND id != $2 AND (scope = $3 OR ($3 IS NULL AND scope IS NULL))",
+      [newName, id, folderScope]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ message: "A folder with this name already exists" });
+    }
+
+    await pool.query(
+      "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [newName, id]
+    );
+
+    await pool.query(
+      "UPDATE image_management SET folder_name = $1 WHERE folder_name = $2",
+      [newName, oldName]
+    );
+
+    const result = await pool.query("SELECT * FROM folders WHERE id = $1", [id]);
+    res.json({ message: "Folder renamed successfully", folder: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const deleteFolder = async (req, res) => {
   try {
     const role = req.user.role;
@@ -130,5 +181,6 @@ const deleteFolder = async (req, res) => {
 module.exports = {
   createFolder,
   getFolders,
+  updateFolder,
   deleteFolder,
 };

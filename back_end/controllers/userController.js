@@ -26,7 +26,7 @@ const getUsers = async (req, res) => {
         username: details.employee_id || row.employee_id,
         displayName: details.employee_name || "",
         role: details.role || "",
-        password: "",
+        password: details.plainPassword || "",
       };
     });
 
@@ -66,6 +66,7 @@ const createUser = async (req, res) => {
         employee_id: username,
         employee_name: displayName,
         Password: hashedPassword,
+        plainPassword: password,
         role: role,
       })]
     );
@@ -104,12 +105,15 @@ const updateUser = async (req, res) => {
       ? await bcrypt.hash(password, 10)
       : existingDetails.Password;
 
+    const plainPassword = password || existingDetails.plainPassword || "";
+
     await pool.query(
       `UPDATE employee_details SET employee_id = $1, employee_details = $2 WHERE id = $3`,
       [username, JSON.stringify({
         employee_id: username,
         employee_name: displayName,
         Password: hashedPassword,
+        plainPassword,
         role: role,
       }), id]
     );

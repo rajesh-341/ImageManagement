@@ -49,6 +49,11 @@ function ImageManagement() {
   const [favEventDate, setFavEventDate] = useState("");
   const [favFolderDesc, setFavFolderDesc] = useState("");
   const [selectedFavFolder, setSelectedFavFolder] = useState(null);
+  const [showEditFolderModal, setShowEditFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(null);
+  const [editFolderName, setEditFolderName] = useState("");
+  const [editFolderVenue, setEditFolderVenue] = useState("");
+  const [editFolderDate, setEditFolderDate] = useState("");
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("designName");
   const [showEditModal, setShowEditModal] = useState(false);
@@ -266,6 +271,35 @@ function ImageManagement() {
       loadFolders();
     } catch (err) {
       showNotif("Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenEditFolder = (folder, e) => {
+    e.stopPropagation();
+    const { customerName, venue, eventDate } = parseFolderName(folder.name);
+    setEditingFolder(folder);
+    setEditFolderName(customerName);
+    setEditFolderVenue(venue);
+    setEditFolderDate(eventDate);
+    setShowEditFolderModal(true);
+  };
+
+  const handleSaveEditFolder = async (e) => {
+    e.preventDefault();
+    if (!editingFolder) return;
+    const newName = `${editFolderName.trim()}_${editFolderVenue.trim()}_${editFolderDate}`;
+    if (!editFolderName.trim()) { showNotif("Customer name is required", "warning"); return; }
+    setLoading(true);
+    try {
+      await ApiService.updateFolder(editingFolder.id, newName);
+      setShowEditFolderModal(false);
+      setEditingFolder(null);
+      loadFolders();
+      if (showFavorites) loadFavoriteFolders();
+    } catch (err) {
+      showNotif(err.message || "Failed to rename folder");
     } finally {
       setLoading(false);
     }
@@ -1199,16 +1233,17 @@ function ImageManagement() {
             <span>Add Folder</span>
           </div>
         )}
-        {sortedFolders.map(folder => (
-          <FolderCard
-            key={folder.id}
-            folder={folder}
-            canDelete={canUpload}
-            onMoveToFolder={handleMoveImagesToFolder}
-            onClick={() => handleEnterFolder(folder)}
-            onDelete={(e) => handleDeleteFolder(folder.id, folder.name, e)}
-          />
-        ))}
+          {sortedFolders.map(folder => (
+            <FolderCard
+              key={folder.id}
+              folder={folder}
+              canDelete={canUpload}
+              onEdit={(f, evt) => handleOpenEditFolder(f, evt)}
+              onMoveToFolder={handleMoveImagesToFolder}
+              onClick={() => handleEnterFolder(folder)}
+              onDelete={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+            />
+          ))}
       </div>
     )
   );
@@ -1240,6 +1275,7 @@ function ImageManagement() {
               key={folder.id}
               folder={folder}
               canDelete={canUpload}
+              onEdit={(f, evt) => handleOpenEditFolder(f, evt)}
               onMoveToFolder={handleMoveImagesToFolder}
               onClick={() => handleEnterFavoriteFolder(folder)}
               onDelete={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}
@@ -1495,6 +1531,63 @@ function ImageManagement() {
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddFavFolderModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Folder Modal */}
+      {showEditFolderModal && editingFolder && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Edit Folder</h2>
+              <button className="modal-close" onClick={() => setShowEditFolderModal(false)}>×</button>
+            </div>
+            <form onSubmit={handleSaveEditFolder}>
+              <div className="form-group">
+                <label className="label">Customer Name <span className="required">*</span></label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFolderName}
+                  onChange={(e) => setEditFolderName(e.target.value.slice(0, 15))}
+                  placeholder="Enter customer name"
+                  maxLength={15}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Venue</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFolderVenue}
+                  onChange={(e) => setEditFolderVenue(e.target.value.slice(0, 15))}
+                  placeholder="Enter venue name"
+                  maxLength={15}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={editFolderDate}
+                  onChange={(e) => setEditFolderDate(e.target.value)}
+                />
+              </div>
+              {editFolderName && editFolderVenue && editFolderDate && (
+                <div className="folder-name-preview">
+                  Folder will be: <strong>{editFolderName}_{editFolderVenue}_{editFolderDate}</strong>
+                </div>
+              )}
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditFolderModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? "Saving..." : "Save"}
+                </button>
               </div>
             </form>
           </div>
