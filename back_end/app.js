@@ -204,6 +204,121 @@ app.get("/api/upload-signature", verifyToken, (req, res) => {
   });
 });
 
+app.get("/api/download-all", verifyToken, async (req, res) => {
+  try {
+    const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
+    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
+    if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+    const imgResult = await pool.query(
+      `SELECT id, folder_name, image_data FROM image_management
+       WHERE (folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL) OR folder_name NOT IN (SELECT name FROM folders))
+       ORDER BY folder_name, id`
+    );
+    if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found" });
+
+    const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
+
+    const archiver = require("archiver");
+    const archive = archiver("zip", { zlib: { level: 6 } });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="all_images_${Date.now()}.zip"`);
+
+    archive.pipe(res);
+
+    let processed = 0;
+    const total = imgResult.rows.length;
+
+    for (const row of imgResult.rows) {
+      const imgData = typeof row.image_data === "string"
+        ? JSON.parse(row.image_data)
+        : row.image_data;
+
+      if (!imgData || !imgData.imageUrl) continue;
+
+      try {
+        const imageResponse = await fetch(imgData.imageUrl);
+        if (!imageResponse.ok) continue;
+
+        const buffer = Buffer.from(await imageResponse.arrayBuffer());
+        const folderPath = sanitize(row.folder_name);
+        const urlParts = imgData.imageUrl.split("/");
+        let filename = urlParts[urlParts.length - 1].split("?")[0];
+        if (!filename) filename = `image_${row.id}.jpg`;
+        archive.append(buffer, { name: `${folderPath}/${filename}` });
+        processed++;
+      } catch (err) {
+        console.warn(`[Download-All] Skipping image ${row.id}: ${err.message}`);
+      }
+    }
+
+    archive.finalize();
+
+    archive.on("finish", () => {
+      console.log(`[Download-All] Zipped ${processed}/${total} images`);
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
+  try {
+    const SYNC_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
+    const allowed = SYNC_ROLES.map(r => r.toLowerCase()).includes(userRole);
+    if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+    const { action } = req.body;
+    if (!action || !["dry-run", "cleanup"].includes(action)) {
+      return res.status(400).json({ message: "action must be 'dry-run' or 'cleanup'" });
+    }
+
+    const result = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'image_management/',
+      max_results: 500,
+    });
+
+    const dbResult = await pool.query("SELECT image_data FROM image_management");
+    const dbUrls = new Set(
+      dbResult.rows.map(r => {
+        const d = typeof r.image_data === "string" ? JSON.parse(r.image_data) : r.image_data;
+        return d?.imageUrl;
+      }).filter(Boolean)
+    );
+
+    const orphaned = [];
+    for (const asset of result.resources) {
+      const assetUrl = asset.secure_url;
+      if (!dbUrls.has(assetUrl)) {
+        orphaned.push({ public_id: asset.public_id, url: assetUrl, created_at: asset.created_at });
+      }
+    }
+
+    const cleaned = [];
+    if (action === "cleanup" && orphaned.length > 0) {
+      for (const asset of orphaned) {
+        const destroyResult = await cloudinary.uploader.destroy(asset.public_id, { invalidate: true });
+        cleaned.push({ public_id: asset.public_id, result: destroyResult.result });
+      }
+    }
+
+    res.json({
+      totalCloudinary: result.resources.length,
+      totalDb: dbUrls.size,
+      orphanedCount: orphaned.length,
+      orphaned,
+      cleanedCount: cleaned.length,
+      cleaned,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.get("/api/download/:id", verifyToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT image_data FROM image_management WHERE id = $1", [req.params.id]);

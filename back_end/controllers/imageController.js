@@ -22,7 +22,7 @@ const getImages = async (req, res) => {
     const conditions = [];
 
     if (!folder) {
-      conditions.push(`folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL)`);
+      conditions.push(`(folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL) OR folder_name NOT IN (SELECT name FROM folders))`);
     }
 
     if (searchText) {
@@ -243,8 +243,13 @@ const uploadImage = async (req, res) => {
       RETURNING *
     `;
 
-    const result = await pool.query(query, [folderName, JSON.stringify(imageData), req.user.userId]);
-    res.status(201).json(result.rows[0]);
+    try {
+      const result = await pool.query(query, [folderName, JSON.stringify(imageData), req.user.userId]);
+      res.status(201).json(result.rows[0]);
+    } catch (dbError) {
+      await deleteStorageImage(imageUrl).catch(() => {});
+      throw dbError;
+    }
   } catch (error) {
     console.log("[IMAGE] Error:", error.message);
     res.status(500).json({ message: error.message });

@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const path = require("path");
-const fs = require("fs");
+const fs = require("fs").promises;
 const { deleteImage: deleteStorageImage, isLocal } = require("../config/storage");
 
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
@@ -146,33 +146,33 @@ const deleteFolder = async (req, res) => {
     }
 
     const folderName = folderResult.rows[0].name;
-    const sanitizedFolder = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
     const imagesResult = await pool.query("SELECT image_data FROM image_management WHERE folder_name = $1", [folderName]);
+    const deleteErrors = [];
     for (const row of imagesResult.rows) {
       const imageData = typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data;
       if (imageData && imageData.imageUrl) {
-        if (isLocal()) {
-          const filePath = path.join(__dirname, "..", imageData.imageUrl.replace(/^\//, ""));
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        } else {
+        try {
           await deleteStorageImage(imageData.imageUrl);
+        } catch (err) {
+          deleteErrors.push({ id: row.id, error: err.message });
         }
       }
     }
 
     await pool.query("DELETE FROM image_management WHERE folder_name = $1", [folderName]);
 
+    const sanitizedFolder = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
     const uploadDir = path.join(__dirname, "..", "uploads", sanitizedFolder);
-    if (fs.existsSync(uploadDir)) {
-      fs.rmSync(uploadDir, { recursive: true, force: true });
+    try {
+      await fs.rm(uploadDir, { recursive: true, force: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') deleteErrors.push({ file: uploadDir, error: err.message });
     }
 
     await pool.query("DELETE FROM folders WHERE id = $1", [id]);
 
-    res.json({ message: "Folder deleted successfully" });
+    res.json({ message: "Folder deleted successfully", deleteErrors: deleteErrors.length > 0 ? deleteErrors : undefined });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

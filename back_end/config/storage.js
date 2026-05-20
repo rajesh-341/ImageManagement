@@ -55,15 +55,28 @@ const deleteImage = async (imageUrl) => {
     return;
   }
 
-  const publicId = imageUrl.split('/').pop().replace(/\.\w+$/, '');
-  const folderMatch = imageUrl.match(/image_management\/([^/]+)/);
-  const fullPublicId = folderMatch
-    ? `image_management/${folderMatch[1]}/${publicId}`
-    : publicId;
+  if (imageUrl.startsWith('/uploads/')) {
+    console.warn(`[Cloudinary] Skipping local-format URL in cloudinary mode: ${imageUrl}`);
+    return;
+  }
+
   try {
-    await cloudinary.uploader.destroy(fullPublicId);
+    const urlObj = new URL(imageUrl);
+    const pathParts = urlObj.pathname.split('/');
+    const uploadIndex = pathParts.indexOf('upload');
+    if (uploadIndex === -1 || uploadIndex + 1 >= pathParts.length) {
+      throw new Error(`Cannot parse Cloudinary public_id from URL: ${imageUrl}`);
+    }
+    const publicIdParts = pathParts.slice(uploadIndex + 2);
+    const fullPublicId = publicIdParts.join('/').replace(/\.[^.]+$/, '');
+
+    const result = await cloudinary.uploader.destroy(fullPublicId, { invalidate: true });
+    if (result.result !== 'ok') {
+      console.warn(`[Cloudinary] Destroy returned: ${JSON.stringify(result)} for public_id: ${fullPublicId}`);
+    }
   } catch (err) {
-    console.log('[Cloudinary] Delete warning:', err.message);
+    console.error('[Cloudinary] Delete failed:', err.message);
+    throw err;
   }
 };
 

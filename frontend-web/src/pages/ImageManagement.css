@@ -2453,6 +2453,33 @@
   stroke: #374151;
 }
 
+/* Download All Button */
+.btn-download-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #7EC0CE, #D56493);
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(126, 192, 206, 0.3);
+}
+
+.btn-download-all:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(126, 192, 206, 0.4);
+}
+
+.btn-download-all svg {
+  flex-shrink: 0;
+}
+
 /* Price Range Inputs */
 .price-range-inputs {
   display: flex;
