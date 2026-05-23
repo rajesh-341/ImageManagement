@@ -5,6 +5,7 @@ import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
 import AutocompleteInput from "../components/AutocompleteInput";
 import FolderCard from "../components/FolderCard";
+import FolderBox from "../components/FolderBox";
 import {
   UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
@@ -688,19 +689,21 @@ function ImageManagement() {
     });
   };
 
-  const handleMoveImagesToFolder = async (targetFolderName) => {
-    if (selectedImageIds.size === 0) return;
+  const handleMoveImagesToFolder = async (targetFolderName, draggedImageId) => {
+    const idsToMove = draggedImageId ? [draggedImageId] : [...selectedImageIds];
+    if (idsToMove.length === 0) return;
     setLoading(true);
     try {
-      for (const imageId of selectedImageIds) {
+      for (const imageId of idsToMove) {
         await ApiService.moveImageToFolder(imageId, targetFolderName);
       }
       setSelectedImageIds(new Set());
       setShowMoveModal(false);
-      loadImages();
-      if (showFavorites) loadFavorites(selectedFavFolder?.name);
+      await loadImages();
+      if (showFavorites) await loadFavorites(selectedFavFolder?.name);
     } catch (err) {
-      showNotif("Something went wrong");
+      console.error("Move to folder failed:", err);
+      showNotif(err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -2088,26 +2091,25 @@ function ImageManagement() {
               <h2 className="modal-title">Move to Folder</h2>
               <button className="modal-close" onClick={() => setShowMoveModal(false)}>X</button>
             </div>
-            {(showFavorites ? favoriteFolders : folders).length === 0 ? (
-              <p className="empty-folder-message">No folders available.</p>
-            ) : (
-              <div className="move-folder-list">
-                {(showFavorites ? favoriteFolders : folders).map(folder => {
-                  const { customerName, venue, eventDate } = parseFolderName(folder.name);
-                  return (
-                    <button key={folder.id} className="move-folder-item"
-                      onClick={() => handleMoveImagesToFolder(folder.name)}>
-                      <svg className="move-folder-icon" viewBox="0 0 24 24" width="18" height="18" fill="#F5C842" stroke="#e6a800" strokeWidth="0.5">
-                        <path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/>
-                      </svg>
-                      <span className="move-folder-name">{customerName || folder.name}</span>
-                      {venue && <span className="move-folder-venue"> - {venue}</span>}
-                      {eventDate && <span className="move-folder-date">{formatEventDate(eventDate) ? ` (${formatEventDate(eventDate)})` : ""}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {(() => {
+              const allFolders = showFavorites
+                ? [...new Map([...folders, ...favoriteFolders].map(f => [f.id, f])).values()]
+                : folders;
+              return allFolders.length === 0 ? (
+                <p className="empty-folder-message">No folders available.</p>
+              ) : (
+                <div className="move-folder-grid">
+                  {allFolders.map(folder => (
+                    <FolderBox
+                      key={folder.id}
+                      folder={folder}
+                      isFavoriteFolder={folder.scope === 'favourite'}
+                      onClick={() => handleMoveImagesToFolder(folder.name)}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
             <button className="btn btn-secondary" onClick={() => setShowMoveModal(false)} style={{ marginTop: "16px", width: "100%" }}>Cancel</button>
           </div>
         </div>

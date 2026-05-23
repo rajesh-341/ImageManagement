@@ -20,9 +20,11 @@ export const DECOR_TYPES = [
 ];
 
 export const BATCH_COLORS = [
-  "Red", "Blue", "Green", "Yellow", "White", "Gold",
-  "Pink", "Purple", "Orange", "Silver", "Black", "Multicolor",
-  "Peach", "Cream", "Lavender", "Teal", "Maroon", "Brown",
+  "Red", "Blue", "Green", "Yellow", "Orange", "Purple", "Pink",
+  "Brown", "Black", "White", "Gray", "Light Blue", "Dark Blue",
+  "Light Green", "Dark Green", "Sky Blue", "Navy Blue", "Maroon",
+  "Olive Green", "Beige", "Cream", "Gold", "Silver", "Bronze",
+  "Copper", "Rose Gold",
 ];
 
 export const MAX_BATCH_UPLOAD = 100;

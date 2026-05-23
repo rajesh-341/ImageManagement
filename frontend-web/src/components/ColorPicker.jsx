@@ -3,20 +3,30 @@ import React, { useState } from "react";
 const COLORS = [
   { name: "Red", hex: "#dc2626" },
   { name: "Blue", hex: "#2563eb" },
-  { name: "Yellow", hex: "#eab308" },
   { name: "Green", hex: "#22c55e" },
+  { name: "Yellow", hex: "#eab308" },
   { name: "Orange", hex: "#f97316" },
   { name: "Purple", hex: "#9333ea" },
-  { name: "Teal", hex: "#0d9488" },
-  { name: "Cyan", hex: "#06b6d4" },
-  { name: "Indigo", hex: "#4f46e5" },
-  { name: "Deep Purple", hex: "#7c3aed" },
-  { name: "Amber", hex: "#f59e0b" },
-  { name: "Lime", hex: "#65a30d" },
+  { name: "Pink", hex: "#ec4899" },
   { name: "Brown", hex: "#92400e" },
-  { name: "Grey", hex: "#6b7280" },
   { name: "Black", hex: "#1a1a1a" },
   { name: "White", hex: "#ffffff" },
+  { name: "Gray", hex: "#6b7280" },
+  { name: "Light Blue", hex: "#93c5fd" },
+  { name: "Dark Blue", hex: "#1e40af" },
+  { name: "Light Green", hex: "#86efac" },
+  { name: "Dark Green", hex: "#166534" },
+  { name: "Sky Blue", hex: "#38bdf8" },
+  { name: "Navy Blue", hex: "#1e3a8a" },
+  { name: "Maroon", hex: "#7f1d1d" },
+  { name: "Olive Green", hex: "#808000" },
+  { name: "Beige", hex: "#f5f5dc" },
+  { name: "Cream", hex: "#fef3c7" },
+  { name: "Gold", hex: "#f59e0b" },
+  { name: "Silver", hex: "#9ca3af" },
+  { name: "Bronze", hex: "#cd7f32" },
+  { name: "Copper", hex: "#b87333" },
+  { name: "Rose Gold", hex: "#fda4af" },
 ];
 
 const MAX_COLORS = 3;
@@ -70,13 +80,13 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
               <button
                   type="button"
                   className={`color-swatch ${selectedColors.includes(color.name) ? "selected" : ""} ${
-                    color.name === "White" || color.name === "Yellow" || color.name === "Amber" || color.name === "Lime" ? "light-color" : ""
+                    ["White","Yellow","Light Blue","Light Green","Sky Blue","Beige","Cream","Silver","Gold","Rose Gold","Gray","Bronze","Copper"].includes(color.name) ? "light-color" : ""
                   }`}
                   style={{ backgroundColor: color.hex, borderColor: selectedColors.includes(color.name) ? color.hex : undefined }}
                   title={color.name}
                 >
                   {selectedColors.includes(color.name) && (
-                    <span className="color-swatch-check" style={{ color: ["White","Yellow","Amber","Lime"].includes(color.name) ? "#374151" : "#fff" }}>✓</span>
+                    <span className="color-swatch-check" style={{ color: ["White","Yellow","Light Blue","Light Green","Sky Blue","Beige","Cream","Silver","Gold","Rose Gold","Gray","Bronze","Copper"].includes(color.name) ? "#374151" : "#fff" }}>✓</span>
                   )}
                 </button>
             <span className="color-swatch-name">{color.name}</span>

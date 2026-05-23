@@ -48,7 +48,7 @@ const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, onMoveToFold
     e.preventDefault();
     if (cardRef.current) cardRef.current.classList.remove("drag-over");
     const imageId = e.dataTransfer.getData("imageId");
-    if (imageId && onMoveToFolder) onMoveToFolder(folder.name);
+    if (imageId && onMoveToFolder) onMoveToFolder(folder.name, imageId);
   };
 
   const handleDeleteClick = (e) => {

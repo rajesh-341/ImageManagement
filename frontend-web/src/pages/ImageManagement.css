@@ -2583,61 +2583,16 @@
 
 /* Move to Folder Modal */
 .move-modal .modal {
-  max-width: 400px;
+  max-width: 520px;
 }
 
-.move-folder-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 320px;
+.move-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  max-height: 380px;
   overflow-y: auto;
-}
-
-.move-folder-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
-  width: 100%;
-  font-family: inherit;
-  font-size: 13px;
-  color: #374151;
-}
-
-.move-folder-item:hover {
-  background: #F6DCE7;
-}
-
-.move-folder-icon {
-  flex-shrink: 0;
-}
-
-.move-folder-name {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.move-folder-venue {
-  color: #6b7280;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.move-folder-date {
-  color: #9ca3af;
-  font-size: 11px;
-  margin-left: auto;
-  white-space: nowrap;
+  padding: 8px 4px;
 }
 
 .empty-folder-message {
