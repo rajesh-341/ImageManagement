@@ -2483,17 +2483,16 @@
 .btn-sync-cloudinary {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   background: linear-gradient(135deg, #667eea, #764ba2);
   border: none;
   border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
   color: #fff;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 

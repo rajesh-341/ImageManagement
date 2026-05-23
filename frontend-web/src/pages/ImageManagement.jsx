@@ -690,17 +690,30 @@ function ImageManagement() {
   };
 
   const handleMoveImagesToFolder = async (targetFolderName, draggedImageId) => {
-    const idsToMove = draggedImageId ? [draggedImageId] : [...selectedImageIds];
+    const idsToMove = draggedImageId ? [parseInt(draggedImageId, 10)] : [...selectedImageIds];
     if (idsToMove.length === 0) return;
     setLoading(true);
     try {
-      for (const imageId of idsToMove) {
-        await ApiService.moveImageToFolder(imageId, targetFolderName);
+      if (showFavorites) {
+        const targetFolder = (favoriteFolders.length > 0 ? favoriteFolders : folders).find(
+          f => f.name === targetFolderName
+        );
+        if (targetFolder) {
+          await ApiService.addImagesToFavouriteFolder(targetFolder.id, idsToMove);
+        }
+      } else {
+        for (const imageId of idsToMove) {
+          await ApiService.moveImageToFolder(imageId, targetFolderName);
+        }
       }
       setSelectedImageIds(new Set());
       setShowMoveModal(false);
-      await loadImages();
-      if (showFavorites) await loadFavorites(selectedFavFolder?.name);
+      if (showFavorites) {
+        await loadFavorites(selectedFavFolder?.name);
+        await loadFavoriteFolders();
+      } else {
+        await loadImages();
+      }
     } catch (err) {
       console.error("Move to folder failed:", err);
       showNotif(err.message || "Something went wrong");
@@ -1204,13 +1217,12 @@ function ImageManagement() {
               </button>
             )}
             {canDownloadAll && (
-              <button className="btn btn-sync-cloudinary" onClick={handleSyncCloudinary} disabled={syncing}>
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+              <button className="btn btn-sync-cloudinary" onClick={handleSyncCloudinary} disabled={syncing} title="Sync Cloudinary">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M23 4v6h-6"/>
                   <path d="M1 20v-6h6"/>
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                 </svg>
-                {syncing ? "Syncing..." : "Sync Cloudinary"}
               </button>
             )}
           </div>
@@ -2092,18 +2104,16 @@ function ImageManagement() {
               <button className="modal-close" onClick={() => setShowMoveModal(false)}>X</button>
             </div>
             {(() => {
-              const allFolders = showFavorites
-                ? [...new Map([...folders, ...favoriteFolders].map(f => [f.id, f])).values()]
-                : folders;
-              return allFolders.length === 0 ? (
+              const targetFolders = showFavorites ? favoriteFolders : folders;
+              return targetFolders.length === 0 ? (
                 <p className="empty-folder-message">No folders available.</p>
               ) : (
                 <div className="move-folder-grid">
-                  {allFolders.map(folder => (
+                  {targetFolders.map(folder => (
                     <FolderBox
                       key={folder.id}
                       folder={folder}
-                      isFavoriteFolder={folder.scope === 'favourite'}
+                      isFavoriteFolder={showFavorites}
                       onClick={() => handleMoveImagesToFolder(folder.name)}
                     />
                   ))}

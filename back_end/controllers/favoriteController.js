@@ -61,15 +61,21 @@ const getFavorites = async (req, res) => {
 
     if (ids.length === 0) return res.json([]);
 
-    let query = "SELECT * FROM image_management WHERE id = ANY($1::int[])";
-    const params = [ids];
+    let query = "SELECT im.* FROM image_management im";
+    const params = [];
+    let paramIndex = 1;
 
     if (folder) {
-      query += " AND folder_name = $2";
-      params.push(folder);
+      query += ` INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id AND ffm.employee_id = $${paramIndex}
+                 INNER JOIN folders f ON ffm.folder_id = f.id AND f.name = $${paramIndex + 1}`;
+      params.push(req.user.userId, folder);
+      paramIndex += 2;
     }
 
-    query += " ORDER BY created_at DESC";
+    query += ` WHERE im.id = ANY($${paramIndex}::int[])`;
+    params.push(ids);
+
+    query += " ORDER BY im.created_at DESC";
 
     const result = await pool.query(query, params);
     const rows = result.rows.map(row => ({
@@ -77,6 +83,94 @@ const getFavorites = async (req, res) => {
       image_data: typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data,
     }));
     res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const addImageToFavouriteFolder = async (req, res) => {
+  try {
+    const { folderId, imageId } = req.body;
+    if (!folderId || !imageId) return res.status(400).json({ message: "folderId and imageId are required" });
+
+    const folderCheck = await pool.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
+    if (folderCheck.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
+
+    const imgCheck = await pool.query("SELECT id FROM image_management WHERE id = $1", [imageId]);
+    if (imgCheck.rows.length === 0) return res.status(404).json({ message: "Image not found" });
+
+    await pool.query(
+      `INSERT INTO favourite_folder_mapping (folder_id, image_id, employee_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (folder_id, image_id, employee_id) DO NOTHING`,
+      [folderId, imageId, req.user.userId]
+    );
+
+    const ids = await getFavImageIds(req.user.userId);
+    if (!ids.includes(imageId)) {
+      ids.push(imageId);
+      await pool.query(
+        "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
+        [JSON.stringify(ids), req.user.userId]
+      );
+    }
+
+    res.json({ message: "Image added to favourite folder" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const removeImageFromFavouriteFolder = async (req, res) => {
+  try {
+    const { folderId, imageId } = req.body;
+    if (!folderId || !imageId) return res.status(400).json({ message: "folderId and imageId are required" });
+
+    await pool.query(
+      `DELETE FROM favourite_folder_mapping WHERE folder_id = $1 AND image_id = $2 AND employee_id = $3`,
+      [folderId, imageId, req.user.userId]
+    );
+
+    res.json({ message: "Image removed from favourite folder" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const addImagesToFavouriteFolder = async (req, res) => {
+  try {
+    const { folderId, imageIds } = req.body;
+    if (!folderId || !imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({ message: "folderId and imageIds array are required" });
+    }
+
+    const folderCheck = await pool.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
+    if (folderCheck.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
+
+    const ids = await getFavImageIds(req.user.userId);
+    let changed = false;
+
+    for (const imageId of imageIds) {
+      await pool.query(
+        `INSERT INTO favourite_folder_mapping (folder_id, image_id, employee_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (folder_id, image_id, employee_id) DO NOTHING`,
+        [folderId, imageId, req.user.userId]
+      );
+      if (!ids.includes(imageId)) {
+        ids.push(imageId);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await pool.query(
+        "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
+        [JSON.stringify(ids), req.user.userId]
+      );
+    }
+
+    res.json({ message: `${imageIds.length} image(s) added to favourite folder` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -122,4 +216,7 @@ module.exports = {
   removeFavorite,
   getFavoriteFolders,
   createFavoriteFolder,
+  addImageToFavouriteFolder,
+  removeImageFromFavouriteFolder,
+  addImagesToFavouriteFolder,
 };

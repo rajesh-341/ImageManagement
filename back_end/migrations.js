@@ -94,6 +94,18 @@ async function runMigrations() {
       console.log("[Migration] employee_details seeded with default employees");
     }
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS favourite_folder_mapping (
+        id SERIAL PRIMARY KEY,
+        folder_id INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+        image_id INTEGER NOT NULL REFERENCES image_management(id) ON DELETE CASCADE,
+        employee_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(folder_id, image_id, employee_id)
+      )
+    `);
+    console.log("[Migration] favourite_folder_mapping table ready");
+
     const cleanResult = await pool.query(
       `UPDATE employee_details 
        SET employee_details = employee_details #- '{rawPassword}' #- '{plainPassword}'

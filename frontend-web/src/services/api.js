@@ -227,6 +227,13 @@ const ApiService = {
     });
   },
 
+  async addImagesToFavouriteFolder(folderId, imageIds) {
+    return request("/favorites/folder-images/batch", {
+      method: "POST",
+      body: JSON.stringify({ folderId, imageIds }),
+    });
+  },
+
   async getUsers() {
     const data = await request("/users");
     return data.users || [];

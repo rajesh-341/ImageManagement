@@ -7,6 +7,9 @@ const {
   removeFavorite,
   getFavoriteFolders,
   createFavoriteFolder,
+  addImageToFavouriteFolder,
+  removeImageFromFavouriteFolder,
+  addImagesToFavouriteFolder,
 } = require("../controllers/favoriteController");
 
 router.use(verifyToken);
@@ -16,5 +19,8 @@ router.post("/", addFavorite);
 router.delete("/:imageId", removeFavorite);
 router.get("/folders", getFavoriteFolders);
 router.post("/folders", createFavoriteFolder);
+router.post("/folder-images", addImageToFavouriteFolder);
+router.delete("/folder-images", removeImageFromFavouriteFolder);
+router.post("/folder-images/batch", addImagesToFavouriteFolder);
 
 module.exports = router;
