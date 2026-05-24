@@ -10,10 +10,22 @@ async function runMigrations() {
         description TEXT DEFAULT '',
         created_by VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         scope VARCHAR(50) DEFAULT 'home'
       )
     `);
     console.log("[Migration] folders table ready");
+
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'folders' AND column_name = 'updated_at'
+        ) THEN
+          ALTER TABLE folders ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        END IF;
+      END $$;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS image_management (
@@ -93,6 +105,18 @@ async function runMigrations() {
       }
       console.log("[Migration] employee_details seeded with default employees");
     }
+
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'owner_table' AND column_name = 'dropdown_config'
+        ) THEN
+          ALTER TABLE owner_table ADD COLUMN dropdown_config JSONB DEFAULT '{}';
+        END IF;
+      END $$;
+    `);
+    console.log("[Migration] owner_table.dropdown_config column ready");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS favourite_folder_mapping (

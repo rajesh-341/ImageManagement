@@ -3,7 +3,7 @@ export const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitato
 export const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 
 export const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
-export const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
+export const FLOWER_TYPES = ["Natural", "Artificial", "Both", "None"];
 export const EVENT_TYPES = [
   "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
   "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",
@@ -28,4 +28,4 @@ export const BATCH_COLORS = [
 ];
 
 export const MAX_BATCH_UPLOAD = 100;
-export const SAME_FIELDS = ["designName","eventType","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","venueDate","priceMin","priceMax"];
+export const SAME_FIELDS = ["designName","eventType","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","priceMin","priceMax"];

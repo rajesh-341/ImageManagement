@@ -185,7 +185,6 @@ const uploadImage = async (req, res) => {
       eventType,
       venueCustomer,
       venueName,
-      venueDate,
       sizeWidth,
       sizeLength,
       sizeHeight,
@@ -199,18 +198,7 @@ const uploadImage = async (req, res) => {
       return res.status(400).json({ message: "Folder name and image URL required" });
     }
 
-    if (!designName) {
-      return res.status(400).json({ message: "Missing required field: Design Name" });
-    }
-    if (!eventType) {
-      return res.status(400).json({ message: "Missing required field: Event Type" });
-    }
-    if (!decorType) {
-      return res.status(400).json({ message: "Missing required field: Decoration Type" });
-    }
-    if (!colourCombination || colourCombination.length === 0) {
-      return res.status(400).json({ message: "Missing required field: Colour" });
-    }
+
 
     const imageData = {
       imageUrl,
@@ -225,7 +213,6 @@ const uploadImage = async (req, res) => {
       decorType,
       venueCustomer: venueCustomer || null,
       venueName: venueName || null,
-      venueDate: venueDate || null,
       flowerType: flowerType || null,
       priceMin: priceMin ? parseFloat(priceMin) : null,
       priceMax: priceMax ? parseFloat(priceMax) : null,
@@ -354,7 +341,7 @@ const updateImage = async (req, res) => {
       : existing.rows[0].image_data;
 
     const {
-      designName, eventType, decorType, venueCustomer, venueName, venueDate,
+      designName, eventType, decorType, venueCustomer, venueName,
       sizeWidth, sizeLength, sizeHeight, sizeUnit, sizeDisplay,
       colourCombination, flowerType, priceMin, priceMax
     } = req.body;
@@ -366,7 +353,6 @@ const updateImage = async (req, res) => {
       ...(decorType !== undefined && { decorType }),
       ...(venueCustomer !== undefined && { venueCustomer }),
       ...(venueName !== undefined && { venueName }),
-      ...(venueDate !== undefined && { venueDate }),
       ...(sizeWidth !== undefined && { sizeWidth }),
       ...(sizeLength !== undefined && { sizeLength }),
       ...(sizeHeight !== undefined && { sizeHeight }),
@@ -391,6 +377,41 @@ const updateImage = async (req, res) => {
   }
 };
 
+const getSuggestions = async (req, res) => {
+  try {
+    const { field, query } = req.query;
+    if (!field) return res.status(400).json({ message: "Field parameter is required" });
+
+    const fieldMap = {
+      designName: "image_data->>'designName'",
+      eventType: "image_data->>'eventType'",
+      decorType: "image_data->>'decorType'",
+      venueName: "image_data->>'venueName'",
+      venueCustomer: "image_data->>'venueCustomer'",
+      flowerType: "image_data->>'flowerType'",
+    };
+
+    const dbField = fieldMap[field];
+    if (!dbField) return res.status(400).json({ message: "Invalid field" });
+
+    let sql = `SELECT DISTINCT ${dbField} AS val FROM image_management WHERE ${dbField} IS NOT NULL AND ${dbField} != ''`;
+    const params = [];
+
+    if (query) {
+      sql += ` AND ${dbField} ILIKE $1`;
+      params.push(`%${query}%`);
+    }
+
+    sql += ` ORDER BY val LIMIT 20`;
+
+    const result = await pool.query(sql, params);
+    const suggestions = result.rows.map(r => r.val).filter(Boolean);
+    res.json(suggestions);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getImages,
   getFolders,
@@ -399,6 +420,7 @@ module.exports = {
   getImageById,
   updateImageFolder,
   updateImage,
+  getSuggestions,
   UPLOAD_ROLES,
   DELETE_ROLES,
   VIEW_ROLES,

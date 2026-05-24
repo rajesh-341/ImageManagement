@@ -14,6 +14,7 @@ const imageRoutes = require("./routes/imageRoutes");
 const folderRoutes = require("./routes/folderRoutes");
 const favoriteRoutes = require("./routes/favoriteRoutes");
 const userRoutes = require("./routes/userRoutes");
+const dropdownRoutes = require("./routes/dropdownRoutes");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
 const pool = require("./config/db");
@@ -183,6 +184,7 @@ app.use("/api/images", imageRoutes);
 app.use("/api/folders", folderRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/dropdown", dropdownRoutes);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 

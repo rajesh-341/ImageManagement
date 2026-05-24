@@ -329,10 +329,27 @@ const ApiService = {
     return { success: true };
   },
 
+  async getSuggestions(field, query = "") {
+    const params = new URLSearchParams({ field });
+    if (query) params.set("query", query);
+    return request(`/images/suggestions?${params.toString()}`);
+  },
+
   async destroyCloudinaryImage(imageUrl) {
     return request("/destroy-cloudinary", {
       method: "POST",
       body: JSON.stringify({ imageUrl }),
+    });
+  },
+
+  async getDropdownConfig() {
+    return request("/dropdown/config");
+  },
+
+  async updateDropdownConfig(eventTypes, decorTypes) {
+    return request("/dropdown/config", {
+      method: "PUT",
+      body: JSON.stringify({ eventTypes, decorTypes }),
     });
   },
 

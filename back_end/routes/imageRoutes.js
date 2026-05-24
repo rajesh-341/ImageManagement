@@ -12,6 +12,7 @@ const {
   getImageById,
   updateImageFolder,
   updateImage,
+  getSuggestions,
   VIEW_ROLES,
   UPLOAD_ROLES,
   DELETE_ROLES,
@@ -64,6 +65,14 @@ router.put(
   verifyToken,
   allowRoles(DELETE_ROLES),
   updateImageFolder
+);
+
+// Get autocomplete suggestions - accessible by all
+router.get(
+  "/suggestions",
+  verifyToken,
+  allowRoles(VIEW_ROLES),
+  getSuggestions
 );
 
 // Update image metadata - accessible by edit/delete roles

@@ -74,6 +74,15 @@ function ImageManagement() {
   const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
+  const [showOtherServices, setShowOtherServices] = useState(false);
+  const [otherServicesTab, setOtherServicesTab] = useState("");
+  const [customEventTypes, setCustomEventTypes] = useState([]);
+  const [customDecorTypes, setCustomDecorTypes] = useState([]);
+  const [newEventType, setNewEventType] = useState("");
+  const [newDecorType, setNewDecorType] = useState("");
+
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
+  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
 
   const showNotif = (message, type = "error") => {
     setNotification({ message, type });
@@ -100,7 +109,6 @@ function ImageManagement() {
     designName: "",
     eventType: "",
     decorType: "",
-    venueDate: "",
     sizeWidth: "",
     sizeLength: "",
     sizeHeight: "",
@@ -115,6 +123,9 @@ function ImageManagement() {
   const batchImageRef = useRef(null);
   const imageFileRef = useRef(null);
   const formSettingsRef = useRef(null);
+  const searchTimerRef = useRef(null);
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -142,6 +153,7 @@ function ImageManagement() {
     if (user) {
       loadFolders();
       loadFavorites();
+      loadDropdownConfig();
       const isFolderViewUser = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
       if (!isFolderViewUser) {
         setView("images");
@@ -149,6 +161,16 @@ function ImageManagement() {
       }
     }
   }, [user]);
+
+  const loadDropdownConfig = async () => {
+    try {
+      const config = await ApiService.getDropdownConfig();
+      if (config.eventTypes) setCustomEventTypes(config.eventTypes);
+      if (config.decorTypes) setCustomDecorTypes(config.decorTypes);
+    } catch (err) {
+      console.error("Failed to load dropdown config:", err);
+    }
+  };
 
   useEffect(() => {
     if (currentFolder) {
@@ -331,7 +353,7 @@ function ImageManagement() {
   };
 
   const resetUploadForm = () => {
-    setImageData({ designName: "", eventType: "", decorType: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+    setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
     setSelectedImage(null);
     setImagePreview("");
     setBatchImages([]);
@@ -371,7 +393,6 @@ function ImageManagement() {
       return {
         file, preview: URL.createObjectURL(file),
         designName: "", eventType: "", decorType: "",
-        venueDate: "",
         sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
         colours: "", flowerType: "", priceMin: "", priceMax: "",
         keepSame,
@@ -438,7 +459,6 @@ function ImageManagement() {
       if (isFieldRequired("image_eventType") && !row.eventType) missing.push("Event Type");
       if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
       if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
-      if (isFieldRequired("image_venueDate") && !row.venueDate) missing.push("Event Date");
       if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
       if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
     });
@@ -491,7 +511,6 @@ function ImageManagement() {
             decorType: row.decorType,
             venueCustomer: folderCustomer,
             venueName: folderVenue,
-            venueDate: row.venueDate,
             flowerType: row.flowerType || null,
             priceMin: row.priceMin,
             priceMax: row.priceMax,
@@ -538,7 +557,6 @@ function ImageManagement() {
     if (isFieldRequired("image_eventType") && !imageData.eventType) missing.push("Event Type");
     if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
-    if (isFieldRequired("image_venueDate") && !imageData.venueDate) missing.push("Event Date");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
@@ -575,7 +593,6 @@ function ImageManagement() {
         decorType: imageData.decorType,
         venueCustomer: folderCustomer,
         venueName: folderVenue,
-        venueDate: imageData.venueDate,
         flowerType: imageData.flowerType,
         priceMin: imageData.priceMin,
         priceMax: imageData.priceMax,
@@ -585,7 +602,7 @@ function ImageManagement() {
       setUploadProgress("Uploaded successfully!");
       setSelectedImage(null);
       setImagePreview("");
-      setImageData({ designName: "", eventType: "", decorType: "", venueDate: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+      setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
       loadImages();
       setTimeout(() => {
         resetUploadForm();
@@ -695,12 +712,14 @@ function ImageManagement() {
     setLoading(true);
     try {
       if (showFavorites) {
-        const targetFolder = (favoriteFolders.length > 0 ? favoriteFolders : folders).find(
-          f => f.name === targetFolderName
-        );
-        if (targetFolder) {
-          await ApiService.addImagesToFavouriteFolder(targetFolder.id, idsToMove);
+        const targetFolder = favoriteFolders.find(f => f.name === targetFolderName);
+        if (!targetFolder) {
+          showNotif("Selected folder not found in Favorites", "warning");
+          setLoading(false);
+          return;
         }
+        await ApiService.addImagesToFavouriteFolder(targetFolder.id, idsToMove);
+        showNotif(`${idsToMove.length} image(s) moved to "${parseFolderName(targetFolderName).customerName || targetFolderName}"`, "success");
       } else {
         for (const imageId of idsToMove) {
           await ApiService.moveImageToFolder(imageId, targetFolderName);
@@ -732,9 +751,7 @@ function ImageManagement() {
       if (filterData.decorTypes && filterData.decorTypes.length > 0) searchFilters.decorType = filterData.decorTypes.join(",");
       if (filterData.colors && filterData.colors.length > 0) searchFilters.colors = filterData.colors.join(",");
       if (filterData.flowerTypes && filterData.flowerTypes.length > 0) searchFilters.flowerType = filterData.flowerTypes.join(",");
-      if (filterData.venueCustomer) searchFilters.venueCustomer = filterData.venueCustomer;
-      if (filterData.venueName) searchFilters.venueName = filterData.venueName;
-      if (filterData.venueDate) searchFilters.venueDate = filterData.venueDate;
+      if (filterData.placeOfEvent) searchFilters.placeOfEvent = filterData.placeOfEvent;
       if (filterData.priceRange) {
         searchFilters.priceMin = filterData.priceRange[0];
         searchFilters.priceMax = filterData.priceRange[1];
@@ -759,17 +776,23 @@ function ImageManagement() {
     setFilters(newFilters);
   };
 
-  const handleCommonSearch = async () => {
-    if (!commonSearch.trim()) return;
+  const handleCommonSearch = async (searchValue) => {
+    const term = searchValue !== undefined ? searchValue : commonSearch;
     setLoading(true);
     try {
+      if (!term.trim()) {
+        setFilteredImages([]);
+        setView("folders");
+        setLoading(false);
+        return;
+      }
       const searchFilters = {};
-      if (commonSearchType === "designName") searchFilters.designName = commonSearch;
-      else if (commonSearchType === "eventType") searchFilters.eventType = commonSearch;
-      else if (commonSearchType === "decorType") searchFilters.decorType = commonSearch;
-      else if (commonSearchType === "flowerType") searchFilters.flowerType = commonSearch;
-      else if (commonSearchType === "venue") searchFilters.placeOfEvent = commonSearch;
-      else searchFilters.searchText = commonSearch;
+      if (commonSearchType === "designName") searchFilters.designName = term;
+      else if (commonSearchType === "eventType") searchFilters.eventType = term;
+      else if (commonSearchType === "decorType") searchFilters.decorType = term;
+      else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
+      else if (commonSearchType === "venue") searchFilters.placeOfEvent = term;
+      else searchFilters.searchText = term;
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
       setView("filtered");
@@ -777,6 +800,18 @@ function ImageManagement() {
       showNotif("Something went wrong");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSuggestions = async (query) => {
+    try {
+      const fieldMap = { designName: "designName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", venue: "venueName", all: "designName" };
+      const field = fieldMap[commonSearchType] || "designName";
+      const data = await ApiService.getSuggestions(field, query);
+      setSearchSuggestions(data);
+      setShowSuggestions(true);
+    } catch {
+      setSearchSuggestions([]);
     }
   };
 
@@ -845,7 +880,6 @@ function ImageManagement() {
       decorType: data.decorType || "",
       venueCustomer: data.venueCustomer || "",
       venueName: data.venueName || "",
-      venueDate: data.venueDate || "",
       sizeWidth: data.sizeWidth || "",
       sizeLength: data.sizeLength || "",
       sizeHeight: data.sizeHeight || "",
@@ -1162,7 +1196,7 @@ function ImageManagement() {
         <div className="action-bar">
           <div className="action-bar-left">
             {canViewFolders && <h2>{view === "images" ? "All Images" : "Folders"}</h2>}
-            <div className="common-search-bar">
+            <div className="common-search-bar common-search-with-suggestions">
               <select
                 className="common-search-select"
                 value={commonSearchType}
@@ -1175,17 +1209,32 @@ function ImageManagement() {
                 <option value="venue">Venue</option>
                 <option value="all">All Fields</option>
               </select>
-              <input
-                type="text"
-                className="common-search-input"
-                placeholder={`Search by ${commonSearchType}...`}
-                value={commonSearch}
-                onChange={(e) => setCommonSearch(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCommonSearch(); }}
-              />
-              <button className="btn btn-common-search" onClick={handleCommonSearch}>
-                Search
-              </button>
+              <div className="common-search-input-wrap">
+                <input
+                  type="text"
+                  className="common-search-input"
+                  placeholder={`Search by ${commonSearchType}...`}
+                  value={commonSearch}
+                  onChange={(e) => {
+                    setCommonSearch(e.target.value);
+                    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+                    searchTimerRef.current = setTimeout(() => handleCommonSearch(e.target.value), 300);
+                    fetchSuggestions(e.target.value);
+                  }}
+                  onFocus={() => { if (searchSuggestions.length > 0) setShowSuggestions(true); }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                />
+                {showSuggestions && searchSuggestions.length > 0 && (
+                  <ul className="search-suggestions-list">
+                    {searchSuggestions.map((s, i) => (
+                      <li key={i} className="search-suggestion-item"
+                        onMouseDown={() => { setCommonSearch(s); handleCommonSearch(s); setShowSuggestions(false); }}>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
           <div className="action-bar-buttons">
@@ -1447,6 +1496,26 @@ function ImageManagement() {
             {canUpload && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
+            <div className="nav-item-dropdown">
+              <button
+                className={`nav-item ${showOtherServices ? "active" : ""}`}
+                onClick={() => { setShowOtherServices(!showOtherServices); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}
+              >
+                OTHER SERVICES ▾
+              </button>
+              {showOtherServices && (
+                <div className="nav-dropdown-menu">
+                  {["Rental", "Garland", "Electrical Materials", "Events Handled"].map(tab => (
+                    <button key={tab}
+                      className={`nav-dropdown-item ${otherServicesTab === tab ? "active" : ""}`}
+                      onClick={() => setOtherServicesTab(tab)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <button
             className={`nav-item nav-fav-btn ${showFavorites ? "active" : ""}`}
@@ -1469,7 +1538,28 @@ function ImageManagement() {
         </div>
       )}
       <div className="main-content">
-        {showFavorites && !currentFolder ? renderFavoritesContent() :
+        {showOtherServices ? (
+          <div className="other-services-view">
+            <h2>Other Services</h2>
+            <div className="other-services-tabs">
+              {["Rental", "Garland", "Electrical Materials", "Events Handled"].map(tab => (
+                <button key={tab}
+                  className={`other-services-tab ${otherServicesTab === tab ? "active" : ""}`}
+                  onClick={() => setOtherServicesTab(tab)}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div className="other-services-content">
+              {otherServicesTab ? (
+                <p className="other-services-placeholder">Content for <strong>{otherServicesTab}</strong> will be added here.</p>
+              ) : (
+                <p className="other-services-placeholder">Select a service tab above to view details.</p>
+              )}
+            </div>
+          </div>
+        ) : showFavorites && !currentFolder ? renderFavoritesContent() :
          currentFolder ? renderFolderContent() :
          renderFolderView()}
       </div>
@@ -1712,7 +1802,7 @@ function ImageManagement() {
                   <div className="form-group">
                     <label className="label">Decoration Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</label>
                     <AutocompleteInput
-                      options={DECOR_TYPES}
+                      options={allDecorTypes}
                       value={imageData.decorType}
                       onChange={(val) => setImageData({...imageData, decorType: val})}
                       placeholder="Search and select decoration type"
@@ -1725,7 +1815,7 @@ function ImageManagement() {
                   <div className="form-group">
                     <label className="label">Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</label>
                     <AutocompleteInput
-                      options={EVENT_TYPES}
+                      options={allEventTypes}
                       value={imageData.eventType}
                       onChange={(val) => setImageData({...imageData, eventType: val})}
                       placeholder="Type or select event type"
@@ -1791,11 +1881,6 @@ function ImageManagement() {
                       )}
                     </div>
                     <div className="form-group">
-                      <label className="label">Event Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}</label>
-                      <input type="date" className="input" value={imageData.venueDate}
-                        onChange={(e) => setImageData({...imageData, venueDate: e.target.value})} required={isFieldRequired("image_venueDate")} />
-                    </div>
-                    <div className="form-group">
                       <label className="label">Price Range{isFieldRequired("image_price") && <span className="required">*</span>}</label>
                       <div className="flex-gap">
                         <input type="number" className="input" placeholder="Min" value={imageData.priceMin}
@@ -1841,7 +1926,6 @@ function ImageManagement() {
                             <th>Unit<span className="batch-same-hdr">S</span></th>
                             <th>Colours{isFieldRequired("image_colours") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Flower{isFieldRequired("image_flowerType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Date{isFieldRequired("image_venueDate") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Min{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Max{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th></th>
@@ -1863,7 +1947,7 @@ function ImageManagement() {
                                 <div className="batch-field-with-same">
                                   <div className="batch-autocomplete-cell">
                                     <AutocompleteInput
-                                      options={EVENT_TYPES}
+                                      options={allEventTypes}
                                       value={row.eventType}
                                       onChange={(val) => updateBatchRow(index, "eventType", val)}
                                       placeholder="Event Type"
@@ -1877,7 +1961,7 @@ function ImageManagement() {
                                 <div className="batch-field-with-same">
                                   <div className="batch-autocomplete-cell">
                                     <AutocompleteInput
-                                      options={DECOR_TYPES}
+                                      options={allDecorTypes}
                                       value={row.decorType}
                                       onChange={(val) => updateBatchRow(index, "decorType", val)}
                                       placeholder="Decor Type"
@@ -1986,14 +2070,6 @@ function ImageManagement() {
                                   </select>
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.flowerType ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "flowerType")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <input type="date" className="batch-input-date" value={row.venueDate}
-                                    onChange={(e) => updateBatchRow(index, "venueDate", e.target.value)} />
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.venueDate ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "venueDate")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
@@ -2293,8 +2369,76 @@ function ImageManagement() {
                       <label className="form-settings-row"><span>Flower Type</span><input type="checkbox" checked={isFieldRequired("image_flowerType")} onChange={(e) => { const c = {...formConfig, image_flowerType: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Colour</span><input type="checkbox" checked={isFieldRequired("image_colours")} onChange={(e) => { const c = {...formConfig, image_colours: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Size</span><input type="checkbox" checked={isFieldRequired("image_size")} onChange={(e) => { const c = {...formConfig, image_size: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("image_venueDate")} onChange={(e) => { const c = {...formConfig, image_venueDate: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Price Range</span><input type="checkbox" checked={isFieldRequired("image_price")} onChange={(e) => { const c = {...formConfig, image_price: e.target.checked}; saveFormConfig(c); }} /></label>
+                    </div>
+                  </div>
+                )}
+
+                {showFormSettings && (user?.role === "Captain" || user?.role === "ViceCaptain" || user?.role === "Admin" || user?.role === "Owner") && (
+                  <div className="form-settings-panel" style={{ marginTop: "16px" }}>
+                    <h3 className="form-settings-title">Manage Dropdown Options</h3>
+                    <p className="form-settings-hint">Add or remove options for Event Type and Decoration Type dropdowns. Changes apply to all users.</p>
+
+                    <div className="form-settings-group">
+                      <h4>Event Type</h4>
+                      <div className="dropdown-tag-list">
+                        {allEventTypes.map((t, i) => (
+                          <span key={i} className="dropdown-tag">
+                            {t}
+                            {customEventTypes.includes(t) && !EVENT_TYPES.includes(t) && (
+                              <button type="button" className="dropdown-tag-remove" onClick={async () => {
+                                const updated = customEventTypes.filter(ct => ct !== t);
+                                setCustomEventTypes(updated);
+                                await ApiService.updateDropdownConfig(updated, customDecorTypes);
+                              }}>×</button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="dropdown-add-row">
+                        <input type="text" className="input" placeholder="New event type..." value={newEventType}
+                          onChange={(e) => setNewEventType(e.target.value)} />
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!newEventType.trim()}
+                          onClick={async () => {
+                            const val = newEventType.trim();
+                            if (!val || allEventTypes.includes(val)) return;
+                            const updated = [...customEventTypes, val];
+                            setCustomEventTypes(updated);
+                            setNewEventType("");
+                            await ApiService.updateDropdownConfig(updated, customDecorTypes);
+                          }}>Add</button>
+                      </div>
+                    </div>
+
+                    <div className="form-settings-group">
+                      <h4>Decoration Type</h4>
+                      <div className="dropdown-tag-list">
+                        {allDecorTypes.map((t, i) => (
+                          <span key={i} className="dropdown-tag">
+                            {t}
+                            {customDecorTypes.includes(t) && !DECOR_TYPES.includes(t) && (
+                              <button type="button" className="dropdown-tag-remove" onClick={async () => {
+                                const updated = customDecorTypes.filter(ct => ct !== t);
+                                setCustomDecorTypes(updated);
+                                await ApiService.updateDropdownConfig(customEventTypes, updated);
+                              }}>×</button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="dropdown-add-row">
+                        <input type="text" className="input" placeholder="New decoration type..." value={newDecorType}
+                          onChange={(e) => setNewDecorType(e.target.value)} />
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!newDecorType.trim()}
+                          onClick={async () => {
+                            const val = newDecorType.trim();
+                            if (!val || allDecorTypes.includes(val)) return;
+                            const updated = [...customDecorTypes, val];
+                            setCustomDecorTypes(updated);
+                            setNewDecorType("");
+                            await ApiService.updateDropdownConfig(customEventTypes, updated);
+                          }}>Add</button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2319,28 +2463,28 @@ function ImageManagement() {
                   onChange={(e) => setEditData({...editData, designName: e.target.value})} />
               </div>
               <div className="grid-2">
+                  <div className="form-group">
+                    <label className="label">Event Type</label>
+                    <AutocompleteInput
+                      options={allEventTypes}
+                      value={editData.eventType}
+                      onChange={(val) => setEditData({...editData, eventType: val})}
+                      placeholder="Type or select event type"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="label">Flower Type</label>
+                    <select className="input" value={editData.flowerType}
+                      onChange={(e) => setEditData({...editData, flowerType: e.target.value})}>
+                      <option value="">Select</option>
+                      {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
                 <div className="form-group">
-                  <label className="label">Event Type</label>
+                  <label className="label">Decoration Type</label>
                   <AutocompleteInput
-                    options={EVENT_TYPES}
-                    value={editData.eventType}
-                    onChange={(val) => setEditData({...editData, eventType: val})}
-                    placeholder="Type or select event type"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="label">Flower Type</label>
-                  <select className="input" value={editData.flowerType}
-                    onChange={(e) => setEditData({...editData, flowerType: e.target.value})}>
-                    <option value="">Select</option>
-                    {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="label">Decoration Type</label>
-                <AutocompleteInput
-                  options={DECOR_TYPES}
+                    options={allDecorTypes}
                   value={editData.decorType}
                   onChange={(val) => setEditData({...editData, decorType: val})}
                   placeholder="Search and select decoration type"
@@ -2383,11 +2527,6 @@ function ImageManagement() {
                 </div>
               </div>
               <div className="grid-2">
-                <div className="form-group">
-                  <label className="label">Event Date</label>
-                  <input type="date" className="input" value={editData.venueDate}
-                    onChange={(e) => setEditData({...editData, venueDate: e.target.value})} />
-                </div>
                 <div className="form-group">
                   <label className="label">Price Range</label>
                   <div className="flex-gap">
