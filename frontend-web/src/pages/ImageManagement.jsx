@@ -803,16 +803,20 @@ function ImageManagement() {
     }
   };
 
+  const suggTimerRef = useRef(null);
+
   const fetchSuggestions = async (query) => {
-    try {
-      const fieldMap = { designName: "designName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", venue: "venueName", all: "designName" };
-      const field = fieldMap[commonSearchType] || "designName";
-      const data = await ApiService.getSuggestions(field, query);
-      setSearchSuggestions(data);
-      setShowSuggestions(true);
-    } catch {
-      setSearchSuggestions([]);
-    }
+    if (suggTimerRef.current) clearTimeout(suggTimerRef.current);
+    if (!query.trim()) { setSearchSuggestions([]); setShowSuggestions(false); return; }
+    suggTimerRef.current = setTimeout(async () => {
+      try {
+        const fieldMap = { designName: "designName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", venue: "venueName", all: "designName" };
+        const field = fieldMap[commonSearchType] || "designName";
+        const data = await ApiService.getSuggestions(field, query);
+        setSearchSuggestions(data);
+        setShowSuggestions(true);
+      } catch { setSearchSuggestions([]); }
+    }, 200);
   };
 
   const handleToggleFavorites = () => {
@@ -1825,20 +1829,14 @@ function ImageManagement() {
                   <div className="form-group">
                     <label className="label">Flower Type{isFieldRequired("image_flowerType") && <span className="required">*</span>}</label>
                     <div className="checkbox-group-horizontal">
-                      {FLOWER_TYPES.map(t => (
-                        <label key={t} className="checkbox-item-inline">
-                          <input type="radio" name="flowerType" value={t}
-                            checked={imageData.flowerType === t}
+                      {[{ value: "", label: "None" }, ...FLOWER_TYPES.filter(t => t !== "None").map(t => ({ value: t, label: t }))].map(item => (
+                        <label key={item.value || "none"} className="checkbox-item-inline">
+                          <input type="radio" name="flowerType" value={item.value}
+                            checked={imageData.flowerType === item.value}
                             onChange={(e) => setImageData({...imageData, flowerType: e.target.value})} />
-                          <span>{t}</span>
+                          <span>{item.label}</span>
                         </label>
                       ))}
-                      <label className="checkbox-item-inline">
-                        <input type="radio" name="flowerType" value=""
-                          checked={imageData.flowerType === ""}
-                          onChange={(e) => setImageData({...imageData, flowerType: ""})} />
-                        <span>None</span>
-                      </label>
                     </div>
                   </div>
                 </div>

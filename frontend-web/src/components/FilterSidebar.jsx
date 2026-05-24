@@ -1,8 +1,26 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Accordion from "./Accordion";
 import RangeSlider from "./RangeSlider";
 import ColorPicker from "./ColorPicker";
 import { DECOR_TYPES, EVENT_TYPES, FLOWER_TYPES, SIZE_UNITS } from "../constants";
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+
+const fetchSuggestions = async (field, query) => {
+  if (!query.trim()) return [];
+  try {
+    const token = document.cookie.replace(/(?:(?:^|.*;\s*)auth_token\s*=\s*([^;]*).*$)|^.*$/, "$1");
+    const params = new URLSearchParams({ field, query });
+    const res = await fetch(`${API_BASE_URL}/images/suggestions?${params}`, {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+};
 
 function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
@@ -14,24 +32,42 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [venueName, setVenueName] = useState(filters?.venueName || "");
   const [decorTypeSearch, setDecorTypeSearch] = useState("");
   const [eventTypeSearch, setEventTypeSearch] = useState("");
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
+  const [venueSuggestions, setVenueSuggestions] = useState([]);
+  const [showSearchSugs, setShowSearchSugs] = useState(false);
+  const [showVenueSugs, setShowVenueSugs] = useState(false);
   const autoApplyTimer = useRef(null);
+  const searchSugTimer = useRef(null);
+  const venueSugTimer = useRef(null);
+  const searchWrapRef = useRef(null);
+  const venueWrapRef = useRef(null);
 
   const AUTO_APPLY_DELAY = 500;
+  const SUGGESTION_DELAY = 250;
 
-  const triggerAutoApply = () => {
+  const triggerAutoApply = useCallback(() => {
     if (autoApplyTimer.current) clearTimeout(autoApplyTimer.current);
-    autoApplyTimer.current = setTimeout(() => {
-      buildAndApply();
-    }, AUTO_APPLY_DELAY);
-  };
+    autoApplyTimer.current = setTimeout(buildAndApply, AUTO_APPLY_DELAY);
+  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, filters]);
 
   useEffect(() => {
     return () => {
       if (autoApplyTimer.current) clearTimeout(autoApplyTimer.current);
+      if (searchSugTimer.current) clearTimeout(searchSugTimer.current);
+      if (venueSugTimer.current) clearTimeout(venueSugTimer.current);
     };
   }, []);
 
-  const buildAndApply = () => {
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) setShowSearchSugs(false);
+      if (venueWrapRef.current && !venueWrapRef.current.contains(e.target)) setShowVenueSugs(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const buildAndApply = useCallback(() => {
     const allFilters = {
       searchText: filters?.searchText || "",
       designName: filters?.designName || "",
@@ -43,18 +79,47 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
       eventTypes: selectedEventTypes,
       flowerTypes: selectedFlowerTypes,
     };
-    if (venueName) {
-      allFilters.placeOfEvent = venueName;
-    }
+    if (venueName) allFilters.placeOfEvent = venueName;
     onApply && onApply(allFilters);
-  };
+  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, filters, onApply]);
 
   const toggleCheckbox = (value, selected, setSelected) => {
     setSelected((prev) => {
       const next = prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value];
-      setTimeout(() => triggerAutoApply(), 0);
+      setTimeout(triggerAutoApply, 0);
       return next;
     });
+  };
+
+  const handleSearchTextChange = (val) => {
+    onFilterChange?.({ ...filters, searchText: val });
+    if (searchSugTimer.current) clearTimeout(searchSugTimer.current);
+    if (val.trim()) {
+      searchSugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("designName", val);
+        setSearchSuggestions(results);
+        setShowSearchSugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setSearchSuggestions([]);
+      setShowSearchSugs(false);
+    }
+  };
+
+  const handleVenueChange = (val) => {
+    setVenueName(val);
+    triggerAutoApply();
+    if (venueSugTimer.current) clearTimeout(venueSugTimer.current);
+    if (val.trim()) {
+      venueSugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("venueName", val);
+        setVenueSuggestions(results);
+        setShowVenueSugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setVenueSuggestions([]);
+      setShowVenueSugs(false);
+    }
   };
 
   const filteredDecorTypes = DECOR_TYPES.filter((type) =>
@@ -90,6 +155,8 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     setVenueName("");
     setDecorTypeSearch("");
     setEventTypeSearch("");
+    setSearchSuggestions([]);
+    setVenueSuggestions([]);
     onClear && onClear();
   };
 
@@ -102,8 +169,8 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
 
       <div className="filter-sidebar-content">
         <Accordion title="Search & Design Name" defaultOpen={true}>
-          <div className="filter-section">
-            <div className="search-input-wrapper">
+          <div className="filter-section" ref={searchWrapRef}>
+            <div className="search-input-wrapper filter-suggest-wrap">
               <svg className="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" />
@@ -113,21 +180,45 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 className="filter-search-input"
                 placeholder="Search for design, vendor..."
                 value={filters?.searchText || ""}
-                onChange={(e) => onFilterChange?.({ ...filters, searchText: e.target.value })}
+                onChange={(e) => handleSearchTextChange(e.target.value)}
+                onFocus={() => { if (searchSuggestions.length > 0) setShowSearchSugs(true); }}
               />
+              {showSearchSugs && searchSuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {searchSuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { onFilterChange?.({ ...filters, searchText: s }); setShowSearchSugs(false); setSearchSuggestions([]); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </Accordion>
 
         <Accordion title="Venue">
-          <div className="filter-section">
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Search venue..."
-              value={venueName}
-              onChange={(e) => { setVenueName(e.target.value); triggerAutoApply(); }}
-            />
+          <div className="filter-section" ref={venueWrapRef}>
+            <div className="filter-suggest-wrap">
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Search venue..."
+                value={venueName}
+                onChange={(e) => handleVenueChange(e.target.value)}
+                onFocus={() => { if (venueSuggestions.length > 0) setShowVenueSugs(true); }}
+              />
+              {showVenueSugs && venueSuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {venueSuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { setVenueName(s); setShowVenueSugs(false); setVenueSuggestions([]); triggerAutoApply(); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </Accordion>
 
