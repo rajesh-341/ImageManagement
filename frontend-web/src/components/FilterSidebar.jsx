@@ -44,11 +44,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
 
   const AUTO_APPLY_DELAY = 500;
   const SUGGESTION_DELAY = 250;
-
-  const triggerAutoApply = useCallback(() => {
-    if (autoApplyTimer.current) clearTimeout(autoApplyTimer.current);
-    autoApplyTimer.current = setTimeout(buildAndApply, AUTO_APPLY_DELAY);
-  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, filters]);
+  const buildAndApplyRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -82,6 +78,13 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     if (venueName) allFilters.placeOfEvent = venueName;
     onApply && onApply(allFilters);
   }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, filters, onApply]);
+
+  buildAndApplyRef.current = buildAndApply;
+
+  const triggerAutoApply = () => {
+    if (autoApplyTimer.current) clearTimeout(autoApplyTimer.current);
+    autoApplyTimer.current = setTimeout(() => buildAndApplyRef.current(), AUTO_APPLY_DELAY);
+  };
 
   const toggleCheckbox = (value, selected, setSelected) => {
     setSelected((prev) => {
