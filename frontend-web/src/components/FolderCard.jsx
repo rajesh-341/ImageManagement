@@ -30,7 +30,7 @@ const parseFolderName = (name) => {
   };
 };
 
-const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, onMoveToFolder }) => {
+const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, onMoveToFolder, onDownload }) => {
   const cardRef = useRef(null);
   const { customerName, venue, eventDate } = parseFolderName(folder.name);
   const createdDate = formatDate(folder.created_at || folder.createdAt);
@@ -79,6 +79,7 @@ const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, onMoveToFold
       {canDelete && (
         <div className="folder-card-actions">
           <button className="folder-card-edit" onClick={(e) => { e.stopPropagation(); if (onEdit) onEdit(folder, e); }} aria-label="Edit folder">✎</button>
+          <button className="folder-card-download" onClick={(e) => { e.stopPropagation(); if (onDownload) onDownload(folder); }} aria-label="Download folder" title="Download folder as ZIP">⬇</button>
           <button className="folder-card-delete" onClick={handleDeleteClick} aria-label="Delete folder">×</button>
         </div>
       )}

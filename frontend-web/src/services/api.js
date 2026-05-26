@@ -106,17 +106,19 @@ const ApiService = {
     return request(`/folders?scope=${encodeURIComponent(scope)}`);
   },
 
-  async createFolder(folderName, description = "") {
+  async createFolder(folderName, description = "", eventTypes = []) {
     return request("/folders", {
       method: "POST",
-      body: JSON.stringify({ folderName, description }),
+      body: JSON.stringify({ folderName, description, eventTypes }),
     });
   },
 
-  async updateFolder(id, name) {
+  async updateFolder(id, name, eventTypes = undefined) {
+    const body = { name };
+    if (eventTypes !== undefined) body.eventTypes = eventTypes;
     return request(`/folders/${id}`, {
       method: "PUT",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(body),
     });
   },
 
@@ -176,8 +178,8 @@ const ApiService = {
     return data;
   },
 
-  async searchImages(filters, page = 1, limit = 200) {
-    const params = new URLSearchParams({ page, limit });
+  async searchImages(filters, page = 1, limit = 0) {
+    const params = new URLSearchParams({ page, limit: limit || 0 });
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.append(key, value);
     });
@@ -220,10 +222,10 @@ const ApiService = {
     return request("/favorites/folders");
   },
 
-  async createFavoriteFolder(folderName, description = "") {
+  async createFavoriteFolder(folderName, description = "", eventTypes = []) {
     return request("/favorites/folders", {
       method: "POST",
-      body: JSON.stringify({ folderName, description }),
+      body: JSON.stringify({ folderName, description, eventTypes }),
     });
   },
 
@@ -293,6 +295,32 @@ const ApiService = {
       }
     }
 
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    return { success: true };
+  },
+
+  async downloadFolder(folderName) {
+    const sanitized = folderName.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const url = `${API_BASE_URL}/download-folder/${encodeURIComponent(sanitized)}`;
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Download failed");
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = `${sanitized}_${Date.now()}.zip`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
     const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = downloadUrl;

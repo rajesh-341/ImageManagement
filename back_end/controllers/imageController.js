@@ -9,11 +9,13 @@ const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.t
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 50 } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 200 } = req.query;
     
     const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
-    const offset = (pageNum - 1) * limitNum;
+    const limitNum = parseInt(limit);
+    const noLimit = !limitNum || limitNum <= 0;
+    const effectiveLimit = noLimit ? 100000 : Math.min(100000, limitNum);
+    const offset = (pageNum - 1) * effectiveLimit;
 
     let whereClause = "";
     let params = [];
@@ -21,7 +23,7 @@ const getImages = async (req, res) => {
 
     const conditions = [];
 
-    if (!folder) {
+    if (!folder && !searchText && !eventType && !decorType && !colors && !flowerType && !priceMin && !priceMax && !designName && !placeOfEvent) {
       conditions.push(`(folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL) OR folder_name NOT IN (SELECT name FROM folders))`);
     }
 
@@ -134,10 +136,13 @@ const getImages = async (req, res) => {
     const countResult = await pool.query(`SELECT COUNT(*) FROM image_management${whereClause}`, params);
     const total = parseInt(countResult.rows[0].count);
 
-    const result = await pool.query(
-      `SELECT * FROM image_management${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      [...params, limitNum, offset]
-    );
+    let queryStr = `SELECT * FROM image_management${whereClause} ORDER BY created_at DESC`;
+    const queryParams = [...params];
+    if (!noLimit) {
+      queryStr += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      queryParams.push(effectiveLimit, offset);
+    }
+    const result = await pool.query(queryStr, queryParams);
     const rows = result.rows.map(row => ({
       ...row,
       image_data: typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data,
@@ -198,7 +203,19 @@ const uploadImage = async (req, res) => {
       return res.status(400).json({ message: "Folder name and image URL required" });
     }
 
-
+    let folderEventType = eventType;
+    if (!folderEventType) {
+      const folderResult = await pool.query(
+        "SELECT event_types FROM folders WHERE name = $1 AND (scope = 'home' OR scope IS NULL) LIMIT 1",
+        [folderName]
+      );
+      if (folderResult.rows.length > 0 && folderResult.rows[0].event_types) {
+        const types = folderResult.rows[0].event_types;
+        if (Array.isArray(types) && types.length > 0) {
+          folderEventType = types[0];
+        }
+      }
+    }
 
     const imageData = {
       imageUrl,
@@ -209,7 +226,7 @@ const uploadImage = async (req, res) => {
       sizeUnit: sizeUnit || "sq.ft",
       sizeDisplay: sizeDisplay || null,
       designName,
-      eventType,
+      eventType: folderEventType || "",
       decorType,
       venueCustomer: venueCustomer || null,
       venueName: venueName || null,

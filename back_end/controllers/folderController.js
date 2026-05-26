@@ -15,7 +15,7 @@ const createFolder = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const { folderName, description } = req.body;
+    const { folderName, description, eventTypes } = req.body;
 
     if (!folderName) {
       return res.status(400).json({ message: "Folder name is required" });
@@ -27,8 +27,8 @@ const createFolder = async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO folders (name, description, created_by, scope) VALUES ($1, $2, $3, 'home') RETURNING *",
-      [folderName, description || "", req.user.userId]
+      "INSERT INTO folders (name, description, created_by, scope, event_types) VALUES ($1, $2, $3, 'home', $4) RETURNING *",
+      [folderName, description || "", req.user.userId, JSON.stringify(eventTypes || [])]
     );
 
     res.status(201).json(result.rows[0]);
@@ -88,7 +88,7 @@ const updateFolder = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, eventTypes } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: "Folder name is required" });
@@ -111,10 +111,17 @@ const updateFolder = async (req, res) => {
       return res.status(400).json({ message: "A folder with this name already exists" });
     }
 
-    await pool.query(
-      "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-      [newName, id]
-    );
+    if (eventTypes !== undefined) {
+      await pool.query(
+        "UPDATE folders SET name = $1, event_types = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+        [newName, JSON.stringify(eventTypes), id]
+      );
+    } else {
+      await pool.query(
+        "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [newName, id]
+      );
+    }
 
     await pool.query(
       "UPDATE image_management SET folder_name = $1 WHERE folder_name = $2",

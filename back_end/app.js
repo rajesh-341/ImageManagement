@@ -206,6 +206,57 @@ app.get("/api/upload-signature", verifyToken, (req, res) => {
   });
 });
 
+app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
+  try {
+    const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
+    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
+    if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+    const folderName = req.params.folderName;
+    const imgResult = await pool.query(
+      `SELECT id, image_data FROM image_management WHERE folder_name = $1 ORDER BY id`,
+      [folderName]
+    );
+    if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found in this folder" });
+
+    const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
+
+    const archiver = require("archiver");
+    const archive = archiver("zip", { zlib: { level: 6 } });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${sanitize(folderName)}_${Date.now()}.zip"`);
+
+    archive.pipe(res);
+
+    for (const row of imgResult.rows) {
+      const imgData = typeof row.image_data === "string"
+        ? JSON.parse(row.image_data)
+        : row.image_data;
+
+      if (!imgData || !imgData.imageUrl) continue;
+
+      try {
+        const imageResponse = await fetch(imgData.imageUrl);
+        if (!imageResponse.ok) continue;
+
+        const buffer = Buffer.from(await imageResponse.arrayBuffer());
+        const urlParts = imgData.imageUrl.split("/");
+        let filename = urlParts[urlParts.length - 1].split("?")[0];
+        if (!filename) filename = `image_${row.id}.jpg`;
+        archive.append(buffer, { name: filename });
+      } catch (err) {
+        console.warn(`[Download-Folder] Skipping image ${row.id}: ${err.message}`);
+      }
+    }
+
+    archive.finalize();
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.get("/api/download-all", verifyToken, async (req, res) => {
   try {
     const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];

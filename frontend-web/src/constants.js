@@ -28,4 +28,4 @@ export const BATCH_COLORS = [
 ];
 
 export const MAX_BATCH_UPLOAD = 100;
-export const SAME_FIELDS = ["designName","eventType","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","priceMin","priceMax"];
+export const SAME_FIELDS = ["designName","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","priceMin","priceMax"];

@@ -49,12 +49,14 @@ function ImageManagement() {
   const [favVenue, setFavVenue] = useState("");
   const [favEventDate, setFavEventDate] = useState("");
   const [favFolderDesc, setFavFolderDesc] = useState("");
+  const [favFolderEventTypes, setFavFolderEventTypes] = useState([]);
   const [selectedFavFolder, setSelectedFavFolder] = useState(null);
   const [showEditFolderModal, setShowEditFolderModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState(null);
   const [editFolderName, setEditFolderName] = useState("");
   const [editFolderVenue, setEditFolderVenue] = useState("");
   const [editFolderDate, setEditFolderDate] = useState("");
+  const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("designName");
   const [showEditModal, setShowEditModal] = useState(false);
@@ -104,6 +106,7 @@ function ImageManagement() {
   const [venueName, setVenueName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [folderDescription, setFolderDescription] = useState("");
+  const [folderEventTypes, setFolderEventTypes] = useState([]);
 
   const [imageData, setImageData] = useState({
     designName: "",
@@ -285,11 +288,12 @@ function ImageManagement() {
     const folderName = `${customerName.trim()}_${venueName.trim()}_${eventDate}`;
     setLoading(true);
     try {
-      await ApiService.createFolder(folderName, folderDescription.trim());
+      await ApiService.createFolder(folderName, folderDescription.trim(), folderEventTypes);
       setCustomerName("");
       setVenueName("");
       setEventDate("");
       setFolderDescription("");
+      setFolderEventTypes([]);
       setShowAddFolderModal(false);
       loadFolders();
     } catch (err) {
@@ -306,6 +310,7 @@ function ImageManagement() {
     setEditFolderName(customerName);
     setEditFolderVenue(venue);
     setEditFolderDate(eventDate);
+    setEditFolderEventTypes(folder.event_types || []);
     setShowEditFolderModal(true);
   };
 
@@ -316,9 +321,10 @@ function ImageManagement() {
     if (!editFolderName.trim()) { showNotif("Customer name is required", "warning"); return; }
     setLoading(true);
     try {
-      await ApiService.updateFolder(editingFolder.id, newName);
+      await ApiService.updateFolder(editingFolder.id, newName, editFolderEventTypes);
       setShowEditFolderModal(false);
       setEditingFolder(null);
+      setEditFolderEventTypes([]);
       loadFolders();
       if (showFavorites) loadFavoriteFolders();
     } catch (err) {
@@ -392,7 +398,7 @@ function ImageManagement() {
       SAME_FIELDS.forEach(f => { keepSame[f] = false; });
       return {
         file, preview: URL.createObjectURL(file),
-        designName: "", eventType: "", decorType: "",
+        designName: "", decorType: "",
         sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
         colours: "", flowerType: "", priceMin: "", priceMax: "",
         keepSame,
@@ -456,7 +462,6 @@ function ImageManagement() {
     batchImages.forEach((row, idx) => {
       const missing = [];
       if (isFieldRequired("image_designName") && !row.designName) missing.push("Design Name");
-      if (isFieldRequired("image_eventType") && !row.eventType) missing.push("Event Type");
       if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
       if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
       if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
@@ -507,7 +512,6 @@ function ImageManagement() {
             sizeUnit: row.sizeUnit,
             sizeDisplay: sizeDisplay,
             designName: row.designName,
-            eventType: row.eventType,
             decorType: row.decorType,
             venueCustomer: folderCustomer,
             venueName: folderVenue,
@@ -554,7 +558,6 @@ function ImageManagement() {
     if (!selectedImage) { showNotif("Please select an image", "warning"); return; }
     const missing = [];
     if (isFieldRequired("image_designName") && !imageData.designName) missing.push("Design Name");
-    if (isFieldRequired("image_eventType") && !imageData.eventType) missing.push("Event Type");
     if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
@@ -589,7 +592,6 @@ function ImageManagement() {
         sizeUnit: imageData.sizeUnit,
         sizeDisplay: sizeDisplay,
         designName: imageData.designName,
-        eventType: imageData.eventType,
         decorType: imageData.decorType,
         venueCustomer: folderCustomer,
         venueName: folderVenue,
@@ -662,6 +664,16 @@ function ImageManagement() {
     if (downloadResolve) {
       downloadResolve(useCustom);
       setDownloadResolve(null);
+    }
+  };
+
+  const handleDownloadFolder = async (folderName) => {
+    try {
+      showNotif("Preparing folder download...", "warning");
+      await ApiService.downloadFolder(folderName);
+      showNotif("Folder download complete", "success");
+    } catch (err) {
+      showNotif(err.message || "Download failed");
     }
   };
 
@@ -863,11 +875,12 @@ function ImageManagement() {
     }
     const folderName = `${favCustName.trim()}_${favVenue.trim()}_${favEventDate}`;
     try {
-      await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim());
+      await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim(), favFolderEventTypes);
       setFavCustName("");
       setFavVenue("");
       setFavEventDate("");
       setFavFolderDesc("");
+      setFavFolderEventTypes([]);
       setShowAddFavFolderModal(false);
       loadFavoriteFolders();
     } catch (err) {
@@ -1311,7 +1324,7 @@ function ImageManagement() {
           <h3>Search Results ({filteredImages.length})</h3>
           <button className="btn-clear-filters" onClick={handleClearFilters}>Clear Filters</button>
         </div>
-        {selectedImageIds.size > 0 && renderSelectionToolbar()}
+        {selectedImageIds.size > 0 && renderSelectionToolbar(filteredImages)}
         <div className="image-grid">
           {filteredImages.map((image, index) => renderImageCard(image, index, filteredImages))}
         </div>
@@ -1329,7 +1342,7 @@ function ImageManagement() {
         <div className="filter-results-header">
           <h3>All Images ({allImages.length})</h3>
         </div>
-        {selectedImageIds.size > 0 && renderSelectionToolbar()}
+        {selectedImageIds.size > 0 && renderSelectionToolbar(allImages)}
         <div className="image-grid">
           {allImages.map((image, index) => renderImageCard(image, index, allImages))}
         </div>
@@ -1368,6 +1381,7 @@ function ImageManagement() {
               onMoveToFolder={handleMoveImagesToFolder}
               onClick={() => handleEnterFolder(folder)}
               onDelete={(e) => handleDeleteFolder(folder.id, folder.name, e)}
+              onDownload={(f) => handleDownloadFolder(f.name)}
             />
           ))}
       </div>
@@ -1405,6 +1419,7 @@ function ImageManagement() {
               onMoveToFolder={handleMoveImagesToFolder}
               onClick={() => handleEnterFavoriteFolder(folder)}
               onDelete={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}
+              onDownload={(f) => handleDownloadFolder(f.name)}
             />
           ))}
         </div>
@@ -1414,7 +1429,7 @@ function ImageManagement() {
         <div className="empty-state"><p>No favorites yet. Star images to add them here.</p></div>
       ) : (
         <>
-      {selectedImageIds.size > 0 && renderSelectionToolbar()}
+      {selectedImageIds.size > 0 && renderSelectionToolbar(favoriteImages)}
           <div className="favorites-images-grid">
             {favoriteImages.map((image, index) => renderImageCard(image, index, favoriteImages))}
           </div>
@@ -1423,15 +1438,28 @@ function ImageManagement() {
     </div>
   );
 
-  const renderSelectionToolbar = () => (
+  const renderSelectionToolbar = (currentImageList = []) => {
+    const allSelected = currentImageList.length > 0 && currentImageList.every(img => selectedImageIds.has(img.id));
+    return (
     <div className="selection-toolbar">
       <span className="selection-count">{selectedImageIds.size} selected</span>
+      <button className="btn btn-secondary" onClick={() => {
+        if (allSelected) {
+          setSelectedImageIds(new Set());
+        } else {
+          setSelectedImageIds(new Set(currentImageList.map(img => img.id)));
+        }
+      }}>
+        {allSelected ? "Deselect All" : "Select All"}
+      </button>
       <button className="btn btn-secondary" onClick={() => { setSelectedImageIds(new Set()); }}>
         Cancel
       </button>
-      <button className="btn btn-secondary" onClick={() => setShowMoveModal(true)} disabled={selectedImageIds.size === 0}>
-        Move
-      </button>
+      {showFavorites && (
+        <button className="btn btn-secondary" onClick={() => setShowMoveModal(true)} disabled={selectedImageIds.size === 0}>
+          Move
+        </button>
+      )}
       <button className="btn btn-secondary" onClick={handleBulkDownload} disabled={selectedImageIds.size === 0}>
         Download
       </button>
@@ -1440,6 +1468,7 @@ function ImageManagement() {
       </button>
     </div>
   );
+  };
 
   const renderFolderContent = () => (
     <div className="folder-content">
@@ -1458,7 +1487,7 @@ function ImageManagement() {
         </div>
       </div>
 
-      {selectedImageIds.size > 0 && renderSelectionToolbar()}
+      {selectedImageIds.size > 0 && renderSelectionToolbar(images)}
 
       {loading ? (
         <div className="loading-state"><div className="spinner"></div></div>
@@ -1618,8 +1647,23 @@ function ImageManagement() {
                   value={folderDescription}
                   onChange={(e) => setFolderDescription(e.target.value)}
                   placeholder="Enter folder description"
-                  rows={3}
+                  rows={2}
                 />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Types (multi-select)</label>
+                <div className="multi-select-tags">
+                  {allEventTypes.map(type => (
+                    <label key={type} className={`multi-select-tag ${folderEventTypes.includes(type) ? "selected" : ""}`}
+                      onClick={() => {
+                        setFolderEventTypes(prev =>
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                      }}>
+                      {type}
+                    </label>
+                  ))}
+                </div>
               </div>
               {customerName && venueName && eventDate && (
                 <div className="folder-name-preview">
@@ -1687,8 +1731,23 @@ function ImageManagement() {
                   value={favFolderDesc}
                   onChange={(e) => setFavFolderDesc(e.target.value)}
                   placeholder="Enter folder description"
-                  rows={3}
+                  rows={2}
                 />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Types (multi-select)</label>
+                <div className="multi-select-tags">
+                  {allEventTypes.map(type => (
+                    <span key={type} className={`multi-select-tag ${favFolderEventTypes.includes(type) ? "selected" : ""}`}
+                      onClick={() => {
+                        setFavFolderEventTypes(prev =>
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                      }}>
+                      {type}
+                    </span>
+                  ))}
+                </div>
               </div>
               {favCustName && favVenue && favEventDate && (
                 <div className="folder-name-preview">
@@ -1744,6 +1803,21 @@ function ImageManagement() {
                   value={editFolderDate}
                   onChange={(e) => setEditFolderDate(e.target.value)}
                 />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Types (multi-select)</label>
+                <div className="multi-select-tags">
+                  {allEventTypes.map(type => (
+                    <span key={type} className={`multi-select-tag ${editFolderEventTypes.includes(type) ? "selected" : ""}`}
+                      onClick={() => {
+                        setEditFolderEventTypes(prev =>
+                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                        );
+                      }}>
+                      {type}
+                    </span>
+                  ))}
+                </div>
               </div>
               {editFolderName && editFolderVenue && editFolderDate && (
                 <div className="folder-name-preview">
@@ -1816,16 +1890,6 @@ function ImageManagement() {
                 </div>
 
                 <div className="grid-2">
-                  <div className="form-group">
-                    <label className="label">Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}</label>
-                    <AutocompleteInput
-                      options={allEventTypes}
-                      value={imageData.eventType}
-                      onChange={(val) => setImageData({...imageData, eventType: val})}
-                      placeholder="Type or select event type"
-                      required={isFieldRequired("image_eventType")}
-                    />
-                  </div>
                   <div className="form-group">
                     <label className="label">Flower Type{isFieldRequired("image_flowerType") && <span className="required">*</span>}</label>
                     <div className="checkbox-group-horizontal">
@@ -1918,7 +1982,6 @@ function ImageManagement() {
                           <tr>
                             <th>Image</th>
                             <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Event Type{isFieldRequired("image_eventType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Unit<span className="batch-same-hdr">S</span></th>
@@ -1939,20 +2002,6 @@ function ImageManagement() {
                                     onChange={(e) => updateBatchRow(index, "designName", e.target.value)} placeholder="Design" />
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.designName ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "designName")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-autocomplete-cell">
-                                    <AutocompleteInput
-                                      options={allEventTypes}
-                                      value={row.eventType}
-                                      onChange={(val) => updateBatchRow(index, "eventType", val)}
-                                      placeholder="Event Type"
-                                    />
-                                  </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.eventType ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "eventType")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>

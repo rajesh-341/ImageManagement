@@ -130,6 +130,18 @@ async function runMigrations() {
     `);
     console.log("[Migration] favourite_folder_mapping table ready");
 
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'folders' AND column_name = 'event_types'
+        ) THEN
+          ALTER TABLE folders ADD COLUMN event_types JSONB DEFAULT '[]';
+        END IF;
+      END $$;
+    `);
+    console.log("[Migration] folders.event_types column ready");
+
     const cleanResult = await pool.query(
       `UPDATE employee_details 
        SET employee_details = employee_details #- '{rawPassword}' #- '{plainPassword}'
