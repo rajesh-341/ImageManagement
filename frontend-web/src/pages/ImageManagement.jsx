@@ -6,6 +6,7 @@ import ColorPicker from "../components/ColorPicker";
 import AutocompleteInput from "../components/AutocompleteInput";
 import FolderCard from "../components/FolderCard";
 import FolderBox from "../components/FolderBox";
+import useChunkedRender from "../hooks/useChunkedRender";
 import {
   UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
@@ -88,6 +89,11 @@ function ImageManagement() {
   const eventTypeRef = useRef(null);
   const favEventTypeRef = useRef(null);
   const editEventTypeRef = useRef(null);
+
+  const chunkedFiltered = useChunkedRender(filteredImages);
+  const chunkedAllImages = useChunkedRender(allImages);
+  const chunkedFavorites = useChunkedRender(favoriteImages);
+  const chunkedFolderImages = useChunkedRender(images);
 
   React.useEffect(() => {
     const handleClickOutside = (e) => {
@@ -287,17 +293,38 @@ function ImageManagement() {
     }
   };
 
+  const getFullResUrl = useCallback((imageData) => {
+    const rawUrl = imageData?.imageUrl || "";
+    if (!rawUrl) return "";
+    return rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`;
+  }, []);
+
+  const preloadAdjacent = useCallback((imageArray, index) => {
+    const preloadIdx = [index - 1, index + 1];
+    for (const idx of preloadIdx) {
+      if (idx >= 0 && idx < imageArray.length) {
+        const url = imageArray[idx]?.image_data?.imageUrl;
+        if (url && url.startsWith("http")) {
+          const fullUrl = url.replace("/upload/", "/upload/w_800,h_600,c_fit,f_auto,q_auto/");
+          const img = new Image();
+          img.src = fullUrl;
+        }
+      }
+    }
+  }, []);
+
   const openLightbox = useCallback((imageArray, index) => {
     const img = imageArray[index];
     setLightboxImage({
-      url: img.image_data?.imageUrl ? (img.image_data.imageUrl.startsWith("http") ? img.image_data.imageUrl : `${IMAGE_BASE_URL}${img.image_data.imageUrl}`) : "",
+      url: getFullResUrl(img.image_data),
       data: img.image_data,
       id: img.id,
       isFav: favoriteImages.some(fav => fav.id === img.id),
       allImages: imageArray,
       currentIndex: index,
     });
-  }, [favoriteImages]);
+    preloadAdjacent(imageArray, index);
+  }, [favoriteImages, getFullResUrl, preloadAdjacent]);
 
   const handleAddFolder = async (e) => {
     e.preventDefault();
@@ -1163,7 +1190,7 @@ function ImageManagement() {
 
   const renderImageCard = useCallback((image, index, imageArray) => {
     const rawUrl = image.image_data?.imageUrl || "";
-    const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
+    const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/w_300,h_200,c_fill,f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
     const isFav = favoriteImages.some(fav => fav.id === image.id);
     const isSelected = selectedImageIds.has(image.id);
     const data = image.image_data || {};
@@ -1369,7 +1396,12 @@ function ImageManagement() {
         </div>
         {selectedImageIds.size > 0 && renderSelectionToolbar(filteredImages)}
         <div className="image-grid">
-          {filteredImages.map((image, index) => renderImageCard(image, index, filteredImages))}
+          {chunkedFiltered.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFiltered.visibleItems))}
+          {chunkedFiltered.totalCount > chunkedFiltered.visibleCount && (
+            <div className="loading-more" style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 13 }}>
+              Loading more images...
+            </div>
+          )}
         </div>
       </>
     )
@@ -1387,7 +1419,12 @@ function ImageManagement() {
         </div>
         {selectedImageIds.size > 0 && renderSelectionToolbar(allImages)}
         <div className="image-grid">
-          {allImages.map((image, index) => renderImageCard(image, index, allImages))}
+          {chunkedAllImages.visibleItems.map((image, index) => renderImageCard(image, index, chunkedAllImages.visibleItems))}
+          {chunkedAllImages.totalCount > chunkedAllImages.visibleCount && (
+            <div className="loading-more" style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 13 }}>
+              Loading more images...
+            </div>
+          )}
         </div>
         {allImagesHasMore && (
           <div className="load-more-wrap">
@@ -1474,7 +1511,12 @@ function ImageManagement() {
         <>
       {selectedImageIds.size > 0 && renderSelectionToolbar(favoriteImages)}
           <div className="favorites-images-grid">
-            {favoriteImages.map((image, index) => renderImageCard(image, index, favoriteImages))}
+            {chunkedFavorites.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFavorites.visibleItems))}
+            {chunkedFavorites.totalCount > chunkedFavorites.visibleCount && (
+              <div className="loading-more" style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 13 }}>
+                Loading more favorites...
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1547,7 +1589,12 @@ function ImageManagement() {
                 <span>Upload Image</span>
               </div>
             )}
-            {images.map((image, index) => renderImageCard(image, index, images))}
+            {chunkedFolderImages.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFolderImages.visibleItems))}
+            {chunkedFolderImages.totalCount > chunkedFolderImages.visibleCount && (
+              <div className="loading-more" style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 13 }}>
+                Loading more images...
+              </div>
+            )}
           </div>
           {hasMore && (
             <div className="load-more-wrap">

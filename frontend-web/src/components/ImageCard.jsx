@@ -7,16 +7,28 @@ const lightColorSet = new Set([
   "Rose Gold","Gray","Bronze","Copper",
 ]);
 
+const getThumbUrl = (rawUrl) => {
+  if (!rawUrl) return "";
+  if (rawUrl.startsWith("http")) {
+    return rawUrl.replace("/upload/", "/upload/w_300,h_200,c_fill,f_auto,q_auto/");
+  }
+  return `${IMAGE_BASE_URL}${rawUrl}`;
+};
+
+const getFullUrl = (rawUrl) => {
+  if (!rawUrl) return "";
+  if (rawUrl.startsWith("http")) {
+    return rawUrl.replace("/upload/", "/upload/f_auto,q_auto/");
+  }
+  return `${IMAGE_BASE_URL}${rawUrl}`;
+};
+
 function ImageCard({
   image, index, imageArray, isFav, isSelected, canEditDelete,
   onToggleFav, onSelect, onOpenLightbox, onEdit, onDelete, formatPrice, formatEventDate,
 }) {
   const rawUrl = image.image_data?.imageUrl || "";
-  const imgUrl = rawUrl
-    ? rawUrl.startsWith("http")
-      ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/")
-      : `${IMAGE_BASE_URL}${rawUrl}`
-    : "";
+  const thumbUrl = getThumbUrl(rawUrl);
   const data = image.image_data || {};
 
   const buildSizeLabeled = (w, l, h) => {
@@ -60,8 +72,8 @@ function ImageCard({
         >
           {isFav ? "★" : "☆"}
         </button>
-        {imgUrl ? (
-          <img className="image-card-img" src={imgUrl} alt={data.designName} loading="lazy"
+        {thumbUrl ? (
+          <img className="image-card-img" src={thumbUrl} alt={data.designName} loading="lazy"
             onError={(e) => { e.target.onerror = null; e.target.src = ""; e.target.style.background = "#e5e7eb"; }}
           />
         ) : (
