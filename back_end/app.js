@@ -50,8 +50,18 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
-app.use(compression({ level: 6, threshold: 1024 }));
-app.use(timeout("30s"));
+
+const shouldCompress = (req, res) => {
+  if (req.path.startsWith("/api/download")) return false;
+  return compression.filter(req, res);
+};
+app.use(compression({ level: 6, threshold: 1024, filter: shouldCompress }));
+
+const skipTimeout = (req, res) => req.path.startsWith("/api/download");
+app.use((req, res, next) => {
+  if (skipTimeout(req)) return next();
+  timeout("30s")(req, res, next);
+});
 app.use((req, res, next) => {
   if (!req.timedout) next();
 });
@@ -239,31 +249,43 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 
     archive.pipe(res);
 
-    const fetchPromises = imgResult.rows.map(async (row) => {
+    const fetchWithRetry = async (row) => {
       const imgData = typeof row.image_data === "string"
         ? JSON.parse(row.image_data)
         : row.image_data;
-
       if (!imgData || !imgData.imageUrl) return null;
 
-      try {
-        const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(10000) });
-        if (!imageResponse.ok) return null;
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try {
+          const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(15000) });
+          if (!imageResponse.ok) continue;
 
-        const buffer = Buffer.from(await imageResponse.arrayBuffer());
-        const urlParts = imgData.imageUrl.split("/");
-        let filename = urlParts[urlParts.length - 1].split("?")[0];
-        if (!filename) filename = `image_${row.id}.jpg`;
-        return { buffer, filename };
-      } catch (err) {
-        console.warn(`[Download-Folder] Skipping image ${row.id}: ${err.message}`);
-        return null;
+          const buffer = Buffer.from(await imageResponse.arrayBuffer());
+          if (buffer.length < 100) continue;
+
+          const urlParts = imgData.imageUrl.split("/");
+          let filename = urlParts[urlParts.length - 1].split("?")[0];
+          if (!filename || !filename.includes(".")) filename = `image_${row.id}.jpg`;
+          return { buffer, filename };
+        } catch (err) {
+          if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
       }
-    });
+      console.warn(`[Download-Folder] Skipping image ${row.id} after 3 attempts`);
+      return null;
+    };
 
-    const results = await Promise.all(fetchPromises);
-    for (const r of results) {
-      if (r) archive.append(r.buffer, { name: r.filename });
+    const CONCURRENCY = 15;
+    let processed = 0;
+    for (let i = 0; i < imgResult.rows.length; i += CONCURRENCY) {
+      const batch = imgResult.rows.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.allSettled(batch.map(fetchWithRetry));
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value) {
+          archive.append(r.value.buffer, { name: r.value.filename });
+          processed++;
+        }
+      }
     }
 
     archive.finalize();
@@ -279,8 +301,12 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 });
 
 app.get("/api/download-all", verifyToken, async (req, res) => {
+  const CONCURRENCY = 15;
+  const PER_IMAGE_TIMEOUT = 15000;
+  const MAX_RETRIES = 2;
+  const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+
   try {
-    const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
     const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
     if (!allowed) return res.status(403).json({ message: "Access denied" });
@@ -294,53 +320,71 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
-    const archive = archiver("zip", { zlib: { level: 3 } });
+    const archive = archiver("zip", { zlib: { level: 1 } });
 
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="all_images_${Date.now()}.zip"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     archive.pipe(res);
+
+    const fetchWithRetry = async (row) => {
+      const imgData = typeof row.image_data === "string"
+        ? JSON.parse(row.image_data)
+        : row.image_data;
+      if (!imgData || !imgData.imageUrl) return null;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const imageResponse = await fetch(imgData.imageUrl, {
+            signal: AbortSignal.timeout(PER_IMAGE_TIMEOUT),
+          });
+          if (!imageResponse.ok) continue;
+
+          const buffer = Buffer.from(await imageResponse.arrayBuffer());
+          if (buffer.length < 100) continue;
+
+          const folderPath = sanitize(row.folder_name);
+          const urlParts = imgData.imageUrl.split("/");
+          let filename = urlParts[urlParts.length - 1].split("?")[0];
+          if (!filename || !filename.includes(".")) filename = `image_${row.id}.jpg`;
+          return { buffer, name: `${folderPath}/${filename}` };
+        } catch (err) {
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          }
+        }
+      }
+      console.warn(`[Download-All] Skipping image ${row.id} after ${MAX_RETRIES + 1} attempts`);
+      return null;
+    };
 
     let processed = 0;
     const total = imgResult.rows.length;
 
-    const fetchPromises = imgResult.rows.map(async (row) => {
-      const imgData = typeof row.image_data === "string"
-        ? JSON.parse(row.image_data)
-        : row.image_data;
-
-      if (!imgData || !imgData.imageUrl) return null;
-
-      try {
-        const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(10000) });
-        if (!imageResponse.ok) return null;
-
-        const buffer = Buffer.from(await imageResponse.arrayBuffer());
-        const folderPath = sanitize(row.folder_name);
-        const urlParts = imgData.imageUrl.split("/");
-        let filename = urlParts[urlParts.length - 1].split("?")[0];
-        if (!filename) filename = `image_${row.id}.jpg`;
-        return { buffer, name: `${folderPath}/${filename}` };
-      } catch (err) {
-        console.warn(`[Download-All] Skipping image ${row.id}: ${err.message}`);
-        return null;
-      }
-    });
-
-    const results = await Promise.all(fetchPromises);
-    for (const r of results) {
-      if (r) {
-        archive.append(r.buffer, { name: r.name });
-        processed++;
+    for (let i = 0; i < total; i += CONCURRENCY) {
+      const batch = imgResult.rows.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.allSettled(batch.map(fetchWithRetry));
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value) {
+          archive.append(r.value.buffer, { name: r.value.name });
+          processed++;
+        }
       }
     }
 
     archive.finalize();
 
+    archive.on("finish", () => {
+      console.log(`[Download-All] Completed: ${processed}/${total} images zipped (${archive.pointer()} bytes)`);
+    });
+
     archive.on("error", (err) => {
-      throw err;
+      console.error("[Download-All] Archive error:", err.message);
+      if (!res.headersSent) res.status(500).end();
     });
   } catch (error) {
+    console.error("[Download-All] Fatal:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ message: error.message || "Download failed" });
     }
