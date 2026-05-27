@@ -24,7 +24,12 @@ function LoginPage() {
         navigate("/images", { replace: true });
       }
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || "";
+      if (msg.includes("429") || msg.toLowerCase().includes("too many")) {
+        setError("Too many failed login attempts. Please wait a few minutes before trying again.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }

@@ -58,8 +58,9 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
   };
 
   return (
-    <div className="color-picker">
+      <div className="color-picker">
       <label className="color-picker-label">{label}</label>
+      {error && <span className="color-picker-error">{error}</span>}
       <div className="color-picker-search">
         <input
           type="text"
@@ -94,7 +95,6 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
         ))}
       </div>
       {filtered.length === 0 && <span className="color-picker-no-results">No colours found</span>}
-      {error && <span className="color-picker-error">{error}</span>}
       {selectedColors.length > 0 && (
         <div className="selected-colors-preview">
           <span className="selected-colors-label">Selected:</span>

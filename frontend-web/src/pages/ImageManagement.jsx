@@ -82,6 +82,28 @@ function ImageManagement() {
   const [customDecorTypes, setCustomDecorTypes] = useState([]);
   const [newEventType, setNewEventType] = useState("");
   const [newDecorType, setNewDecorType] = useState("");
+  const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
+  const [showFavEventTypeDropdown, setShowFavEventTypeDropdown] = useState(false);
+  const [showEditEventTypeDropdown, setShowEditEventTypeDropdown] = useState(false);
+  const eventTypeRef = useRef(null);
+  const favEventTypeRef = useRef(null);
+  const editEventTypeRef = useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (eventTypeRef.current && !eventTypeRef.current.contains(e.target)) {
+        setShowEventTypeDropdown(false);
+      }
+      if (favEventTypeRef.current && !favEventTypeRef.current.contains(e.target)) {
+        setShowFavEventTypeDropdown(false);
+      }
+      if (editEventTypeRef.current && !editEventTypeRef.current.contains(e.target)) {
+        setShowEditEventTypeDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
   const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
@@ -193,6 +215,7 @@ function ImageManagement() {
 
   const loadImages = async (pageNum = 1, append = false) => {
     if (!currentFolder) { setImages([]); return; }
+    if (isUploading.current) return;
     setLoading(true);
     try {
       const result = await ApiService.getImages(currentFolder.name, pageNum, 50);
@@ -204,8 +227,9 @@ function ImageManagement() {
       setPage(pageNum);
       setHasMore(result.hasMore);
     } catch (err) {
-      showNotif("Something went wrong");
+      if (!isUploading.current) showNotif("Something went wrong");
     } finally {
+      isUploading.current = false;
       setLoading(false);
     }
   };
@@ -364,6 +388,7 @@ function ImageManagement() {
     setImagePreview("");
     setBatchImages([]);
     setUploadProgress("");
+    isUploading.current = false;
   };
 
   const handleBackToFolders = () => {
@@ -475,66 +500,72 @@ function ImageManagement() {
     }
 
     setLoading(true);
+    isUploading.current = true;
     const totalImages = batchImages.length;
     setUploadProgress(`Uploading 0 of ${totalImages} images...`);
     let successCount = 0;
     let errorCount = 0;
     const batchStartTime = Date.now();
-    let perImageTimes = [];
-    try {
+    const CONCURRENCY = 3;
+    const uploadImageWithTimeout = async (row, index) => {
+      const timeoutMs = 10000;
+      let imageUrl;
       const isLocalDev = window.location.hostname === "localhost";
-      for (let i = 0; i < totalImages; i++) {
-        const row = batchImages[i];
-        const imageStartTime = Date.now();
-        setUploadProgress(`Uploading ${i + 1} of ${totalImages} images...`);
-        let imageUrl;
-        try {
-          if (isLocalDev) {
-            const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
-            imageUrl = uploadResult.imageUrl;
-          } else {
-            const sig = await ApiService.getUploadSignature(currentFolder.name);
-            const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
-            imageUrl = cloudResult.secure_url;
-          }
-          const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
-          const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
-          const colours = Array.isArray(row.colours)
-            ? row.colours
-            : row.colours.split(",").map(c => c.trim()).filter(c => c);
-          const metaData = {
-            folderName: currentFolder.name,
-            imageUrl,
-            colourCombination: colours,
-            sizeWidth: row.sizeWidth || null,
-            sizeLength: row.sizeLength || null,
-            sizeHeight: row.sizeHeight || null,
-            sizeUnit: row.sizeUnit,
-            sizeDisplay: sizeDisplay,
-            designName: row.designName,
-            decorType: row.decorType,
-            venueCustomer: folderCustomer,
-            venueName: folderVenue,
-            flowerType: row.flowerType || null,
-            priceMin: row.priceMin,
-            priceMax: row.priceMax,
-          };
-          await ApiService.uploadImage(metaData);
-          successCount++;
-        } catch (err) {
-          if (imageUrl && !isLocalDev) {
-            ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
-          }
-          console.error(`Failed to upload image ${i + 1}:`, err);
-          errorCount++;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        if (isLocalDev) {
+          const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
+          imageUrl = uploadResult.imageUrl;
+        } else {
+          const sig = await ApiService.getUploadSignature(currentFolder.name);
+          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
+          imageUrl = cloudResult.secure_url;
         }
-        const elapsed = ((Date.now() - imageStartTime) / 1000).toFixed(1);
-        perImageTimes.push(elapsed);
-        const avgTime = perImageTimes.reduce((a, b) => a + parseFloat(b), 0) / perImageTimes.length;
-        const remaining = Math.max(0, totalImages - i - 1);
-        const estRemaining = (avgTime * remaining).toFixed(1);
-        if (i < totalImages - 1) {
-          setUploadProgress(`Uploading ${i + 1} of ${totalImages} images... (${elapsed}s | ~${estRemaining}s remaining)`);
+        const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
+        const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
+        const colours = Array.isArray(row.colours)
+          ? row.colours
+          : row.colours.split(",").map(c => c.trim()).filter(c => c);
+        const metaData = {
+          folderName: currentFolder.name,
+          imageUrl,
+          colourCombination: colours,
+          sizeWidth: row.sizeWidth || null,
+          sizeLength: row.sizeLength || null,
+          sizeHeight: row.sizeHeight || null,
+          sizeUnit: row.sizeUnit,
+          sizeDisplay: sizeDisplay,
+          designName: row.designName,
+          decorType: row.decorType,
+          venueCustomer: folderCustomer,
+          venueName: folderVenue,
+          flowerType: row.flowerType || null,
+          priceMin: row.priceMin,
+          priceMax: row.priceMax,
+        };
+        await ApiService.uploadImage(metaData);
+        return true;
+      } catch (err) {
+        if (imageUrl && !isLocalDev) {
+          ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
+        }
+        console.error(`Failed to upload image ${index + 1}:`, err);
+        return false;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+    try {
+      for (let i = 0; i < totalImages; i += CONCURRENCY) {
+        const batch = batchImages.slice(i, i + CONCURRENCY);
+        setUploadProgress(`Uploading ${Math.min(i + CONCURRENCY, totalImages)} of ${totalImages} images...`);
+        const batchResults = await Promise.allSettled(
+          batch.map((row, batchIndex) => uploadImageWithTimeout(row, i + batchIndex))
+        );
+        for (const r of batchResults) {
+          if (r.status === "fulfilled" && r.value) successCount++;
+          else errorCount++;
         }
       }
       const totalTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
@@ -549,6 +580,7 @@ function ImageManagement() {
     } catch (err) {
       showNotif("Something went wrong");
     } finally {
+      isUploading.current = false;
       setLoading(false);
     }
   };
@@ -566,19 +598,23 @@ function ImageManagement() {
       return;
     }
     setLoading(true);
+    isUploading.current = true;
     setUploadProgress("Uploading image...");
     let imageUrl;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const isLocalDev = window.location.hostname === "localhost";
 
-      if (isLocalDev) {
-        const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
-        imageUrl = uploadResult.imageUrl;
-      } else {
-        const sig = await ApiService.getUploadSignature(currentFolder.name);
-        const cloudResult = await ApiService.uploadDirectToCloudinary(selectedImage, sig);
-        imageUrl = cloudResult.secure_url;
-      }
+      const uploadPromise = isLocalDev
+        ? ApiService.uploadFile(selectedImage, currentFolder.name)
+        : (async () => {
+            const sig = await ApiService.getUploadSignature(currentFolder.name);
+            return ApiService.uploadDirectToCloudinary(selectedImage, sig);
+          })();
+
+      const uploadResult = await uploadPromise;
+      imageUrl = uploadResult.imageUrl || uploadResult.secure_url;
 
       const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
@@ -605,7 +641,7 @@ function ImageManagement() {
       setSelectedImage(null);
       setImagePreview("");
       setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
-      loadImages();
+      try { loadImages(); } catch {}
       setTimeout(() => {
         resetUploadForm();
         setShowUploadModal(false);
@@ -614,8 +650,10 @@ function ImageManagement() {
       if (imageUrl && !window.location.hostname.includes("localhost")) {
         ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
       }
-      showNotif("Something went wrong");
+      showNotif(err.name === "AbortError" ? "Upload timed out. Please try again." : "Something went wrong");
     } finally {
+      clearTimeout(timeoutId);
+      isUploading.current = false;
       setLoading(false);
     }
   };
@@ -1062,6 +1100,7 @@ function ImageManagement() {
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canDownloadAll = user && DOWNLOAD_ALL_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const [syncing, setSyncing] = useState(false);
+  const isUploading = useRef(false);
 
   const handleSyncCloudinary = async () => {
     setSyncing(true);
@@ -1088,15 +1127,13 @@ function ImageManagement() {
 
   const monthsShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  const formatEventDate = (dateStr) => {
+  const formatEventDate = useCallback((dateStr) => {
     if (!dateStr) return "";
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const month = monthsShort[d.getMonth()];
-    const day = d.getDate();
-    const year = d.getFullYear();
-    return `${month} ${day} ${year}`;
-  };
+    const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${monthsShort[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }, []);
 
   const parseFolderName = (name) => {
     if (!name) return { customerName: "", venue: "", eventDate: "" };
@@ -1126,7 +1163,7 @@ function ImageManagement() {
     return "";
   };
 
-  const renderImageCard = (image, index, imageArray) => {
+  const renderImageCard = useCallback((image, index, imageArray) => {
     const rawUrl = image.image_data?.imageUrl || "";
     const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
     const isFav = favoriteImages.some(fav => fav.id === image.id);
@@ -1134,13 +1171,14 @@ function ImageManagement() {
     const data = image.image_data || {};
     const buildSizeLabeled = (w, l, h) => {
       const parts = [];
-      if (w && w !== "0") parts.push(`w:${w}`);
+      if (w && w !== "0") parts.push(`W:${w}`);
       if (l && l !== "0") parts.push(`L:${l}`);
       if (h && h !== "0") parts.push(`H:${h}`);
       return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
     };
-    const sizeDisplay = data.sizeDisplay ? data.sizeDisplay.replace(/(\d+)x(\d+)x(\d+)/, "w:$1 L:$2 H:$3") : buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
+    const sizeDisplay = data.sizeDisplay || buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
     const priceDisplay = formatPrice(data.priceMin, data.priceMax);
+    const colorsDisplay = data.colourCombination?.length > 0 ? data.colourCombination.join(", ") : "";
 
     return (
       <div
@@ -1189,9 +1227,16 @@ function ImageManagement() {
             )}
           </div>
           <div className="image-card-hover-details">
+            {data.designName && <div className="hover-detail"><span>Design</span> {data.designName}</div>}
+            {data.decorType && <div className="hover-detail"><span>Decor</span> {data.decorType}</div>}
+            {data.eventType && <div className="hover-detail"><span>Event</span> {data.eventType}</div>}
             {sizeDisplay && <div className="hover-detail"><span>Size</span> {sizeDisplay}</div>}
-            {priceDisplay && <div className="hover-detail"><span>Price range</span> {priceDisplay}</div>}
-            {data.venueDate && <div className="hover-detail"><span>Event Date</span> {formatEventDate(data.venueDate)}</div>}
+            {priceDisplay && <div className="hover-detail"><span>Price</span> {priceDisplay}</div>}
+            {colorsDisplay && <div className="hover-detail"><span>Colors</span> {colorsDisplay}</div>}
+            {data.flowerType && <div className="hover-detail"><span>Flower</span> {data.flowerType}</div>}
+            {data.venueCustomer && <div className="hover-detail"><span>Customer</span> {data.venueCustomer}</div>}
+            {data.venueName && <div className="hover-detail"><span>Venue</span> {data.venueName}</div>}
+            {data.venueDate && <div className="hover-detail"><span>Date</span> {formatEventDate(data.venueDate)}</div>}
           </div>
         </div>
         <div className="image-card-info">
@@ -1199,13 +1244,13 @@ function ImageManagement() {
         </div>
       </div>
     );
-  };
+  }, [favoriteImages, selectedImageIds, canEditDelete, toggleImageSelection, handleToggleFavorite, handleEditImage, handleDeleteImage, openLightbox, formatEventDate]);
 
-  const sortedFolders = [...folders].sort((a, b) => {
+  const sortedFolders = React.useMemo(() => [...folders].sort((a, b) => {
     const dateA = new Date(a.created_at || a.createdAt || 0);
     const dateB = new Date(b.created_at || b.createdAt || 0);
     return dateB - dateA;
-  });
+  }), [folders]);
 
   const renderFolderView = () => (
     <div className="folder-view-with-filters">
@@ -1652,17 +1697,31 @@ function ImageManagement() {
               </div>
               <div className="form-group">
                 <label className="label">Event Types (multi-select)</label>
-                <div className="multi-select-tags">
-                  {allEventTypes.map(type => (
-                    <label key={type} className={`multi-select-tag ${folderEventTypes.includes(type) ? "selected" : ""}`}
-                      onClick={() => {
-                        setFolderEventTypes(prev =>
-                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-                        );
-                      }}>
-                      {type}
-                    </label>
-                  ))}
+                <div className="custom-multiselect" ref={eventTypeRef}>
+                  <div className="custom-multiselect-trigger" onClick={() => setShowEventTypeDropdown(prev => !prev)}>
+                    {folderEventTypes.length > 0 ? (
+                      <span className="custom-multiselect-summary">{folderEventTypes.length} selected</span>
+                    ) : (
+                      <span className="custom-multiselect-placeholder">Select event types...</span>
+                    )}
+                    <span className={`custom-multiselect-arrow ${showEventTypeDropdown ? "open" : ""}`}>▾</span>
+                  </div>
+                  {showEventTypeDropdown && (
+                    <div className="custom-multiselect-dropdown">
+                      {allEventTypes.map(type => (
+                        <label key={type} className={`custom-multiselect-option ${folderEventTypes.includes(type) ? "selected" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFolderEventTypes(prev =>
+                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                            );
+                          }}>
+                          <input type="checkbox" checked={folderEventTypes.includes(type)} readOnly />
+                          <span>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               {customerName && venueName && eventDate && (
@@ -1736,17 +1795,31 @@ function ImageManagement() {
               </div>
               <div className="form-group">
                 <label className="label">Event Types (multi-select)</label>
-                <div className="multi-select-tags">
-                  {allEventTypes.map(type => (
-                    <span key={type} className={`multi-select-tag ${favFolderEventTypes.includes(type) ? "selected" : ""}`}
-                      onClick={() => {
-                        setFavFolderEventTypes(prev =>
-                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-                        );
-                      }}>
-                      {type}
-                    </span>
-                  ))}
+                <div className="custom-multiselect" ref={favEventTypeRef}>
+                  <div className="custom-multiselect-trigger" onClick={() => setShowFavEventTypeDropdown(prev => !prev)}>
+                    {favFolderEventTypes.length > 0 ? (
+                      <span className="custom-multiselect-summary">{favFolderEventTypes.length} selected</span>
+                    ) : (
+                      <span className="custom-multiselect-placeholder">Select event types...</span>
+                    )}
+                    <span className={`custom-multiselect-arrow ${showFavEventTypeDropdown ? "open" : ""}`}>▾</span>
+                  </div>
+                  {showFavEventTypeDropdown && (
+                    <div className="custom-multiselect-dropdown">
+                      {allEventTypes.map(type => (
+                        <label key={type} className={`custom-multiselect-option ${favFolderEventTypes.includes(type) ? "selected" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFavFolderEventTypes(prev =>
+                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                            );
+                          }}>
+                          <input type="checkbox" checked={favFolderEventTypes.includes(type)} readOnly />
+                          <span>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               {favCustName && favVenue && favEventDate && (
@@ -1806,17 +1879,31 @@ function ImageManagement() {
               </div>
               <div className="form-group">
                 <label className="label">Event Types (multi-select)</label>
-                <div className="multi-select-tags">
-                  {allEventTypes.map(type => (
-                    <span key={type} className={`multi-select-tag ${editFolderEventTypes.includes(type) ? "selected" : ""}`}
-                      onClick={() => {
-                        setEditFolderEventTypes(prev =>
-                          prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-                        );
-                      }}>
-                      {type}
-                    </span>
-                  ))}
+                <div className="custom-multiselect" ref={editEventTypeRef}>
+                  <div className="custom-multiselect-trigger" onClick={() => setShowEditEventTypeDropdown(prev => !prev)}>
+                    {editFolderEventTypes.length > 0 ? (
+                      <span className="custom-multiselect-summary">{editFolderEventTypes.length} selected</span>
+                    ) : (
+                      <span className="custom-multiselect-placeholder">Select event types...</span>
+                    )}
+                    <span className={`custom-multiselect-arrow ${showEditEventTypeDropdown ? "open" : ""}`}>▾</span>
+                  </div>
+                  {showEditEventTypeDropdown && (
+                    <div className="custom-multiselect-dropdown">
+                      {allEventTypes.map(type => (
+                        <label key={type} className={`custom-multiselect-option ${editFolderEventTypes.includes(type) ? "selected" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditFolderEventTypes(prev =>
+                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                            );
+                          }}>
+                          <input type="checkbox" checked={editFolderEventTypes.includes(type)} readOnly />
+                          <span>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               {editFolderName && editFolderVenue && editFolderDate && (

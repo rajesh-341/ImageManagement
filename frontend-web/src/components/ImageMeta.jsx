@@ -33,4 +33,4 @@ function ImageMeta({ data, showFolder = false, folderName = "" }) {
   );
 }
 
-export default ImageMeta;
+export default React.memo(ImageMeta);

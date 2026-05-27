@@ -115,4 +115,4 @@ const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, onMoveToFold
   );
 };
 
-export default FolderCard;
+export default React.memo(FolderCard);

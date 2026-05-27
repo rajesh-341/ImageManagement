@@ -9,8 +9,8 @@ const isLocal = () => process.env.STORAGE_TYPE === 'local';
 
 const processBuffer = async (buffer) => {
   return sharp(buffer)
-    .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 85 })
+    .resize(1600, 900, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 80 })
     .toBuffer();
 };
 

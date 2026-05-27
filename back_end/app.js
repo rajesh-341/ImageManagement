@@ -7,6 +7,8 @@ const multer = require("multer");
 const cloudinary = require("./config/cloudinary");
 const { saveImage, isLocal } = require("./config/storage");
 const path = require("path");
+const archiver = require("archiver");
+const { PassThrough } = require("stream");
 require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
@@ -49,15 +51,16 @@ app.use(express.json({ limit: "50mb" }));
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "production" ? 10 : 100,
+  max: process.env.NODE_ENV === "production" ? 10 : 50,
   message: { message: "Too many login attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
 });
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "production" ? 100 : 500,
+  max: process.env.NODE_ENV === "production" ? 200 : 1000,
   message: { message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -222,8 +225,7 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
-    const archiver = require("archiver");
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = archiver("zip", { zlib: { level: 3 } });
 
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${sanitize(folderName)}_${Date.now()}.zip"`);
@@ -252,8 +254,14 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
     }
 
     archive.finalize();
+
+    archive.on("error", (err) => {
+      throw err;
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ message: error.message || "Download failed" });
+    }
   }
 });
 
@@ -273,8 +281,7 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
 
-    const archiver = require("archiver");
-    const archive = archiver("zip", { zlib: { level: 6 } });
+    const archive = archiver("zip", { zlib: { level: 3 } });
 
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="all_images_${Date.now()}.zip"`);
@@ -309,11 +316,13 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
 
     archive.finalize();
 
-    archive.on("finish", () => {
-      console.log(`[Download-All] Zipped ${processed}/${total} images`);
+    archive.on("error", (err) => {
+      throw err;
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ message: error.message || "Download failed" });
+    }
   }
 });
 
