@@ -747,14 +747,14 @@ function ImageManagement() {
     }
   };
 
-  const toggleImageSelection = (id) => {
+  const toggleImageSelection = useCallback((id) => {
     setSelectedImageIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
   const handleMoveImagesToFolder = async (targetFolderName, draggedImageId) => {
     const idsToMove = draggedImageId ? [parseInt(draggedImageId, 10)] : [...selectedImageIds];
@@ -926,7 +926,7 @@ function ImageManagement() {
     }
   };
 
-  const handleEditImage = (image) => {
+  const handleEditImage = useCallback((image) => {
     const data = image.image_data || {};
     setEditingImage(image);
     setEditData({
@@ -945,7 +945,7 @@ function ImageManagement() {
       priceMax: data.priceMax || "",
     });
     setShowEditModal(true);
-  };
+  }, []);
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
@@ -1125,8 +1125,6 @@ function ImageManagement() {
   const displayName = user?.displayName || user?.username || "User";
   const role = user?.role || "N/A";
 
-  const monthsShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
   const formatEventDate = useCallback((dateStr) => {
     if (!dateStr) return "";
     const d = new Date(dateStr);
@@ -1244,7 +1242,7 @@ function ImageManagement() {
         </div>
       </div>
     );
-  }, [favoriteImages, selectedImageIds, canEditDelete, toggleImageSelection, handleToggleFavorite, handleEditImage, handleDeleteImage, openLightbox, formatEventDate]);
+  }, [favoriteImages, selectedImageIds, canEditDelete, toggleImageSelection, handleEditImage, openLightbox, formatEventDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedFolders = React.useMemo(() => [...folders].sort((a, b) => {
     const dateA = new Date(a.created_at || a.createdAt || 0);

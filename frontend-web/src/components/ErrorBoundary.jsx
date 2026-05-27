@@ -11,24 +11,34 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Error caught:", error, errorInfo);
+    console.error("[ErrorBoundary]", error, errorInfo);
   }
-
-  handleRetry = () => {
-    this.setState({ hasError: false, error: null });
-  };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="error-boundary">
-          <div className="error-boundary-content">
-            <h2>Something went wrong</h2>
-            <p>{this.state.error?.message || "An unexpected error occurred"}</p>
-            <button onClick={this.handleRetry} className="btn btn-primary">
-              Try Again
-            </button>
-          </div>
+        <div style={{ padding: 40, textAlign: "center" }}>
+          <h2>Something went wrong</h2>
+          <p style={{ color: "#6b7280", margin: "12px 0" }}>
+            {this.state.error?.message || "An unexpected error occurred"}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            style={{
+              padding: "8px 24px",
+              background: "#DA87A9",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontSize: 14,
+            }}
+          >
+            Reload Page
+          </button>
         </div>
       );
     }

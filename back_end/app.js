@@ -2,7 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const compression = require("compression");
 const cookieParser = require("cookie-parser");
+const timeout = require("connect-timeout");
 const multer = require("multer");
 const cloudinary = require("./config/cloudinary");
 const { saveImage, isLocal } = require("./config/storage");
@@ -48,6 +50,11 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
+app.use(compression({ level: 6, threshold: 1024 }));
+app.use(timeout("30s"));
+app.use((req, res, next) => {
+  if (!req.timedout) next();
+});
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -232,25 +239,31 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 
     archive.pipe(res);
 
-    for (const row of imgResult.rows) {
+    const fetchPromises = imgResult.rows.map(async (row) => {
       const imgData = typeof row.image_data === "string"
         ? JSON.parse(row.image_data)
         : row.image_data;
 
-      if (!imgData || !imgData.imageUrl) continue;
+      if (!imgData || !imgData.imageUrl) return null;
 
       try {
-        const imageResponse = await fetch(imgData.imageUrl);
-        if (!imageResponse.ok) continue;
+        const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(10000) });
+        if (!imageResponse.ok) return null;
 
         const buffer = Buffer.from(await imageResponse.arrayBuffer());
         const urlParts = imgData.imageUrl.split("/");
         let filename = urlParts[urlParts.length - 1].split("?")[0];
         if (!filename) filename = `image_${row.id}.jpg`;
-        archive.append(buffer, { name: filename });
+        return { buffer, filename };
       } catch (err) {
         console.warn(`[Download-Folder] Skipping image ${row.id}: ${err.message}`);
+        return null;
       }
+    });
+
+    const results = await Promise.all(fetchPromises);
+    for (const r of results) {
+      if (r) archive.append(r.buffer, { name: r.filename });
     }
 
     archive.finalize();
@@ -291,26 +304,34 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
     let processed = 0;
     const total = imgResult.rows.length;
 
-    for (const row of imgResult.rows) {
+    const fetchPromises = imgResult.rows.map(async (row) => {
       const imgData = typeof row.image_data === "string"
         ? JSON.parse(row.image_data)
         : row.image_data;
 
-      if (!imgData || !imgData.imageUrl) continue;
+      if (!imgData || !imgData.imageUrl) return null;
 
       try {
-        const imageResponse = await fetch(imgData.imageUrl);
-        if (!imageResponse.ok) continue;
+        const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(10000) });
+        if (!imageResponse.ok) return null;
 
         const buffer = Buffer.from(await imageResponse.arrayBuffer());
         const folderPath = sanitize(row.folder_name);
         const urlParts = imgData.imageUrl.split("/");
         let filename = urlParts[urlParts.length - 1].split("?")[0];
         if (!filename) filename = `image_${row.id}.jpg`;
-        archive.append(buffer, { name: `${folderPath}/${filename}` });
-        processed++;
+        return { buffer, name: `${folderPath}/${filename}` };
       } catch (err) {
         console.warn(`[Download-All] Skipping image ${row.id}: ${err.message}`);
+        return null;
+      }
+    });
+
+    const results = await Promise.all(fetchPromises);
+    for (const r of results) {
+      if (r) {
+        archive.append(r.buffer, { name: r.name });
+        processed++;
       }
     }
 

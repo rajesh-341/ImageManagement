@@ -8,6 +8,13 @@ const pool = new Pool({
   port: parseInt(process.env.DB_PORT || '5432'),
   ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
   family: 4,
+  max: parseInt(process.env.DB_POOL_MAX || '20'),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+pool.on('error', (err) => {
+  console.error('[DB] Unexpected pool error:', err.message);
 });
 
 module.exports = pool;

@@ -1,4 +1,6 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const RETRY_DELAY = 1000;
+const MAX_RETRIES = 2;
 
 const getHeaders = (includeAuth = true) => {
   const headers = { "Content-Type": "application/json" };
@@ -12,7 +14,9 @@ const getHeaders = (includeAuth = true) => {
   return headers;
 };
 
-const request = async (endpoint, options = {}, includeAuth = true) => {
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const request = async (endpoint, options = {}, includeAuth = true, retries = MAX_RETRIES) => {
   const url = `${API_BASE_URL}${endpoint}`;
   const config = {
     ...options,
@@ -25,8 +29,19 @@ const request = async (endpoint, options = {}, includeAuth = true) => {
 
   let response;
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    config.signal = controller.signal;
     response = await fetch(url, config);
+    clearTimeout(timeoutId);
   } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out");
+    }
+    if (retries > 0) {
+      await wait(RETRY_DELAY);
+      return request(endpoint, options, includeAuth, retries - 1);
+    }
     throw new Error(`Network error: unable to reach server. Check that the backend is running and CORS is configured.`);
   }
 
@@ -38,6 +53,10 @@ const request = async (endpoint, options = {}, includeAuth = true) => {
   }
 
   if (!response.ok) {
+    if (response.status >= 500 && retries > 0) {
+      await wait(RETRY_DELAY);
+      return request(endpoint, options, includeAuth, retries - 1);
+    }
     throw new Error(data.message || "Request failed");
   }
 

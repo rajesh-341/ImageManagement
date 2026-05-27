@@ -1,9 +1,22 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { Suspense, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import LoginPage from "./pages/LoginPage";
-import ImageManagement from "./pages/ImageManagement";
 import ApiService from "./services/api";
+import ErrorBoundary from "./components/ErrorBoundary";
 import "./styles/colors.css";
+
+const LoginPage = React.lazy(() => import("./pages/LoginPage"));
+const ImageManagement = React.lazy(() => import("./pages/ImageManagement"));
+
+function PageLoader() {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100vh", background: "#0f172a", color: "#fff", fontSize: 16,
+    }}>
+      Loading...
+    </div>
+  );
+}
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 
@@ -48,22 +61,26 @@ function InactivityWrapper({ children }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LoginPage />} />
-        <Route
-          path="/images"
-          element={
-            <ProtectedRoute>
-              <InactivityWrapper>
-                <ImageManagement />
-              </InactivityWrapper>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={<LoginPage />} />
+            <Route
+              path="/images"
+              element={
+                <ProtectedRoute>
+                  <InactivityWrapper>
+                    <ImageManagement />
+                  </InactivityWrapper>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
