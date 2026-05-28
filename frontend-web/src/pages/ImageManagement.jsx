@@ -17,6 +17,17 @@ import "./ImageManagement.css";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
+const COMMON_SEARCH_LABELS = {
+  venue: "Venue",
+  eventType: "Event Type",
+  decorType: "Decoration Type",
+  priceRange: "Price Range",
+  size: "Size",
+  colour: "Colour",
+  flowerType: "Flower Type",
+  designName: "Design Name",
+  all: "All Fields",
+};
 
 function ImageManagement() {
   const [folders, setFolders] = useState([]);
@@ -918,11 +929,14 @@ function ImageManagement() {
         commonSearchPrevView.current = view;
       }
       const searchFilters = {};
-      if (commonSearchType === "designName") searchFilters.designName = term;
+      if (commonSearchType === "venue") searchFilters.placeOfEvent = term;
       else if (commonSearchType === "eventType") searchFilters.eventType = term;
       else if (commonSearchType === "decorType") searchFilters.decorType = term;
+      else if (commonSearchType === "priceRange") searchFilters.searchText = term;
+      else if (commonSearchType === "size") searchFilters.searchText = term;
+      else if (commonSearchType === "colour") searchFilters.colors = term;
       else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
-      else if (commonSearchType === "venue") searchFilters.placeOfEvent = term;
+      else if (commonSearchType === "designName") searchFilters.designName = term;
       else searchFilters.searchText = term;
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
@@ -939,10 +953,11 @@ function ImageManagement() {
   const fetchSuggestions = async (query) => {
     if (suggTimerRef.current) clearTimeout(suggTimerRef.current);
     if (!query.trim()) { setSearchSuggestions([]); setShowSuggestions(false); return; }
+    const sugFieldMap = { venue: "venueName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", designName: "designName", all: "designName" };
+    const field = sugFieldMap[commonSearchType];
+    if (!field) { setSearchSuggestions([]); setShowSuggestions(false); return; }
     suggTimerRef.current = setTimeout(async () => {
       try {
-        const fieldMap = { designName: "designName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", venue: "venueName", all: "designName" };
-        const field = fieldMap[commonSearchType] || "designName";
         const data = await ApiService.getSuggestions(field, query);
         setSearchSuggestions(data);
         setShowSuggestions(true);
@@ -1343,18 +1358,21 @@ function ImageManagement() {
                 value={commonSearchType}
                 onChange={(e) => setCommonSearchType(e.target.value)}
               >
-                <option value="designName">Design Name</option>
-                <option value="eventType">Event Type</option>
-                <option value="decorType">Decor Type</option>
-                <option value="flowerType">Flower Type</option>
                 <option value="venue">Venue</option>
+                <option value="eventType">Event Type</option>
+                <option value="decorType">Decoration Type</option>
+                <option value="priceRange">Price Range</option>
+                <option value="size">Size</option>
+                <option value="colour">Colour</option>
+                <option value="flowerType">Flower Type</option>
+                <option value="designName">Design Name</option>
                 <option value="all">All Fields</option>
               </select>
               <div className="common-search-input-wrap">
                 <input
                   type="text"
                   className="common-search-input"
-                  placeholder={`Search by ${commonSearchType}...`}
+                  placeholder={`Search ${COMMON_SEARCH_LABELS[commonSearchType] || commonSearchType}...`}
                   value={commonSearch}
                   onChange={(e) => {
                     setCommonSearch(e.target.value);
