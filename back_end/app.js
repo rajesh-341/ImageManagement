@@ -241,13 +241,16 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
     if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found in this folder" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
-
     const archive = archiver("zip", { zlib: { level: 3 } });
+    const chunks = [];
 
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${sanitize(folderName)}_${Date.now()}.zip"`);
+    archive.on("data", (chunk) => chunks.push(chunk));
+    archive.on("error", (err) => { throw err; });
 
-    archive.pipe(res);
+    const done = new Promise((resolve, reject) => {
+      archive.on("end", resolve);
+      archive.on("error", reject);
+    });
 
     const fetchWithRetry = async (row) => {
       const imgData = typeof row.image_data === "string"
@@ -289,10 +292,13 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
     }
 
     archive.finalize();
+    await done;
 
-    archive.on("error", (err) => {
-      throw err;
-    });
+    const zipBuffer = Buffer.concat(chunks);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${sanitize(folderName)}_${Date.now()}.zip"`);
+    res.setHeader("Content-Length", zipBuffer.length);
+    res.send(zipBuffer);
   } catch (error) {
     if (!res.headersSent) {
       res.status(500).json({ message: error.message || "Download failed" });
@@ -319,14 +325,16 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
     if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
-
     const archive = archiver("zip", { zlib: { level: 1 } });
+    const chunks = [];
 
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="all_images_${Date.now()}.zip"`);
-    res.setHeader("X-Content-Type-Options", "nosniff");
+    archive.on("data", (chunk) => chunks.push(chunk));
+    archive.on("error", (err) => { throw err; });
 
-    archive.pipe(res);
+    const done = new Promise((resolve, reject) => {
+      archive.on("end", resolve);
+      archive.on("error", reject);
+    });
 
     const fetchWithRetry = async (row) => {
       const imgData = typeof row.image_data === "string"
@@ -374,15 +382,15 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
     }
 
     archive.finalize();
+    await done;
 
-    archive.on("finish", () => {
-      console.log(`[Download-All] Completed: ${processed}/${total} images zipped (${archive.pointer()} bytes)`);
-    });
-
-    archive.on("error", (err) => {
-      console.error("[Download-All] Archive error:", err.message);
-      if (!res.headersSent) res.status(500).end();
-    });
+    console.log(`[Download-All] Completed: ${processed}/${total} images zipped`);
+    const zipBuffer = Buffer.concat(chunks);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="all_images_${Date.now()}.zip"`);
+    res.setHeader("Content-Length", zipBuffer.length);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.send(zipBuffer);
   } catch (error) {
     console.error("[Download-All] Fatal:", error.message);
     if (!res.headersSent) {

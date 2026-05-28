@@ -12,6 +12,7 @@ import {
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
   BATCH_COLORS, SAME_FIELDS,
 } from "../constants";
+import { downloadAsPDF } from "../utils/pdfGenerator";
 import "./ImageManagement.css";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
@@ -60,6 +61,7 @@ function ImageManagement() {
   const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("designName");
+  const commonSearchPrevView = useRef(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
   const [editData, setEditData] = useState({});
@@ -77,6 +79,7 @@ function ImageManagement() {
   const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
+  const [downloadModalContext, setDownloadModalContext] = useState(null);
   const [showOtherServices, setShowOtherServices] = useState(false);
   const [otherServicesTab, setOtherServicesTab] = useState("");
   const [customEventTypes, setCustomEventTypes] = useState([]);
@@ -717,40 +720,96 @@ function ImageManagement() {
     }
   };
 
-  const openDownloadModal = () => {
+  const openDownloadModal = (context = null) => {
+    setDownloadModalContext(context);
     return new Promise((resolve) => {
       setDownloadResolve(() => resolve);
       setShowDownloadModal(true);
     });
   };
 
-  const handleDownloadChoice = (useCustom) => {
+  const handleDownloadChoice = (choice) => {
     setShowDownloadModal(false);
+    setDownloadModalContext(null);
     if (downloadResolve) {
-      downloadResolve(useCustom);
+      downloadResolve(choice);
       setDownloadResolve(null);
     }
   };
 
+  const getImageListForPDF = (context) => {
+    if (context === "filtered") return filteredImages;
+    if (context === "favorites") return favoriteImages;
+    if (context === "allImages") return allImages;
+    if (context === "folder") return images;
+    return [];
+  };
+
   const handleDownloadFolder = async (folderName) => {
-    try {
-      showNotif("Preparing folder download...", "warning");
-      await ApiService.downloadFolder(folderName);
-      showNotif("Folder download complete", "success");
-    } catch (err) {
-      showNotif(err.message || "Download failed");
+    const choice = await openDownloadModal("folder");
+    if (!choice) return;
+    if (choice === "image") {
+      try {
+        showNotif("Preparing folder download...", "warning");
+        await ApiService.downloadFolder(folderName);
+        showNotif("Folder download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "Download failed");
+      }
+    } else {
+      try {
+        showNotif("Preparing PDF...", "warning");
+        await downloadAsPDF(images);
+        showNotif("PDF download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "PDF generation failed");
+      }
     }
   };
 
   const handleBulkDownload = async () => {
     if (selectedImageIds.size === 0) return;
-    const useCustom = await openDownloadModal();
-    if (useCustom === undefined) return;
-    for (const id of selectedImageIds) {
+    const choice = await openDownloadModal("bulk");
+    if (!choice) return;
+    if (choice === "image") {
+      for (const id of selectedImageIds) {
+        try {
+          await ApiService.downloadImage(id, false);
+        } catch (err) {
+          showNotif(`Failed to download image ${id}: ${err.message}`);
+        }
+      }
+    } else {
       try {
-        await ApiService.downloadImage(id, useCustom);
+        showNotif("Preparing PDF...", "warning");
+        const allImgs = allImages.length > 0 ? allImages : images;
+        const selectedImgs = allImgs.filter((img) => selectedImageIds.has(img.id));
+        await downloadAsPDF(selectedImgs);
+        showNotif("PDF download complete", "success");
       } catch (err) {
-        showNotif(`Failed to download image ${id}: ${err.message}`);
+        showNotif(err.message || "PDF generation failed");
+      }
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    const choice = await openDownloadModal("allImages");
+    if (!choice) return;
+    if (choice === "image") {
+      try {
+        showNotif("Preparing download...", "warning");
+        await ApiService.downloadAllImages();
+        showNotif("Download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "Download failed");
+      }
+    } else {
+      try {
+        showNotif("Preparing PDF...", "warning");
+        await downloadAsPDF(allImages);
+        showNotif("PDF download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "PDF generation failed");
       }
     }
   };
@@ -859,9 +918,15 @@ function ImageManagement() {
     try {
       if (!term.trim()) {
         setFilteredImages([]);
-        setView("folders");
+        if (commonSearchPrevView.current) {
+          setView(commonSearchPrevView.current);
+          commonSearchPrevView.current = null;
+        }
         setLoading(false);
         return;
+      }
+      if (view !== "filtered") {
+        commonSearchPrevView.current = view;
       }
       const searchFilters = {};
       if (commonSearchType === "designName") searchFilters.designName = term;
@@ -1335,15 +1400,7 @@ function ImageManagement() {
               Filter
             </button>
             {canDownloadAll && (
-              <button className="btn btn-download-all" onClick={async () => {
-                try {
-                  showNotif("Preparing download...", "warning");
-                  await ApiService.downloadAllImages();
-                  showNotif("Download complete", "warning");
-                } catch (err) {
-                  showNotif(err.message || "Download failed");
-                }
-              }}>
+              <button className="btn btn-download-all" onClick={handleDownloadAll}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>
@@ -1614,8 +1671,8 @@ function ImageManagement() {
         <div className="navbar-brand">Event Management</div>
         <div className="navbar-right">
           <div className="nav-menu">
-            <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
-            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); loadAllImages(); }}>IMAGES</button>
+            <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
+            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); loadAllImages(); }}>IMAGES</button>
             {canUpload && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
@@ -2335,9 +2392,15 @@ function ImageManagement() {
                 handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
               }}>Edit</button>
               <button className="btn btn-secondary btn-sm" onClick={async () => {
-                const useCustom = await openDownloadModal();
-                if (useCustom === undefined) return;
-                ApiService.downloadImage(lightboxImage.id, useCustom).catch(err => showNotif(err.message));
+                const choice = await openDownloadModal("single");
+                if (!choice) return;
+                if (choice === "image") {
+                  ApiService.downloadImage(lightboxImage.id, false).catch(err => showNotif(err.message));
+                } else {
+                  showNotif("Preparing PDF...", "warning");
+                  await downloadAsPDF([lightboxImage]);
+                  showNotif("PDF download complete", "success");
+                }
               }}>Download</button>
               <button className={`btn btn-sm ${lightboxImage.isFav ? "btn-fav-active" : "btn-secondary"}`}
                 onClick={() => {
@@ -2729,37 +2792,38 @@ function ImageManagement() {
 
       {/* Download Modal */}
       {showDownloadModal && (
-        <div className="modal-overlay" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>
+        <div className="modal-overlay" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>
           <div className="modal download-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Download Image</h2>
-              <button className="modal-close" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>×</button>
+              <h2 className="modal-title">Download Options</h2>
+              <button className="modal-close" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>×</button>
             </div>
             <div className="modal-body">
-              <p className="download-modal-desc">Choose how you want to save the image:</p>
+              <p className="download-modal-desc">Select the download format:</p>
               <div className="download-options">
-                <button className="download-option-btn" onClick={() => handleDownloadChoice(true)}>
-                  <span className="download-option-icon">
-                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M21 21H3M18 13l-6 6-6-6M12 3v16"/>
-                    </svg>
-                  </span>
-                  <span className="download-option-label">Custom Path</span>
-                  <span className="download-option-desc">Choose where to save the file</span>
-                </button>
-                <button className="download-option-btn" onClick={() => handleDownloadChoice(false)}>
+                <button className="download-option-btn" onClick={() => handleDownloadChoice("image")}>
                   <span className="download-option-icon">
                     <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
                     </svg>
                   </span>
-                  <span className="download-option-label">Default Path</span>
-                  <span className="download-option-desc">Save to browser's default download folder</span>
+                  <span className="download-option-label">Image Only</span>
+                  <span className="download-option-desc">Download as image file</span>
+                </button>
+                <button className="download-option-btn" onClick={() => handleDownloadChoice("pdf")}>
+                  <span className="download-option-icon">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6"/>
+                      <path d="M9 15h6M9 12h6M9 18h4"/>
+                    </svg>
+                  </span>
+                  <span className="download-option-label">Image with Features</span>
+                  <span className="download-option-desc">Download as PDF with specifications</span>
                 </button>
               </div>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(undefined); setDownloadResolve(null); } }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>Cancel</button>
             </div>
           </div>
         </div>
