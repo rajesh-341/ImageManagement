@@ -79,7 +79,6 @@ function ImageManagement() {
   const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
-  const [downloadModalContext, setDownloadModalContext] = useState(null);
   const [showOtherServices, setShowOtherServices] = useState(false);
   const [otherServicesTab, setOtherServicesTab] = useState("");
   const [customEventTypes, setCustomEventTypes] = useState([]);
@@ -720,8 +719,7 @@ function ImageManagement() {
     }
   };
 
-  const openDownloadModal = (context = null) => {
-    setDownloadModalContext(context);
+  const openDownloadModal = () => {
     return new Promise((resolve) => {
       setDownloadResolve(() => resolve);
       setShowDownloadModal(true);
@@ -730,23 +728,14 @@ function ImageManagement() {
 
   const handleDownloadChoice = (choice) => {
     setShowDownloadModal(false);
-    setDownloadModalContext(null);
     if (downloadResolve) {
       downloadResolve(choice);
       setDownloadResolve(null);
     }
   };
 
-  const getImageListForPDF = (context) => {
-    if (context === "filtered") return filteredImages;
-    if (context === "favorites") return favoriteImages;
-    if (context === "allImages") return allImages;
-    if (context === "folder") return images;
-    return [];
-  };
-
   const handleDownloadFolder = async (folderName) => {
-    const choice = await openDownloadModal("folder");
+    const choice = await openDownloadModal();
     if (!choice) return;
     if (choice === "image") {
       try {
@@ -769,7 +758,7 @@ function ImageManagement() {
 
   const handleBulkDownload = async () => {
     if (selectedImageIds.size === 0) return;
-    const choice = await openDownloadModal("bulk");
+    const choice = await openDownloadModal();
     if (!choice) return;
     if (choice === "image") {
       for (const id of selectedImageIds) {
@@ -793,7 +782,7 @@ function ImageManagement() {
   };
 
   const handleDownloadAll = async () => {
-    const choice = await openDownloadModal("allImages");
+    const choice = await openDownloadModal();
     if (!choice) return;
     if (choice === "image") {
       try {
@@ -2392,7 +2381,7 @@ function ImageManagement() {
                 handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
               }}>Edit</button>
               <button className="btn btn-secondary btn-sm" onClick={async () => {
-                const choice = await openDownloadModal("single");
+                const choice = await openDownloadModal();
                 if (!choice) return;
                 if (choice === "image") {
                   ApiService.downloadImage(lightboxImage.id, false).catch(err => showNotif(err.message));
@@ -2792,11 +2781,11 @@ function ImageManagement() {
 
       {/* Download Modal */}
       {showDownloadModal && (
-        <div className="modal-overlay" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>
+        <div className="modal-overlay" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); } }}>
           <div className="modal download-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Download Options</h2>
-              <button className="modal-close" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>×</button>
+              <button className="modal-close" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); } }}>×</button>
             </div>
             <div className="modal-body">
               <p className="download-modal-desc">Select the download format:</p>
@@ -2823,7 +2812,7 @@ function ImageManagement() {
               </div>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); setDownloadModalContext(null); } }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowDownloadModal(false); if (downloadResolve) { downloadResolve(null); setDownloadResolve(null); } }}>Cancel</button>
             </div>
           </div>
         </div>

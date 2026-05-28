@@ -10,7 +10,7 @@ const cloudinary = require("./config/cloudinary");
 const { saveImage, isLocal } = require("./config/storage");
 const path = require("path");
 const archiver = require("archiver");
-const { PassThrough } = require("stream");
+
 require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
@@ -245,11 +245,8 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
     const chunks = [];
 
     archive.on("data", (chunk) => chunks.push(chunk));
-    archive.on("error", (err) => { throw err; });
-
-    const done = new Promise((resolve, reject) => {
-      archive.on("end", resolve);
-      archive.on("error", reject);
+    archive.on("error", (err) => {
+      console.error("[Download-Folder] Archive error:", err.message);
     });
 
     const fetchWithRetry = async (row) => {
@@ -291,8 +288,7 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
       }
     }
 
-    archive.finalize();
-    await done;
+    await archive.finalize();
 
     const zipBuffer = Buffer.concat(chunks);
     res.setHeader("Content-Type", "application/zip");
@@ -329,11 +325,8 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
     const chunks = [];
 
     archive.on("data", (chunk) => chunks.push(chunk));
-    archive.on("error", (err) => { throw err; });
-
-    const done = new Promise((resolve, reject) => {
-      archive.on("end", resolve);
-      archive.on("error", reject);
+    archive.on("error", (err) => {
+      console.error("[Download-All] Archive error:", err.message);
     });
 
     const fetchWithRetry = async (row) => {
@@ -381,8 +374,7 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
       }
     }
 
-    archive.finalize();
-    await done;
+    await archive.finalize();
 
     console.log(`[Download-All] Completed: ${processed}/${total} images zipped`);
     const zipBuffer = Buffer.concat(chunks);
