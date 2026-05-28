@@ -71,7 +71,7 @@ function ImageManagement() {
   const [editFolderDate, setEditFolderDate] = useState("");
   const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
   const [commonSearch, setCommonSearch] = useState("");
-  const [commonSearchType, setCommonSearchType] = useState("designName");
+  const [commonSearchType, setCommonSearchType] = useState("venue");
   const commonSearchPrevView = useRef(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
@@ -95,6 +95,9 @@ function ImageManagement() {
   const [customEventTypes, setCustomEventTypes] = useState([]);
   const [customDecorTypes, setCustomDecorTypes] = useState([]);
   const [newEventType, setNewEventType] = useState("");
+  const [customETInput, setCustomETInput] = useState("");
+  const [customFavETInput, setCustomFavETInput] = useState("");
+  const [customEditETInput, setCustomEditETInput] = useState("");
   const [newDecorType, setNewDecorType] = useState("");
   const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
   const [showFavEventTypeDropdown, setShowFavEventTypeDropdown] = useState(false);
@@ -233,8 +236,8 @@ function ImageManagement() {
   };
 
   const loadImages = async (pageNum = 1, append = false) => {
-    if (!currentFolder) { setImages([]); return; }
-    if (isUploading.current) return;
+    if (!currentFolder) { setImages([]); return []; }
+    if (isUploading.current) return [];
     setLoading(true);
     try {
       const result = await ApiService.getImages(currentFolder.name, pageNum, 50);
@@ -245,8 +248,10 @@ function ImageManagement() {
       }
       setPage(pageNum);
       setHasMore(result.hasMore);
+      return result.images;
     } catch (err) {
       if (!isUploading.current) showNotif("Something went wrong");
+      return [];
     } finally {
       isUploading.current = false;
       setLoading(false);
@@ -700,15 +705,18 @@ function ImageManagement() {
 
   const handleDeleteImage = async (id) => {
     if (!window.confirm("Delete this image?")) return;
-    setLoading(true);
+    setImages(prev => prev.filter(img => img.id !== id));
+    setAllImages(prev => prev.filter(img => img.id !== id));
+    setFilteredImages(prev => prev.filter(img => img.id !== id));
+    setFavoriteImages(prev => prev.filter(img => img.id !== id));
+    setSelectedImageIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     try {
       await ApiService.deleteImage(id);
-      loadImages();
-      if (showFavorites) loadFavorites(selectedFavFolder?.name);
+      if (currentFolder) await loadImages();
+      if (showFavorites) await loadFavorites(selectedFavFolder?.name);
     } catch (err) {
+      if (currentFolder) await loadImages();
       showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -760,6 +768,29 @@ function ImageManagement() {
       try {
         showNotif("Preparing PDF...", "warning");
         await downloadAsPDF(images);
+        showNotif("PDF download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "PDF generation failed");
+      }
+    }
+  };
+
+  const handleDownloadFavoriteFolder = async (folder) => {
+    const choice = await openDownloadModal();
+    if (!choice) return;
+    if (choice === "image") {
+      try {
+        showNotif("Preparing favorite folder download...", "warning");
+        await ApiService.downloadFavoriteFolder(folder.id);
+        showNotif("Download complete", "success");
+      } catch (err) {
+        showNotif(err.message || "Download failed");
+      }
+    } else {
+      try {
+        showNotif("Preparing PDF...", "warning");
+        const favImgs = favoriteFolders.length > 0 ? favoriteImages : [];
+        await downloadAsPDF(favImgs);
         showNotif("PDF download complete", "success");
       } catch (err) {
         showNotif(err.message || "PDF generation failed");
@@ -1046,22 +1077,23 @@ function ImageManagement() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingImage) return;
-    setLoading(true);
+    const sizeDisplay = buildSizeDisplay(editData.sizeWidth, editData.sizeLength, editData.sizeHeight, editData.sizeUnit);
+    const updatedImageData = { ...editingImage.image_data, ...editData, sizeDisplay };
+    const optimisticImage = { ...editingImage, image_data: updatedImageData };
+    setImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
+    setAllImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
+    setFilteredImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
+    setFavoriteImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
+    setShowEditModal(false);
+    setEditingImage(null);
     try {
-      const sizeDisplay = buildSizeDisplay(editData.sizeWidth, editData.sizeLength, editData.sizeHeight, editData.sizeUnit);
-      await ApiService.updateImage(editingImage.id, {
-        ...editData,
-        sizeDisplay,
-      });
-      setShowEditModal(false);
-      setEditingImage(null);
-      loadImages();
-      if (showFavorites) loadFavorites(selectedFavFolder?.name);
-      if (view === "images") loadAllImages();
+      await ApiService.updateImage(editingImage.id, { ...editData, sizeDisplay });
+      if (currentFolder) await loadImages();
+      if (showFavorites) await loadFavorites(selectedFavFolder?.name);
+      if (view === "images") await loadAllImages();
     } catch (err) {
+      if (currentFolder) await loadImages();
       showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -1257,7 +1289,7 @@ function ImageManagement() {
     return "";
   };
 
-  const renderImageCard = useCallback((image, index, imageArray) => {
+  const renderImageCard = useCallback((image, index, imageArray, showActions = true) => {
     const rawUrl = image.image_data?.imageUrl || "";
     const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/w_300,h_200,c_fill,f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
     const isFav = favoriteImages.some(fav => fav.id === image.id);
@@ -1312,6 +1344,7 @@ function ImageManagement() {
           ) : (
             <div className="image-card-placeholder">No Image</div>
           )}
+          {showActions && (
           <div className="image-card-hover-actions">
             {canEditDelete && (
               <>
@@ -1320,6 +1353,7 @@ function ImageManagement() {
               </>
             )}
           </div>
+          )}
           <div className="image-card-hover-details">
             {data.designName && <div className="hover-detail"><span>Design</span> {data.designName}</div>}
             {data.decorType && <div className="hover-detail"><span>Decor</span> {data.decorType}</div>}
@@ -1535,12 +1569,22 @@ function ImageManagement() {
   const renderFavoritesContent = () => (
     <div className="favorites-view">
       <div className="action-bar">
-        <h2>{selectedFavFolder ? parseFolderName(selectedFavFolder.name).customerName || selectedFavFolder.name : "★ Favorites"}</h2>
-        <div className="action-bar-buttons">
-          <button className="btn btn-secondary" onClick={() => setShowFavorites(false)}>← Home</button>
+        <div className="action-bar-title">
           {selectedFavFolder && (
-            <button className="btn btn-secondary" onClick={handleBackFromFavFolder}>Back</button>
+            <button className="btn-icon back-icon" onClick={handleBackFromFavFolder} title="Back">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
           )}
+          <h2>{selectedFavFolder ? parseFolderName(selectedFavFolder.name).customerName || selectedFavFolder.name : "★ Favorites"}</h2>
+        </div>
+        <div className="action-bar-buttons">
+          <button className="btn-icon home-icon" onClick={() => setShowFavorites(false)} title="Home">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -1563,7 +1607,7 @@ function ImageManagement() {
               onMoveToFolder={handleMoveImagesToFolder}
               onClick={() => handleEnterFavoriteFolder(folder)}
               onDelete={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}
-              onDownload={(f) => handleDownloadFolder(f.name)}
+              onDownload={(f) => handleDownloadFavoriteFolder(f)}
             />
           ))}
         </div>
@@ -1575,7 +1619,7 @@ function ImageManagement() {
         <>
       {selectedImageIds.size > 0 && renderSelectionToolbar(favoriteImages)}
           <div className="favorites-images-grid">
-            {chunkedFavorites.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFavorites.visibleItems))}
+            {chunkedFavorites.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFavorites.visibleItems, false))}
             {chunkedFavorites.totalCount > chunkedFavorites.visibleCount && (
               <div className="loading-more" style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 13 }}>
                 Loading more favorites...
@@ -1817,6 +1861,28 @@ function ImageManagement() {
                   </div>
                   {showEventTypeDropdown && (
                     <div className="custom-multiselect-dropdown">
+                      <div className="custom-multiselect-input-row">
+                        <input type="text" className="input input-sm" placeholder="Type custom..." value={customETInput}
+                          onChange={(e) => setCustomETInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && customETInput.trim()) {
+                              e.preventDefault(); e.stopPropagation();
+                              const val = customETInput.trim();
+                              if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                              setFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                              setCustomETInput("");
+                            }
+                          }} />
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!customETInput.trim()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const val = customETInput.trim();
+                            if (!val) return;
+                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                            setFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                            setCustomETInput("");
+                          }}>Add</button>
+                      </div>
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${folderEventTypes.includes(type) ? "selected" : ""}`}
                           onClick={(e) => {
@@ -1915,6 +1981,28 @@ function ImageManagement() {
                   </div>
                   {showFavEventTypeDropdown && (
                     <div className="custom-multiselect-dropdown">
+                      <div className="custom-multiselect-input-row">
+                        <input type="text" className="input input-sm" placeholder="Type custom..." value={customFavETInput}
+                          onChange={(e) => setCustomFavETInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && customFavETInput.trim()) {
+                              e.preventDefault(); e.stopPropagation();
+                              const val = customFavETInput.trim();
+                              if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                              setFavFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                              setCustomFavETInput("");
+                            }
+                          }} />
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!customFavETInput.trim()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const val = customFavETInput.trim();
+                            if (!val) return;
+                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                            setFavFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                            setCustomFavETInput("");
+                          }}>Add</button>
+                      </div>
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${favFolderEventTypes.includes(type) ? "selected" : ""}`}
                           onClick={(e) => {
@@ -1999,6 +2087,28 @@ function ImageManagement() {
                   </div>
                   {showEditEventTypeDropdown && (
                     <div className="custom-multiselect-dropdown">
+                      <div className="custom-multiselect-input-row">
+                        <input type="text" className="input input-sm" placeholder="Type custom..." value={customEditETInput}
+                          onChange={(e) => setCustomEditETInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && customEditETInput.trim()) {
+                              e.preventDefault(); e.stopPropagation();
+                              const val = customEditETInput.trim();
+                              if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                              setEditFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                              setCustomEditETInput("");
+                            }
+                          }} />
+                        <button type="button" className="btn btn-primary btn-sm" disabled={!customEditETInput.trim()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const val = customEditETInput.trim();
+                            if (!val) return;
+                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                            setEditFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                            setCustomEditETInput("");
+                          }}>Add</button>
+                      </div>
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${editFolderEventTypes.includes(type) ? "selected" : ""}`}
                           onClick={(e) => {
@@ -2546,7 +2656,7 @@ function ImageManagement() {
                             <td className="password-cell">
                               <div className="password-wrapper">
                                 <span className="password-text">
-                                  {visiblePasswords.has(user.id) && user.password ? user.password : "••••••••"}
+                                  {visiblePasswords.has(user.id) ? (user.password || "(no password)") : "••••••••"}
                                 </span>
                                 <button
                                   className="password-toggle-btn"

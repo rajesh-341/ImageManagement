@@ -351,6 +351,31 @@ const ApiService = {
     return { success: true };
   },
 
+  async downloadFavoriteFolder(folderId) {
+    const url = `${API_BASE_URL}/download-favorite-folder/${folderId}`;
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Download failed");
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = `favorite_folder_${folderId}_${Date.now()}.zip`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    return { success: true };
+  },
+
   async downloadAllImages() {
     const url = `${API_BASE_URL}/download-all`;
     const response = await fetch(url, { credentials: "include" });

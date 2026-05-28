@@ -275,6 +275,39 @@
   margin: 0;
 }
 
+.action-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-icon:hover {
+  background: rgba(0,0,0,0.06);
+  color: #1a1a1a;
+}
+
+.btn-icon.home-icon:hover {
+  color: var(--primary-dark);
+}
+
+.btn-icon.back-icon:hover {
+  color: var(--secondary-dark);
+}
+
 /* Folder Header with Back Button */
 .folder-header {
   display: flex;
@@ -664,18 +697,28 @@
   inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  gap: 2px;
-  padding: 8px;
+  gap: 1px;
+  padding: 10px 6px;
   background: rgba(0,0,0,0.7);
   opacity: 0;
   transition: opacity 0.05s ease;
   text-align: center;
   z-index: 3;
-  pointer-events: none;
   will-change: opacity;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.3) transparent;
+}
+
+.image-card-hover-details::-webkit-scrollbar {
+  width: 4px;
+}
+
+.image-card-hover-details::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.3);
+  border-radius: 2px;
 }
 
 .image-card-img-wrap:hover .image-card-hover-details {
@@ -3951,9 +3994,33 @@
   border: 1px solid #d1d5db;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
   margin-top: 4px;
+}
+
+.custom-multiselect-input-row {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.custom-multiselect-input-row .input-sm {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  outline: none;
+}
+
+.custom-multiselect-input-row .input-sm:focus {
+  border-color: var(--primary);
 }
 
 .custom-multiselect-option {
