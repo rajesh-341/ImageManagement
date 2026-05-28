@@ -44,89 +44,114 @@ const buildSizeLabeled = (data) => {
   return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "") || data.sizeDisplay || "";
 };
 
+const truncateText = (text, maxWidth, doc) => {
+  if (!text) return "";
+  const str = String(text);
+  const textWidth = doc.getTextWidth(str);
+  if (textWidth <= maxWidth) return str;
+  let truncated = str;
+  while (truncated.length > 0 && doc.getTextWidth(truncated + "..") > maxWidth) {
+    truncated = truncated.slice(0, -1);
+  }
+  return truncated + "..";
+};
+
 export const generateImagePDF = async (images) => {
   const doc = new jsPDF("landscape", "mm", "a4");
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
+  const PAGE_W = 297;
+  const MARGIN = 12;
+  const CARDS_PER_PAGE = 3;
+  const CARD_H = 56;
+  const CARD_GAP = 5;
+  const IMG_SIZE = 40;
+  const COLS = 3;
+  const ROW_H = 7;
 
   for (let i = 0; i < images.length; i++) {
-    const img = images[i];
-    const data = img.image_data || {};
+    const cardIndex = i % CARDS_PER_PAGE;
 
-    if (i > 0) doc.addPage();
+    if (i > 0 && cardIndex === 0) doc.addPage();
 
-    const rawUrl = data.imageUrl || "";
-    const fullUrl = getFullImageUrl(rawUrl);
-
-    try {
-      const imgData = await fetchImageAsBase64(fullUrl);
-
-      const margin = 15;
-      const imgW = 100;
-      const imgH = 75;
-      const imgX = margin;
-      const imgY = margin + 15;
-
-      doc.setFontSize(16);
+    if (cardIndex === 0) {
+      doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text("Image Specification Report", pageW / 2, 12, { align: "center" });
+      doc.setTextColor(40, 40, 40);
+      doc.text("Image Specification Report", PAGE_W / 2, 9, { align: "center" });
 
       doc.setDrawColor(213, 100, 147);
       doc.setLineWidth(0.5);
-      doc.line(margin, 14, pageW - margin, 14);
+      doc.line(MARGIN, 12, PAGE_W - MARGIN, 12);
+    }
 
-      doc.addImage(imgData, "JPEG", imgX, imgY, imgW, imgH);
+    const img = images[i];
+    const data = img.image_data || {};
+    const cardY = 17 + cardIndex * (CARD_H + CARD_GAP);
+    const imgX = MARGIN;
+    const imgY = cardY + 3;
 
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Design Name:", imgX + imgW + 10, imgY + 8);
-      doc.setFont("helvetica", "normal");
-      doc.text(data.designName || "Untitled", imgX + imgW + 10, imgY + 16);
-
-      const specs = [
-        { label: "Design Name", value: data.designName },
-        { label: "Event Type", value: data.eventType },
-        { label: "Decor Type", value: data.decorType },
-        { label: "Flower Type", value: data.flowerType },
-        { label: "Size", value: buildSizeLabeled(data) },
-        { label: "Price", value: formatPriceStr(data.priceMin, data.priceMax) },
-        { label: "Colors", value: data.colourCombination?.join(", ") },
-        { label: "Customer", value: data.venueCustomer },
-        { label: "Venue", value: data.venueName },
-        { label: "Date", value: formatDate(data.venueDate) },
-        { label: "Folder", value: img.folder_name || data.folderName },
-      ];
-
-      const validSpecs = specs.filter((s) => s.value);
-
-      let yPos = imgY + imgH + 15;
-      const col1X = margin;
-      const col2X = margin + (pageW - 2 * margin) / 2;
-
-      validSpecs.forEach((spec, idx) => {
-        const col = idx < Math.ceil(validSpecs.length / 2) ? 0 : 1;
-        const x = col === 0 ? col1X : col2X;
-        const row = col === 0 ? idx : idx - Math.ceil(validSpecs.length / 2);
-        const y = yPos + row * 9;
-
-        if (y > pageH - 20) return;
-
-        doc.setDrawColor(230, 230, 230);
-        doc.setLineWidth(0.2);
-        doc.line(x, y - 1, x + (pageW - 2 * margin) / 2 - 10, y - 1);
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.text(spec.label + ":", x + 2, y + 4);
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
-        doc.text(spec.value || "-", x + 2, y + 12);
-      });
+    try {
+      const rawUrl = data.imageUrl || "";
+      const fullUrl = getFullImageUrl(rawUrl);
+      const imgData = await fetchImageAsBase64(fullUrl);
+      doc.addImage(imgData, "JPEG", imgX, imgY, IMG_SIZE, IMG_SIZE);
     } catch {
-      doc.setFontSize(12);
+      doc.setDrawColor(210, 210, 210);
+      doc.setFillColor(248, 248, 248);
+      doc.rect(imgX, imgY, IMG_SIZE, IMG_SIZE, "FD");
+      doc.setFontSize(7);
       doc.setFont("helvetica", "italic");
-      doc.text("Image could not be loaded for this entry.", 15, 40);
+      doc.setTextColor(180, 180, 180);
+      doc.text("No Image", imgX + IMG_SIZE / 2, imgY + IMG_SIZE / 2 + 1, { align: "center" });
+    }
+
+    const specX = imgX + IMG_SIZE + 7;
+    const specW = PAGE_W - MARGIN - specX;
+    const colW = specW / COLS;
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(50, 50, 50);
+    doc.text(data.designName || "Untitled", specX, cardY + 7);
+
+    const specs = [
+      { label: "Event", value: data.eventType },
+      { label: "Decor", value: data.decorType },
+      { label: "Flower", value: data.flowerType },
+      { label: "Size", value: buildSizeLabeled(data) },
+      { label: "Price", value: formatPriceStr(data.priceMin, data.priceMax) },
+      { label: "Colours", value: data.colourCombination?.join(", ") },
+      { label: "Customer", value: data.venueCustomer },
+      { label: "Venue", value: data.venueName },
+      { label: "Date", value: formatDate(data.venueDate) },
+      { label: "Folder", value: img.folder_name || data.folderName },
+    ].filter((s) => s.value);
+
+    const specStartY = cardY + 13;
+
+    specs.forEach((spec, idx) => {
+      const col = idx % COLS;
+      const row = Math.floor(idx / COLS);
+      const x = specX + col * colW;
+      const y = specStartY + row * ROW_H;
+
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(140, 140, 140);
+      doc.text(spec.label, x, y);
+
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      const valMaxWidth = colW - 2;
+      const displayVal = truncateText(spec.value || "-", valMaxWidth, doc);
+      doc.text(displayVal, x, y + 3.2);
+    });
+
+    if (cardIndex < CARDS_PER_PAGE - 1 && i < images.length - 1) {
+      const sepY = cardY + CARD_H + CARD_GAP / 2;
+      doc.setDrawColor(225, 225, 225);
+      doc.setLineWidth(0.2);
+      doc.line(MARGIN, sepY, PAGE_W - MARGIN, sepY);
     }
   }
 
