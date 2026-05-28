@@ -4,20 +4,46 @@ const getFullImageUrl = (rawUrl) => {
   if (!rawUrl) return "";
   const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/api$/, "");
   if (rawUrl.startsWith("http")) {
-    return rawUrl.replace("/upload/", "/upload/f_auto,q_auto/");
+    return rawUrl;
   }
   return `${API_BASE}${rawUrl}`;
 };
 
-const fetchImageAsBase64 = async (url) => {
+const fetchBlob = async (url) => {
   const response = await fetch(url);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.blob();
+};
+
+const blobToImage = (blob) => new Promise((resolve, reject) => {
+  const img = new Image();
+  const url = URL.createObjectURL(blob);
+  img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+  img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image decode failed")); };
+  img.src = url;
+});
+
+const imageToJpegDataUrl = (img, quality = 0.85) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL("image/jpeg", quality);
+};
+
+const fetchImageAsJpeg = async (url) => {
+  const blob = await fetchBlob(url);
+  if (blob.type === "image/jpeg") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  const img = await blobToImage(blob);
+  return imageToJpegDataUrl(img);
 };
 
 const formatDate = (dateStr) => {
@@ -92,8 +118,12 @@ export const generateImagePDF = async (images) => {
     try {
       const rawUrl = data.imageUrl || "";
       const fullUrl = getFullImageUrl(rawUrl);
-      const imgData = await fetchImageAsBase64(fullUrl);
-      doc.addImage(imgData, "JPEG", imgX, imgY, IMG_SIZE, IMG_SIZE);
+      if (fullUrl) {
+        const jpegData = await fetchImageAsJpeg(fullUrl);
+        doc.addImage(jpegData, "JPEG", imgX, imgY, IMG_SIZE, IMG_SIZE);
+      } else {
+        throw new Error("No image URL");
+      }
     } catch {
       doc.setDrawColor(210, 210, 210);
       doc.setFillColor(248, 248, 248);

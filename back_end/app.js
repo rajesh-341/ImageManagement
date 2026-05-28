@@ -9,7 +9,7 @@ const multer = require("multer");
 const cloudinary = require("./config/cloudinary");
 const { saveImage, isLocal } = require("./config/storage");
 const path = require("path");
-const archiver = require("archiver");
+const { ZipArchive } = require("archiver");
 
 require("dotenv").config();
 
@@ -241,7 +241,7 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
     if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found in this folder" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
-    const archive = archiver("zip", { zlib: { level: 3 } });
+    const archive = new ZipArchive({ zlib: { level: 3 } });
     const chunks = [];
 
     archive.on("data", (chunk) => chunks.push(chunk));
@@ -321,7 +321,7 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
     if (imgResult.rows.length === 0) return res.status(404).json({ message: "No images found" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
-    const archive = archiver("zip", { zlib: { level: 1 } });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
     const chunks = [];
 
     archive.on("data", (chunk) => chunks.push(chunk));
