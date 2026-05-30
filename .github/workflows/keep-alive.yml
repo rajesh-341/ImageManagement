@@ -1,0 +1,22 @@
+name: Keep Backend Alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check IST time (skip 11PM - 5AM)
+        run: |
+          HOUR=$(TZ='Asia/Kolkata' date +%H)
+          if [ "$HOUR" -ge 23 ] || [ "$HOUR" -lt 5 ]; then
+            echo "SLEEP_TIME=true" >> $GITHUB_ENV
+          else
+            echo "SLEEP_TIME=false" >> $GITHUB_ENV
+          fi
+
+      - name: Ping Render backend
+        if: env.SLEEP_TIME == 'false'
+        run: curl -s -o /dev/null -w "%{http_code}" https://imagemanagement-dku8.onrender.com/health
