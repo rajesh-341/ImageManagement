@@ -25,8 +25,13 @@ const pool = require("./config/db");
 
 const app = express();
 
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.status(200).json({ status: "ok", db: "connected", timestamp: new Date().toISOString() });
+  } catch {
+    res.status(200).json({ status: "ok", db: "disconnected", timestamp: new Date().toISOString() });
+  }
 });
 
 app.use(helmet({
