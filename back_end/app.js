@@ -34,6 +34,10 @@ app.get("/health", async (req, res) => {
   }
 });
 
+const ALLOWED_ORIGINS = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",").map((s) => s.trim())
+  : ["http://localhost:3000"];
+
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: false,
@@ -42,8 +46,8 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:", "res.cloudinary.com", `${process.env.FRONTEND_URL || "http://localhost:3000"}`],
-      connectSrc: ["'self'", "res.cloudinary.com", process.env.FRONTEND_URL || "http://localhost:3000"],
+      imgSrc: ["'self'", "data:", "blob:", "res.cloudinary.com", ...ALLOWED_ORIGINS],
+      connectSrc: ["'self'", "res.cloudinary.com", ...ALLOWED_ORIGINS],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -53,7 +57,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: ALLOWED_ORIGINS,
   credentials: true,
 }));
 
