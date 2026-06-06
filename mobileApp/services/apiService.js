@@ -1,6 +1,6 @@
 import offlineStorage from "../offline/offlineStorage";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 
 class ApiService {
   constructor() {
@@ -11,9 +11,9 @@ class ApiService {
     this.isOnline = status;
   }
 
-  async request(endpoint, options = {}) {
+  async request(endpoint, options = {}, includeAuth = true) {
     const url = `${API_BASE_URL}${endpoint}`;
-    const token = await offlineStorage.getToken();
+    const token = includeAuth ? await offlineStorage.getToken() : null;
 
     const config = {
       ...options,
@@ -43,7 +43,7 @@ class ApiService {
     const data = await this.request("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    });
+    }, false);
     if (data.success && data.user) {
       await offlineStorage.storeUser(data.user);
     }
@@ -66,21 +66,23 @@ class ApiService {
   }
 
   // Folders
-  async getFolders() {
-    return this.request("/folders");
+  async getFolders(scope = "home") {
+    return this.request(`/folders?scope=${encodeURIComponent(scope)}`);
   }
 
-  async createFolder(folderName, description = "") {
+  async createFolder(folderName, description = "", eventTypes = []) {
     return this.request("/folders", {
       method: "POST",
-      body: JSON.stringify({ folderName, description }),
+      body: JSON.stringify({ folderName, description, eventTypes }),
     });
   }
 
-  async updateFolder(id, name) {
+  async updateFolder(id, name, eventTypes) {
+    const body = { name };
+    if (eventTypes !== undefined) body.eventTypes = eventTypes;
     return this.request(`/folders/${id}`, {
       method: "PUT",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -91,11 +93,15 @@ class ApiService {
   }
 
   // Images
-  async getImages(folder = null) {
-    const endpoint = folder
-      ? `/images?folder=${encodeURIComponent(folder)}`
-      : "/images";
-    return this.request(endpoint);
+  async getImages(folder = null, page = 1, limit = 50) {
+    const params = new URLSearchParams({ page, limit });
+    if (folder) params.set("folder", folder);
+    const result = await this.request(`/images?${params.toString()}`);
+    return { images: result.images || [], hasMore: result.hasMore || false };
+  }
+
+  async getAllImages() {
+    return this.getImages(null, 1, 200);
   }
 
   async getImageById(id) {
@@ -105,6 +111,13 @@ class ApiService {
   async uploadImage(imageData) {
     return this.request("/images", {
       method: "POST",
+      body: JSON.stringify(imageData),
+    });
+  }
+
+  async updateImage(id, imageData) {
+    return this.request(`/images/${id}`, {
+      method: "PUT",
       body: JSON.stringify(imageData),
     });
   }
@@ -125,7 +138,6 @@ class ApiService {
     if (folderName) {
       formData.append("folderName", folderName);
     }
-
     return this.request("/upload", {
       method: "POST",
       body: formData,
@@ -140,20 +152,26 @@ class ApiService {
       name: file.name || "upload.xlsx",
     });
     formData.append("folderName", folderName);
-
     return this.request("/upload-excel", {
       method: "POST",
       body: formData,
     });
   }
 
-  // Search / Filters
+  // Search
   async searchImages(filters) {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.append(key, value);
     });
-    return this.request(`/images?${params.toString()}`);
+    const result = await this.request(`/images?${params.toString()}`);
+    return result.images || result;
+  }
+
+  async getSuggestions(field, query = "") {
+    const params = new URLSearchParams({ field });
+    if (query) params.set("query", query);
+    return this.request(`/images/suggestions?${params.toString()}`);
   }
 
   // Move
@@ -166,6 +184,143 @@ class ApiService {
 
   async moveImageToFolder(imageId, folderName) {
     return this.updateImageFolder(imageId, folderName);
+  }
+
+  // Favorites
+  async getFavorites(folder = null) {
+    const endpoint = folder
+      ? `/favorites?folder=${encodeURIComponent(folder)}`
+      : "/favorites";
+    return this.request(endpoint);
+  }
+
+  async addFavorite(imageId) {
+    return this.request("/favorites", {
+      method: "POST",
+      body: JSON.stringify({ imageId }),
+    });
+  }
+
+  async removeFavorite(imageId) {
+    return this.request(`/favorites/${imageId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getFavoriteFolders() {
+    return this.request("/favorites/folders");
+  }
+
+  async createFavoriteFolder(folderName, description = "", eventTypes = []) {
+    return this.request("/favorites/folders", {
+      method: "POST",
+      body: JSON.stringify({ folderName, description, eventTypes }),
+    });
+  }
+
+  async addImagesToFavouriteFolder(folderId, imageIds) {
+    return this.request("/favorites/folder-images/batch", {
+      method: "POST",
+      body: JSON.stringify({ folderId, imageIds }),
+    });
+  }
+
+  // Users
+  async getUsers() {
+    const data = await this.request("/users");
+    return data.users || [];
+  }
+
+  async createUser(userData) {
+    return this.request("/users", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async updateUser(id, userData) {
+    return this.request(`/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async deleteUser(id) {
+    return this.request(`/users/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Download
+  async downloadImage(imageId) {
+    const url = `${API_BASE_URL}/download/${imageId}`;
+    const token = await offlineStorage.getToken();
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Download failed");
+    }
+    return response.blob();
+  }
+
+  async downloadFolder(folderName) {
+    const sanitized = folderName.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const url = `${API_BASE_URL}/download-folder/${encodeURIComponent(sanitized)}`;
+    const token = await offlineStorage.getToken();
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Download failed");
+    }
+    return response.blob();
+  }
+
+  async downloadAllImages() {
+    const url = `${API_BASE_URL}/download-all`;
+    const token = await offlineStorage.getToken();
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Download failed");
+    }
+    return response.blob();
+  }
+
+  // Dropdown config
+  async getDropdownConfig() {
+    return this.request("/dropdown/config");
+  }
+
+  async updateDropdownConfig(eventTypes, decorTypes) {
+    return this.request("/dropdown/config", {
+      method: "PUT",
+      body: JSON.stringify({ eventTypes, decorTypes }),
+    });
+  }
+
+  // Cloudinary sync
+  async syncCloudinary(action = "import") {
+    return this.request("/sync/cloudinary", {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+  }
+
+  async getUploadSignature(folder = "uncategorized") {
+    return this.request(`/upload-signature?folder=${encodeURIComponent(folder)}`);
+  }
+
+  async destroyCloudinaryImage(imageUrl) {
+    return this.request("/destroy-cloudinary", {
+      method: "POST",
+      body: JSON.stringify({ imageUrl }),
+    });
   }
 }
 

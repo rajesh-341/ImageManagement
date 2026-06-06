@@ -5,6 +5,7 @@ const KEYS = {
   TOKEN: "token",
   IMAGES: "images",
   FOLDERS: "folders",
+  FAVORITES: "favorites",
   OFFLINE_MODE: "offline_mode",
   DOWNLOAD_PATH: "download_path",
 };
@@ -136,6 +137,35 @@ export const getDownloadPath = async () => {
   }
 };
 
+// Store favorites for offline
+export const storeFavorites = async (favorites) => {
+  try {
+    await AsyncStorage.setItem(KEYS.FAVORITES, JSON.stringify(favorites));
+  } catch (error) {
+    console.error("Error storing favorites:", error);
+  }
+};
+
+export const getFavorites = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.FAVORITES);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error("Error getting favorites:", error);
+    return [];
+  }
+};
+
+// Get cached data for offline mode
+export const getCachedFoldersWithImages = async () => {
+  try {
+    const cachedFolders = await AsyncStorage.getItem(KEYS.FOLDERS);
+    return cachedFolders ? JSON.parse(cachedFolders) : [];
+  } catch {
+    return [];
+  }
+};
+
 // Clear all offline data
 export const clearOfflineData = async () => {
   try {
@@ -143,6 +173,7 @@ export const clearOfflineData = async () => {
       KEYS.IMAGES,
       KEYS.FOLDERS,
       KEYS.OFFLINE_MODE,
+      KEYS.FAVORITES,
     ]);
   } catch (error) {
     console.error("Error clearing offline data:", error);
@@ -159,9 +190,12 @@ export default {
   getImages,
   storeFolders,
   getFolders,
+  storeFavorites,
+  getFavorites,
   setOfflineMode,
   isOfflineMode,
   storeDownloadPath,
   getDownloadPath,
+  getCachedFoldersWithImages,
   clearOfflineData,
 };

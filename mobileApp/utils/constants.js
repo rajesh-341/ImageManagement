@@ -1,8 +1,12 @@
 export const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
 
+export const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
+
+export const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
+
 export const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 
-export const FLOWER_TYPES = ["Natural", "Artificial", "Both"];
+export const FLOWER_TYPES = ["Natural", "Artificial", "Both", "None"];
 
 export const DECOR_TYPES = [
   "Name board", "Stage Ceiling", "Hall side Decoration",
@@ -14,6 +18,7 @@ export const DECOR_TYPES = [
 ];
 
 export const VENUES = ["Indoor", "Outdoor", "Ballroom", "Garden", "Historic", "Industrial"];
+
 export const EVENT_TYPES = [
   "Wedding", "Puberty", "House Warming", "Ear Piercing", "Baby Shower",
   "Birthday", "Inauguration", "Meeting", "25th Wedding Anniversary",

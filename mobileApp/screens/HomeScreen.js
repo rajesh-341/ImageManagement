@@ -1,88 +1,281 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
   Image, Dimensions, Platform,
 } from "react-native";
-import { launchImageLibrary } from "react-native-image-picker";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
-import ImageMeta from "../components/ImageMeta";
+import Toast from "../components/Toast";
+import FolderCard from "../components/FolderCard";
+import ImageCard from "../components/ImageCard";
 import FilterSidebar from "../components/FilterSidebar";
-import { UPLOAD_ROLES, SIZE_UNIT_OPTIONS } from "../utils/constants";
+import UploadModal from "../components/UploadModal";
+import EditImageModal from "../components/EditImageModal";
+import UserModal from "../components/UserModal";
+import DownloadModal from "../components/DownloadModal";
+import { UPLOAD_ROLES, EDIT_DELETE_ROLES, EVENT_TYPES, DECOR_TYPES } from "../utils/constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 12;
 const isTablet = SCREEN_WIDTH >= 768;
-const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
-const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
+const gridColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
 
-const API_BASE_URL = "http://localhost:5000/api";
-const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
+const COMMON_SEARCH_FIELDS = [
+  { key: "venue", label: "Venue" },
+  { key: "eventType", label: "Event Type" },
+  { key: "decorType", label: "Decoration Type" },
+  { key: "designName", label: "Design Name" },
+  { key: "all", label: "All Fields" },
+];
+
+const formatPrice = (min, max) => {
+  if (!min && !max) return "";
+  if (min && max) return `₹${min} - ₹${max}`;
+  if (min) return `From ₹${min}`;
+  return `Up to ₹${max}`;
+};
+
+const formatEventDate = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+};
 
 function HomeScreen({ navigation }) {
   const [user, setUser] = useState(null);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [notif, setNotif] = useState(null);
+
+  // Views
+  const [view, setView] = useState("folders"); // folders | images | favorites
+  const [showOtherServices, setShowOtherServices] = useState(false);
+
+  // Folders
   const [folders, setFolders] = useState([]);
-  const [filteredImages, setFilteredImages] = useState([]);
-  const [activeFilters, setActiveFilters] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [view, setView] = useState("folders");
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
+  const [showEditFolderModal, setShowEditFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(null);
   const [folderName, setFolderName] = useState("");
   const [folderDescription, setFolderDescription] = useState("");
-  const [showFilter, setShowFilter] = useState(false);
-  const [filters, setFilters] = useState({});
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadTab, setUploadTab] = useState("single");
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
-  const [imageData, setImageData] = useState({
-    designName: "", size: "", sizeUnit: "inch", colours: "",
-    placeOfEvent: "", decorType: "", eventName: "",
-  });
-  const [batchImages, setBatchImages] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState("");
-  const [lightboxImage, setLightboxImage] = useState(null);
-  const [selectedImagesForMove, setSelectedImagesForMove] = useState(new Set());
+  const [folderEventTypes, setFolderEventTypes] = useState([]);
+  const [editFolderName, setEditFolderName] = useState("");
+
+  // Images
+  const [images, setImages] = useState([]);
+  const [allImages, setAllImages] = useState([]);
+  const [filteredImages, setFilteredImages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+
+  // Favorites
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+  const [favFolders, setFavFolders] = useState([]);
+  const [showAddFavFolderModal, setShowAddFavFolderModal] = useState(false);
+  const [favCustName, setFavCustName] = useState("");
+  const [favVenue, setFavVenue] = useState("");
+  const [favEventDate, setFavEventDate] = useState("");
+  const [selectedFavFolder, setSelectedFavFolder] = useState(null);
+
+  // Search
+  const [commonSearch, setCommonSearch] = useState("");
+  const [commonSearchField, setCommonSearchField] = useState("venue");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchTimer = useRef(null);
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
 
-  useEffect(() => {
-    const init = async () => {
-      const userData = await offlineStorage.getUser();
-      if (!userData) {
-        navigation.replace("Login");
-      } else {
-        setUser(userData);
-      }
-    };
-    init();
-  }, [navigation]);
+  // Modals
+  const [showFilter, setShowFilter] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingImage, setEditingImage] = useState(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadingFolder, setDownloadingFolder] = useState(null);
 
+  // Lightbox
+  const [lightboxImages, setLightboxImages] = useState([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+
+  // Other services
+  const [customEventTypes, setCustomEventTypes] = useState([]);
+  const [customDecorTypes, setCustomDecorTypes] = useState([]);
+  const [newEventType, setNewEventType] = useState("");
+  const [newDecorType, setNewDecorType] = useState("");
+
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
+  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
+
+  const showNotif = (message, type = "error") => {
+    setNotif({ message, type });
+    setTimeout(() => setNotif(null), 4000);
+  };
+
+  // Auth check
   useEffect(() => {
-    if (user) {
-      loadFolders();
-    }
-  }, [user]);
+    (async () => {
+      const u = await offlineStorage.getUser();
+      if (!u) { navigation.replace("Login"); return; }
+      setUser(u);
+      const offline = await offlineStorage.isOfflineMode();
+      setOfflineMode(offline);
+    })();
+  }, []);
+
+  // Load data when user is available
+  useEffect(() => {
+    if (!user) return;
+    loadFolders();
+    if (view === "images") loadAllImages();
+    if (view === "favorites" || showFavorites) loadFavorites();
+  }, [user, view, showFavorites]);
 
   const loadFolders = async () => {
     try {
       const list = await ApiService.getFolders();
       setFolders(list);
+      await offlineStorage.storeFolders(list);
     } catch (err) {
-      console.error("Failed to load folders:", err);
+      const cached = await offlineStorage.getFolders();
+      if (cached) setFolders(cached);
+      showNotif("Failed to load folders");
     }
   };
 
-  const handleAddFolder = async () => {
-    if (!folderName.trim()) { Alert.alert("Error", "Please enter a folder name"); return; }
+  const loadAllImages = async (p = 1) => {
     setLoading(true);
     try {
-      await ApiService.createFolder(folderName.trim(), folderDescription.trim());
-      setFolderName(""); setFolderDescription("");
+      const result = await ApiService.getImages(null, p, 50);
+      if (p === 1) setAllImages(result.images || []);
+      else setAllImages(prev => [...prev, ...(result.images || [])]);
+      setHasMore(result.hasMore);
+      setPage(p);
+    } catch (err) {
+      showNotif(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const favData = await ApiService.getFavorites();
+      setFavorites(favData.images || favData);
+      const folders = await ApiService.getFavoriteFolders();
+      setFavFolders(folders);
+    } catch (err) {
+      showNotif(err.message);
+    }
+  };
+
+  // Common search
+  const handleCommonSearch = useCallback(async (text, field) => {
+    if (!text.trim()) { setFilteredImages([]); setSuggestions([]); return; }
+    try {
+      const sf = {};
+      if (field === "all") sf.searchText = text;
+      else if (field === "venue") sf.placeOfEvent = text;
+      else if (field === "eventType") sf.eventType = text;
+      else if (field === "decorType") sf.decorType = text;
+      else if (field === "designName") sf.designName = text;
+      const results = await ApiService.searchImages(sf);
+      setFilteredImages(results);
+    } catch (err) {
+      showNotif(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (commonSearchTimer) clearTimeout(commonSearchTimer);
+    commonSearchTimer = setTimeout(() => {
+      handleCommonSearch(commonSearch, commonSearchField);
+    }, 400);
+    return () => clearTimeout(commonSearchTimer);
+  }, [commonSearch, commonSearchField]);
+
+  // Suggestions
+  useEffect(() => {
+    if (commonSearch.length < 2) { setSuggestions([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const fieldMap = { venue: "placeOfEvent", eventType: "eventType", decorType: "decorType", designName: "designName" };
+        const field = fieldMap[commonSearchField] || commonSearchField;
+        const data = await ApiService.getSuggestions(field, commonSearch);
+        setSuggestions(Array.isArray(data) ? data : []);
+        setShowSuggestions(data.length > 0);
+      } catch { }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [commonSearch, commonSearchField]);
+
+  const selectSuggestion = (val) => {
+    setCommonSearch(val);
+    setShowSuggestions(false);
+    handleCommonSearch(val, commonSearchField);
+  };
+
+  // Bulk selection
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleMoveToFolder = async (folder) => {
+    setLoading(true);
+    try {
+      for (const id of selectedIds) {
+        await ApiService.moveImageToFolder(id, folder.name);
+      }
+      setSelectedIds(new Set());
+      setShowMoveModal(false);
+      showNotif(`Moved ${selectedIds.size} image(s) to "${folder.name}"`, "success");
+      loadAllImages(page);
+    } catch (err) {
+      showNotif(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // CRUD
+  const handleAddFolder = async () => {
+    if (!folderName.trim()) { Alert.alert("Error", "Enter a folder name"); return; }
+    setLoading(true);
+    try {
+      await ApiService.createFolder(folderName.trim(), folderDescription.trim(), folderEventTypes);
+      setFolderName(""); setFolderDescription(""); setFolderEventTypes([]);
       setShowAddFolderModal(false);
       loadFolders();
     } catch (err) {
-      Alert.alert("Error", "Failed to create folder: " + err.message);
+      showNotif(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditFolder = async () => {
+    if (!editFolderName.trim() || !editingFolder) return;
+    setLoading(true);
+    try {
+      await ApiService.updateFolder(editingFolder.id, editFolderName.trim(), folderEventTypes);
+      setShowEditFolderModal(false);
+      setEditingFolder(null);
+      loadFolders();
+    } catch (err) {
+      showNotif(err.message);
     } finally {
       setLoading(false);
     }
@@ -92,21 +285,72 @@ function HomeScreen({ navigation }) {
     Alert.alert("Delete Folder", `Delete "${name}" and all its images?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        setLoading(true);
         try {
           await ApiService.deleteFolder(id);
           loadFolders();
-        } catch (err) {
-          Alert.alert("Error", err.message);
-        } finally {
-          setLoading(false);
-        }
+        } catch (err) { showNotif(err.message); }
       }},
     ]);
   };
 
+  const handleDeleteImage = (id) => {
+    Alert.alert("Delete Image", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await ApiService.deleteImage(id);
+          loadAllImages(page);
+          if (showFavorites) loadFavorites();
+        } catch (err) { showNotif(err.message); }
+      }},
+    ]);
+  };
+
+  const handleEditImage = (image) => {
+    setEditingImage(image);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (data) => {
+    setLoading(true);
+    try {
+      await ApiService.updateImage(editingImage.id, { image_data: data });
+      setShowEditModal(false);
+      setEditingImage(null);
+      showNotif("Image updated", "success");
+      loadAllImages(page);
+      if (showFavorites) loadFavorites();
+    } catch (err) {
+      showNotif(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Favorites
+  const toggleFav = async (imageId, isFav) => {
+    try {
+      if (isFav) await ApiService.removeFavorite(imageId);
+      else await ApiService.addFavorite(imageId);
+      if (showFavorites) loadFavorites();
+    } catch (err) {
+      showNotif(err.message);
+    }
+  };
+
+  const handleCreateFavFolder = async () => {
+    if (!favCustName.trim()) { Alert.alert("Error", "Enter customer name"); return; }
+    const folderName = [favCustName.trim(), favVenue.trim(), favEventDate.trim()].filter(Boolean).join("_");
+    try {
+      await ApiService.createFavoriteFolder(folderName);
+      setFavCustName(""); setFavVenue(""); setFavEventDate("");
+      setShowAddFavFolderModal(false);
+      loadFavorites();
+    } catch (err) { showNotif(err.message); }
+  };
+
+  // Filters
   const handleApplyFilters = async (filterData) => {
-    setActiveFilters(filterData);
     setLoading(true);
     try {
       const sf = {};
@@ -117,203 +361,290 @@ function HomeScreen({ navigation }) {
       if (filterData.flowerTypes?.length > 0) sf.flowerType = filterData.flowerTypes.join(",");
       if (filterData.venueFilter) sf.placeOfEvent = filterData.venueFilter;
       if (filterData.priceRange) { sf.priceMin = filterData.priceRange[0]; sf.priceMax = filterData.priceRange[1]; }
-      const data = await ApiService.searchImages(sf);
-      setFilteredImages(data);
+      const results = await ApiService.searchImages(sf);
+      setFilteredImages(results);
     } catch (err) {
-      Alert.alert("Search failed", err.message);
+      showNotif(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleClearFilters = () => {
-    setActiveFilters(null);
     setFilteredImages([]);
+    setCommonSearch("");
   };
 
-  const handleImageSelect = () => {
-    launchImageLibrary({ mediaType: "photo", quality: 0.8 }, (res) => {
-      if (res.didCancel) return;
-      if (res.assets?.[0]) {
-        const file = res.assets[0];
-        setSelectedImage(file);
-        setImagePreview(file.uri);
-      }
+  // Other services
+  const handleAddEventType = async () => {
+    if (!newEventType.trim()) return;
+    try {
+      await ApiService.updateDropdownConfig([...allEventTypes, newEventType.trim()], allDecorTypes);
+      setCustomEventTypes(prev => [...prev, newEventType.trim()]);
+      setNewEventType("");
+      showNotif("Event type added", "success");
+    } catch (err) { showNotif(err.message); }
+  };
+
+  const handleAddDecorType = async () => {
+    if (!newDecorType.trim()) return;
+    try {
+      await ApiService.updateDropdownConfig(allEventTypes, [...allDecorTypes, newDecorType.trim()]);
+      setCustomDecorTypes(prev => [...prev, newDecorType.trim()]);
+      setNewDecorType("");
+      showNotif("Decor type added", "success");
+    } catch (err) { showNotif(err.message); }
+  };
+
+  // Offline mode
+  const toggleOffline = async () => {
+    const next = !offlineMode;
+    setOfflineMode(next);
+    await offlineStorage.setOfflineMode(next);
+    ApiService.setOnlineStatus(!next);
+    showNotif(next ? "Offline mode enabled" : "Online mode enabled", "success");
+  };
+
+  // Lightbox navigation
+  const currentImageList = view === "favorites" ? favorites : filteredImages.length > 0 ? filteredImages : allImages;
+
+  const goToLightbox = (imageArray, index) => {
+    setLightboxImages(imageArray);
+    setLightboxIdx(index);
+  };
+
+  const navLightbox = (direction) => {
+    setLightboxIdx(prev => {
+      const next = prev + direction;
+      if (next < 0) return lightboxImages.length - 1;
+      if (next >= lightboxImages.length) return 0;
+      return next;
     });
   };
 
-  const handleUploadSingle = async () => {
-    if (!selectedImage) { Alert.alert("Error", "Please select an image"); return; }
-    setLoading(true);
-    setUploadProgress("Uploading...");
-    try {
-      const uploadResult = await ApiService.uploadFile(
-        { uri: selectedImage.uri, type: selectedImage.type, fileName: selectedImage.fileName },
-        null
-      );
-      const metaData = {
-        folderName: imageData.folderName || "General",
-        imageUrl: uploadResult.imageUrl,
-        colourCombination: imageData.colours.split(",").map(c => c.trim()).filter(c => c),
-        size: imageData.size,
-        sizeUnit: imageData.sizeUnit,
-        designName: imageData.designName,
-        placeOfEvent: imageData.placeOfEvent,
-        decorType: imageData.decorType,
-        eventName: imageData.eventName,
-      };
-      await ApiService.uploadImage(metaData);
-      setUploadProgress("Uploaded!");
-      setSelectedImage(null);
-      setImagePreview("");
-      setImageData({ designName: "", size: "", sizeUnit: "inch", colours: "", placeOfEvent: "", decorType: "", eventName: "", folderName: "" });
-      setTimeout(() => { setShowUploadModal(false); setUploadProgress(""); }, 1500);
-    } catch (err) {
-      Alert.alert("Upload failed", err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMoveToFolder = async (targetFolder) => {
-    if (selectedImagesForMove.size === 0) return;
-    setLoading(true);
-    try {
-      for (const id of selectedImagesForMove) {
-        await ApiService.moveImageToFolder(id, targetFolder.name);
-      }
-      setSelectedImagesForMove(new Set());
-      setShowMoveModal(false);
-    } catch (err) {
-      Alert.alert("Error", err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canManageUsers = user && ["captain", "vicecaptain", "owner"].includes(user.role?.toLowerCase());
 
-  const getImgUrl = (img) => img?.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "";
-
-  const renderFolderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.folderCard}
-      onPress={() => navigation.navigate("Folder", { folder: item, imageBaseUrl: IMAGE_BASE_URL })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.folderIcon}>
-        <Text style={styles.folderIconText}>📁</Text>
-      </View>
-      <Text style={styles.folderName} numberOfLines={1}>{item.name}</Text>
-      {canUpload && (
-        <TouchableOpacity
-          style={styles.folderDeleteBtn}
-          onPress={() => handleDeleteFolder(item.id, item.name)}
-        >
-          <Text style={styles.folderDeleteBtnText}>×</Text>
-        </TouchableOpacity>
+  const renderFolderGrid = () => (
+    <View style={styles.grid}>
+      {folders.length === 0 ? (
+        <View style={styles.center}><Text style={styles.emptyText}>No folders yet.</Text></View>
+      ) : (
+        <View style={styles.folderGrid}>
+          {folders.map(f => (
+            <View key={f.id} style={styles.folderCol}>
+              <FolderCard
+                folder={f}
+                canDelete={canUpload}
+                onClick={() => navigation.navigate("Folder", { folder: f })}
+                onDelete={handleDeleteFolder}
+                onEdit={(fold) => { setEditingFolder(fold); setEditFolderName(fold.name); setShowEditFolderModal(true); }}
+                onDownload={(fold) => { setDownloadingFolder(fold); setShowDownloadModal(true); }}
+              />
+            </View>
+          ))}
+        </View>
       )}
-    </TouchableOpacity>
+    </View>
   );
 
-  const renderImageCard = ({ item, isFilteredView = false }) => {
-    const imgUrl = getImgUrl(item);
-    const isSelected = selectedImagesForMove.has(item.id);
-
-    return (
-      <View style={[styles.imageCard, isSelected && styles.imageCardSelected]}>
-        <TouchableOpacity onPress={() => setLightboxImage({ url: imgUrl, data: item.image_data, id: item.id })} activeOpacity={0.9}>
-          {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={styles.imageCardImg} resizeMode="cover" />
-          ) : (
-            <View style={[styles.imageCardImg, styles.imagePlaceholder]}>
-              <Text style={styles.placeholderText}>No Image</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.imageCardContent}>
-          <Text style={styles.imageCardTitle} numberOfLines={1}>
-            {item.image_data?.designName || "Untitled"}
-          </Text>
-          <ImageMeta data={item.image_data} />
-        </View>
-      </View>
-    );
-      };
-
-  const renderMainContent = () => {
-    return (
-      <View style={styles.page}>
-        <View style={styles.actionBar}>
-          <Text style={styles.pageTitle}>Folders</Text>
-          <View style={styles.actionBarBtns}>
-            <TouchableOpacity style={styles.filterToggleBtn} onPress={() => setShowFilter(true)}>
-              <Text style={styles.filterToggleText}>Filters</Text>
-            </TouchableOpacity>
-            {canUpload && (
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddFolderModal(true)}>
-                <Text style={styles.addBtnText}>+ Add Folder</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {activeFilters ? (
-          loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
-          ) : filteredImages.length === 0 ? (
-            <View style={styles.center}><Text style={styles.emptyText}>No images match your filters.</Text></View>
-          ) : (
-            <FlatList
-              data={filteredImages}
-              renderItem={(props) => renderImageCard({ ...props, isFilteredView: true })}
-              keyExtractor={item => item.id?.toString()}
-              numColumns={numColumns}
-              key={`filter-${numColumns}`}
-              contentContainerStyle={styles.grid}
-              columnWrapperStyle={styles.gridRow}
-              showsVerticalScrollIndicator={false}
-            />
-          )
-        ) : (
-          <>
-            {folders.length === 0 ? (
-              <View style={styles.center}><Text style={styles.emptyText}>No folders yet. Create one to get started!</Text></View>
-            ) : (
-              <FlatList
-                data={folders}
-                renderItem={renderFolderItem}
-                keyExtractor={item => item.id?.toString()}
-                numColumns={isTablet ? 3 : 2}
-                key={`folder-${isTablet ? 3 : 2}`}
-                contentContainerStyle={styles.grid}
-                columnWrapperStyle={styles.gridRow}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
-          </>
-        )}
-      </View>
-    );
-  };
+  const renderImageGrid = (imageList, showFavToggle = false) => (
+    <FlatList
+      data={imageList}
+      renderItem={({ item, index }) => (
+        <ImageCard
+          image={item}
+          isFav={showFavToggle && favorites.some(f => f.id === item.id)}
+          isSelected={selectedIds.has(item.id)}
+          canEditDelete={canEditDelete}
+          formatPrice={formatPrice}
+          formatEventDate={formatEventDate}
+          onPress={() => goToLightbox(imageList, index)}
+          onToggleFav={showFavToggle ? toggleFav : undefined}
+          onSelect={toggleSelect}
+          onEdit={handleEditImage}
+          onDelete={handleDeleteImage}
+        />
+      )}
+      keyExtractor={item => item.id?.toString()}
+      numColumns={gridColumns}
+      key={`grid-${gridColumns}`}
+      contentContainerStyle={styles.grid}
+      columnWrapperStyle={styles.gridRow}
+      showsVerticalScrollIndicator={false}
+      onEndReached={() => { if (hasMore && view === "images") loadAllImages(page + 1); }}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={loading ? <ActivityIndicator style={{ padding: 20 }} color="#ff6b8a" /> : null}
+    />
+  );
 
   return (
     <View style={styles.container}>
+      <Toast message={notif?.message} type={notif?.type} visible={!!notif} onHide={() => setNotif(null)} />
+
       {/* Navbar */}
       <View style={styles.navbar}>
-        <Text style={styles.navbarTitle}>Event Management</Text>
-        <View style={styles.navbarRight}>
-          <Text style={styles.userText} numberOfLines={1}>
-            {user?.displayName || user?.username}
-          </Text>
+        <Text style={styles.navTitle}>Event Management</Text>
+        <View style={styles.navRight}>
+          <TouchableOpacity style={styles.offlineBtn} onPress={toggleOffline}>
+            <Text style={[styles.offlineBtnText, offlineMode && styles.offlineActive]}>
+              {offlineMode ? "Offline" : "Online"}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.userText} numberOfLines={1}>{user?.displayName || user?.username}</Text>
           <TouchableOpacity onPress={async () => { await ApiService.logout(); navigation.replace("Login"); }}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {renderMainContent()}
+      {/* View Tabs */}
+      <View style={styles.tabs}>
+        {[
+          { key: "folders", label: "Folders" },
+          { key: "images", label: "All Images" },
+          { key: "favorites", label: "Favorites" },
+        ].map(t => (
+          <TouchableOpacity key={t.key} style={[styles.tab, view === t.key && styles.tabActive]}
+            onPress={() => { setView(t.key); if (t.key === "images") loadAllImages(); if (t.key === "favorites") loadFavorites(); }}>
+            <Text style={[styles.tabText, view === t.key && styles.tabTextActive]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Action Bar */}
+      <View style={styles.actionBar}>
+        {view === "folders" ? (
+          <>
+            <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilter(true)}>
+              <Text style={styles.filterBtnText}>Filters</Text>
+            </TouchableOpacity>
+            <View style={styles.actionBtns}>
+              {canUpload ? (
+                <>
+                  <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddFolderModal(true)}>
+                    <Text style={styles.addBtnText}>+ Folder</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.addBtn} onPress={() => setShowUpload(true)}>
+                    <Text style={styles.addBtnText}>+ Upload</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+              <TouchableOpacity style={styles.moreBtn} onPress={() => setShowOtherServices(true)}>
+                <Text style={styles.moreBtnText}>⚙</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.viewTitle}>
+              {view === "favorites" ? "My Favorites" : "All Images"}
+            </Text>
+            <View style={styles.actionBtns}>
+              {canUpload && view === "images" ? (
+                <TouchableOpacity style={styles.addBtn} onPress={() => setShowUpload(true)}>
+                  <Text style={styles.addBtnText}>+ Upload</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </>
+        )}
+      </View>
+
+      {/* Common Search (for images/favorites) */}
+      {view !== "folders" ? (
+        <View style={styles.commonSearch}>
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder={`Search by ${COMMON_SEARCH_FIELDS.find(f => f.key === commonSearchField)?.label || "field"}...`}
+              placeholderTextColor="#9ca3af"
+              value={commonSearch}
+              onChangeText={t => { setCommonSearch(t); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(suggestions.length > 0)}
+            />
+            {commonSearch ? (
+              <TouchableOpacity onPress={() => { setCommonSearch(""); setFilteredImages([]); setSuggestions([]); }}>
+                <Text style={styles.clearSearch}>×</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.fieldRow}>
+            {COMMON_SEARCH_FIELDS.map(f => (
+              <TouchableOpacity key={f.key} style={[styles.fieldChip, commonSearchField === f.key && styles.fieldChipActive]}
+                onPress={() => setCommonSearchField(f.key)}>
+                <Text style={[styles.fieldChipText, commonSearchField === f.key && styles.fieldChipTextActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {showSuggestions && suggestions.length > 0 ? (
+            <View style={styles.suggestions}>
+              {suggestions.map(s => (
+                <TouchableOpacity key={s} style={styles.suggestionItem} onPress={() => selectSuggestion(s)}>
+                  <Text style={styles.suggestionText}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Content */}
+      {view === "folders" ? (
+        filteredImages.length > 0 ? (
+          renderImageGrid(filteredImages, true)
+        ) : loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
+        ) : (
+          renderFolderGrid()
+        )
+      ) : view === "favorites" ? (
+        loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
+        ) : filteredImages.length > 0 ? (
+          renderImageGrid(filteredImages, true)
+        ) : favorites.length > 0 ? (
+          renderImageGrid(favorites, true)
+        ) : (
+          <View style={styles.center}>
+            <Text style={styles.emptyText}>No favorites yet.</Text>
+            {canUpload ? (
+              <TouchableOpacity style={styles.favFolderBtn}
+                onPress={() => { setFavCustName(""); setFavVenue(""); setFavEventDate(""); setShowAddFavFolderModal(true); }}>
+                <Text style={styles.favFolderBtnText}>+ Create Favorites Folder</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )
+      ) : (
+        <>
+          {selectedIds.size > 0 ? (
+            <View style={styles.bulkBar}>
+              <Text style={styles.bulkText}>{selectedIds.size} selected</Text>
+              <TouchableOpacity style={styles.bulkBtn} onPress={() => setShowMoveModal(true)}>
+                <Text style={styles.bulkBtnText}>Move</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bulkBtn} onPress={clearSelection}>
+                <Text style={styles.bulkBtnText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {filteredImages.length > 0 ? renderImageGrid(filteredImages, true) : renderImageGrid(allImages, true)}
+        </>
+      )}
+
+      {/* Upload Modal */}
+      <UploadModal visible={showUpload} onClose={() => setShowUpload(false)}
+        onUploadComplete={() => { loadAllImages(); loadFolders(); }} />
+
+      {/* Edit Image Modal */}
+      <EditImageModal visible={showEditModal} onClose={() => { setShowEditModal(false); setEditingImage(null); }}
+        image={editingImage} onSave={handleSaveEdit} saving={loading} />
+
+      {/* Filter Sidebar */}
+      <FilterSidebar visible={showFilter} onClose={() => setShowFilter(false)}
+        onApply={handleApplyFilters} onClear={handleClearFilters} filters={{}} onFilterChange={() => {}} />
 
       {/* Add Folder Modal */}
       <Modal visible={showAddFolderModal} transparent animationType="fade" onRequestClose={() => setShowAddFolderModal(false)}>
@@ -321,23 +652,19 @@ function HomeScreen({ navigation }) {
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Folder</Text>
-              <TouchableOpacity onPress={() => setShowAddFolderModal(false)}>
-                <Text style={styles.modalClose}>×</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowAddFolderModal(false)}><Text style={styles.modalClose}>×</Text></TouchableOpacity>
             </View>
             <View style={styles.modalBody}>
               <Text style={styles.label}>Folder Name</Text>
-              <TextInput style={styles.input} value={folderName}
-                onChangeText={setFolderName} placeholder="Enter folder name" />
-              <Text style={styles.label}>Description (Optional)</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={folderDescription}
-                onChangeText={setFolderDescription} placeholder="Enter description" multiline numberOfLines={3} />
+              <TextInput style={styles.input} value={folderName} onChangeText={setFolderName} placeholder="Customer_Venue_Date" />
+              <Text style={styles.label}>Description</Text>
+              <TextInput style={[styles.input, styles.textArea]} value={folderDescription} onChangeText={setFolderDescription} placeholder="Description" multiline />
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddFolderModal(false)}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.primaryBtn} onPress={handleAddFolder} disabled={loading}>
-                  <Text style={styles.primaryBtnText}>{loading ? "Creating..." : "Create Folder"}</Text>
+                  <Text style={styles.primaryBtnText}>{loading ? "Creating..." : "Create"}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -345,196 +672,54 @@ function HomeScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Filter Sidebar */}
-      <FilterSidebar
-        visible={showFilter}
-        onClose={() => setShowFilter(false)}
-        onApply={handleApplyFilters}
-        onClear={handleClearFilters}
-        filters={filters}
-        onFilterChange={setFilters}
-      />
-
-      {/* Upload Modal */}
-      <Modal visible={showUploadModal} animationType="slide" onRequestClose={() => setShowUploadModal(false)}>
-        <View style={styles.uploadModal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Upload Images</Text>
-            <TouchableOpacity onPress={() => setShowUploadModal(false)}>
-              <Text style={styles.modalClose}>×</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.uploadTabs}>
-            {["single", "batch"].map(tab => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.uploadTab, uploadTab === tab && styles.uploadTabActive]}
-                onPress={() => setUploadTab(tab)}
-              >
-                <Text style={[styles.uploadTabText, uploadTab === tab && styles.uploadTabTextActive]}>
-                  {tab === "single" ? "Single Image" : "Batch Upload"}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <ScrollView style={styles.uploadForm}>
-            {uploadTab === "single" ? (
-              <>
-                <TouchableOpacity style={styles.imagePickerBtn} onPress={handleImageSelect}>
-                  {imagePreview ? (
-                    <Image source={{ uri: imagePreview }} style={styles.previewImg} />
-                  ) : (
-                    <View style={styles.pickPlaceholder}>
-                      <Text style={styles.pickPlaceholderText}>Tap to select image</Text>
-                    </View>
-                  )}
+      {/* Edit Folder Modal */}
+      <Modal visible={showEditFolderModal} transparent animationType="fade" onRequestClose={() => setShowEditFolderModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Folder</Text>
+              <TouchableOpacity onPress={() => setShowEditFolderModal(false)}><Text style={styles.modalClose}>×</Text></TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>Folder Name</Text>
+              <TextInput style={styles.input} value={editFolderName} onChangeText={setEditFolderName} placeholder="Folder name" />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditFolderModal(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
-
-                <Text style={styles.label}>Design Name</Text>
-                <TextInput style={styles.input} value={imageData.designName}
-                  onChangeText={t => setImageData({...imageData, designName: t})} placeholder="Enter design name" />
-
-                <View style={styles.row2}>
-                  <View style={styles.half}>
-                    <Text style={styles.label}>Size</Text>
-                    <TextInput style={styles.input} value={imageData.size}
-                      onChangeText={t => setImageData({...imageData, size: t})} placeholder="Size" />
-                  </View>
-                  <View style={styles.half}>
-                    <Text style={styles.label}>Unit</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {SIZE_UNIT_OPTIONS.map(u => (
-                        <TouchableOpacity key={u} style={[styles.unitChip, imageData.sizeUnit === u && styles.unitChipActive]}
-                          onPress={() => setImageData({...imageData, sizeUnit: u})}>
-                          <Text style={[styles.unitChipText, imageData.sizeUnit === u && styles.unitChipTextActive]}>{u}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                </View>
-
-                <Text style={styles.label}>Colours (comma separated)</Text>
-                <TextInput style={styles.input} value={imageData.colours}
-                  onChangeText={t => setImageData({...imageData, colours: t})} placeholder="Red, Gold, White" />
-
-                <View style={styles.row2}>
-                  <View style={styles.half}>
-                    <Text style={styles.label}>Place of Event</Text>
-                    <TextInput style={styles.input} value={imageData.placeOfEvent}
-                      onChangeText={t => setImageData({...imageData, placeOfEvent: t})} placeholder="Location" />
-                  </View>
-                  <View style={styles.half}>
-                    <Text style={styles.label}>Event Name</Text>
-                    <TextInput style={styles.input} value={imageData.eventName}
-                      onChangeText={t => setImageData({...imageData, eventName: t})} placeholder="Event name" />
-                  </View>
-                </View>
-
-                <Text style={styles.label}>Decor Name</Text>
-                <TextInput style={styles.input} value={imageData.decorType}
-                  onChangeText={t => setImageData({...imageData, decorType: t})} placeholder="Decor name" />
-
-                {uploadProgress ? (
-                  <Text style={styles.progressText}>{uploadProgress}</Text>
-                ) : null}
-
-                <TouchableOpacity style={[styles.primaryBtn, styles.fullBtn]} onPress={handleUploadSingle} disabled={loading}>
-                  <Text style={styles.primaryBtnText}>{loading ? "Uploading..." : "Upload Image"}</Text>
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleEditFolder} disabled={loading}>
+                  <Text style={styles.primaryBtnText}>{loading ? "Saving..." : "Save"}</Text>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.batchSection}>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => {
-                  launchImageLibrary({ mediaType: "photo", quality: 0.8, selectionLimit: 0 }, (res) => {
-                    if (res.didCancel) return;
-                    if (res.assets) {
-                      const totalAfterAdd = batchImages.length + res.assets.length;
-                      if (totalAfterAdd > 100) {
-                        Alert.alert("Limit Reached", `Maximum 100 images allowed per batch. You can add ${100 - batchImages.length} more.`);
-                        return;
-                      }
-                      setBatchImages(prev => [...prev, ...res.assets.map(f => ({
-                        file: f, preview: f.uri, designName: "", size: "",
-                        sizeUnit: "inch", colours: "", placeOfEvent: "", decorType: "", eventName: "",
-                      }))]);
-                    }
-                  });
-                }}>
-                  <Text style={styles.secondaryBtnText}>+ Add Images</Text>
-                </TouchableOpacity>
-
-                {batchImages.map((row, i) => (
-                  <View key={i} style={styles.batchRow}>
-                    {row.preview ? (
-                      <Image source={{ uri: row.preview }} style={styles.batchThumb} />
-                    ) : null}
-                    <TextInput style={styles.batchInput} value={row.designName}
-                      onChangeText={t => {
-                        setBatchImages(prev => { const u = [...prev]; u[i] = {...u[i], designName: t}; return u; });
-                      }} placeholder="Design" />
-                    <TouchableOpacity onPress={() => {
-                      setBatchImages(prev => prev.filter((_, idx) => idx !== i));
-                    }}>
-                      <Text style={styles.removeBtn}>×</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-
-                {batchImages.length > 0 ? (
-                  <TouchableOpacity style={[styles.primaryBtn, styles.fullBtn]} onPress={async () => {
-                    setLoading(true);
-                    let success = 0, errors = 0;
-                    const batchStartTime = Date.now();
-                    for (let i = 0; i < batchImages.length; i++) {
-                      try {
-                        const row = batchImages[i];
-                        const uploadResult = await ApiService.uploadFile(
-                          { uri: row.file.uri, type: row.file.type, fileName: row.file.fileName },
-                          null
-                        );
-                        await ApiService.uploadImage({
-                          folderName: "General",
-                          imageUrl: uploadResult.imageUrl,
-                          colourCombination: row.colours?.split(",").map(c => c.trim()).filter(c => c) || [],
-                          size: row.size, sizeUnit: row.sizeUnit,
-                          designName: row.designName, placeOfEvent: row.placeOfEvent,
-                          decorType: row.decorType, eventName: row.eventName,
-                          flowerType: null,
-                        });
-                        success++;
-                      } catch { errors++; }
-                    }
-                    const totalTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
-                    setBatchImages([]);
-                    setLoading(false);
-                    Alert.alert("Upload Complete", `${success} uploaded, ${errors} failed in ${totalTime}s`);
-                    setShowUploadModal(false);
-                  }} disabled={loading}>
-                    <Text style={styles.primaryBtnText}>{loading ? "Uploading..." : `Upload ${batchImages.length} Image(s)`}</Text>
-                  </TouchableOpacity>
-                ) : null}
               </View>
-            )}
-          </ScrollView>
+            </View>
+          </View>
         </View>
       </Modal>
 
-      {/* Lightbox */}
-      <Modal visible={!!lightboxImage} transparent animationType="fade" onRequestClose={() => setLightboxImage(null)}>
-        <View style={styles.lightboxOverlay}>
-          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxImage(null)}>
-            <Text style={styles.lightboxCloseText}>X</Text>
-          </TouchableOpacity>
-          {lightboxImage?.url ? (
-            <Image source={{ uri: lightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
-          ) : (
-            <View style={styles.center}><Text style={styles.emptyText}>Image not available</Text></View>
-          )}
-          <View style={styles.lightboxInfo}>
-            <Text style={styles.lightboxTitle}>{lightboxImage?.data?.designName || "Untitled"}</Text>
-            <ImageMeta data={lightboxImage?.data} />
+      {/* Add Favorites Folder Modal */}
+      <Modal visible={showAddFavFolderModal} transparent animationType="fade" onRequestClose={() => setShowAddFavFolderModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>New Favorites Folder</Text>
+              <TouchableOpacity onPress={() => setShowAddFavFolderModal(false)}><Text style={styles.modalClose}>×</Text></TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>Customer Name</Text>
+              <TextInput style={styles.input} value={favCustName} onChangeText={setFavCustName} placeholder="Customer" />
+              <Text style={styles.label}>Venue</Text>
+              <TextInput style={styles.input} value={favVenue} onChangeText={setFavVenue} placeholder="Venue" />
+              <Text style={styles.label}>Event Date</Text>
+              <TextInput style={styles.input} value={favEventDate} onChangeText={setFavEventDate} placeholder="YYYY-MM-DD" />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddFavFolderModal(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateFavFolder} disabled={loading}>
+                  <Text style={styles.primaryBtnText}>Create</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -545,9 +730,7 @@ function HomeScreen({ navigation }) {
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Move to Folder</Text>
-              <TouchableOpacity onPress={() => setShowMoveModal(false)}>
-                <Text style={styles.modalClose}>X</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowMoveModal(false)}><Text style={styles.modalClose}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
               {folders.length === 0 ? (
@@ -555,80 +738,196 @@ function HomeScreen({ navigation }) {
               ) : (
                 folders.map(f => (
                   <TouchableOpacity key={f.id} style={styles.moveItem} onPress={() => handleMoveToFolder(f)}>
-                    <Text style={styles.moveItemIcon}>📁</Text>
                     <Text style={styles.moveItemName}>{f.name}</Text>
                   </TouchableOpacity>
                 ))
               )}
             </ScrollView>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowMoveModal(false)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* User Modal */}
+      <UserModal visible={showUserModal} onClose={() => setShowUserModal(false)} />
+
+      {/* Download Modal */}
+      <DownloadModal visible={showDownloadModal} onClose={() => { setShowDownloadModal(false); setDownloadingFolder(null); }}
+        folder={downloadingFolder} />
+
+      {/* Other Services Modal */}
+      <Modal visible={showOtherServices} transparent animationType="slide" onRequestClose={() => setShowOtherServices(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { maxHeight: "90%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Other Services</Text>
+              <TouchableOpacity onPress={() => setShowOtherServices(false)}><Text style={styles.modalClose}>×</Text></TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {canManageUsers ? (
+                <TouchableOpacity style={styles.serviceItem} onPress={() => { setShowOtherServices(false); setShowUserModal(true); }}>
+                  <Text style={styles.serviceItemText}>👥 User Management</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity style={styles.serviceItem} onPress={() => { setShowOtherServices(false); setShowDownloadModal(true); }}>
+                <Text style={styles.serviceItemText}>⬇ Download All Images</Text>
+              </TouchableOpacity>
+              <View style={styles.serviceDivider} />
+              <Text style={styles.label}>Add Event Type</Text>
+              <View style={styles.serviceAddRow}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={newEventType}
+                  onChangeText={setNewEventType} placeholder="New event type" />
+                <TouchableOpacity style={styles.addRowBtn} onPress={handleAddEventType}>
+                  <Text style={styles.addRowBtnText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.label}>Add Decoration Type</Text>
+              <View style={styles.serviceAddRow}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={newDecorType}
+                  onChangeText={setNewDecorType} placeholder="New decor type" />
+                <TouchableOpacity style={styles.addRowBtn} onPress={handleAddDecorType}>
+                  <Text style={styles.addRowBtnText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lightbox */}
+      <Modal visible={lightboxImages.length > 0} transparent animationType="fade" onRequestClose={() => setLightboxImages([])}>
+        <View style={styles.lightboxOverlay}>
+          <TouchableOpacity style={styles.lbClose} onPress={() => setLightboxImages([])}>
+            <Text style={styles.lbCloseText}>✕</Text>
+          </TouchableOpacity>
+
+          {lightboxImages.length > 1 ? (
+            <View style={styles.lbNav}>
+              <TouchableOpacity style={styles.lbNavBtn} onPress={() => navLightbox(-1)}>
+                <Text style={styles.lbNavText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.lbCounter}>{lightboxIdx + 1} / {lightboxImages.length}</Text>
+              <TouchableOpacity style={styles.lbNavBtn} onPress={() => navLightbox(1)}>
+                <Text style={styles.lbNavText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          <View style={styles.lbImgWrap}>
+            {lightboxImages[lightboxIdx] ? (
+              <Image
+                source={{ uri: `https://imagemanagement-dku8.onrender.com${lightboxImages[lightboxIdx].image_data?.imageUrl || ""}` }}
+                style={styles.lbImg} resizeMode="contain"
+              />
+            ) : (
+              <Text style={styles.lbNoImg}>Image not available</Text>
+            )}
+          </View>
+
+          {lightboxImages[lightboxIdx] ? (
+            <View style={styles.lbInfo}>
+              <View style={styles.lbInfoRow}>
+                <Text style={styles.lbTitle}>{lightboxImages[lightboxIdx].image_data?.designName || "Untitled"}</Text>
+                <TouchableOpacity
+                  style={styles.lbFavBtn}
+                  onPress={() => toggleFav(lightboxImages[lightboxIdx].id, favorites.some(f => f.id === lightboxImages[lightboxIdx].id))}>
+                  <Text style={styles.lbFavBtnText}>
+                    {favorites.some(f => f.id === lightboxImages[lightboxIdx].id) ? "★" : "☆"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {(() => {
+                const d = lightboxImages[lightboxIdx].image_data || {};
+                const lines = [];
+                if (d.decorType) lines.push(`Decor: ${d.decorType}`);
+                if (d.eventType) lines.push(`Event: ${d.eventType}`);
+                if (d.sizeDisplay || d.sizeWidth) {
+                  const sz = d.sizeDisplay || [d.sizeWidth, d.sizeLength, d.sizeHeight].filter(Boolean).join("×") + (d.sizeUnit ? ` ${d.sizeUnit}` : "");
+                  lines.push(`Size: ${sz}`);
+                }
+                if (d.priceMin || d.priceMax) lines.push(`Price: ${formatPrice(d.priceMin, d.priceMax)}`);
+                if (d.colourCombination?.length) lines.push(`Colors: ${d.colourCombination.join(", ")}`);
+                if (d.flowerType) lines.push(`Flower: ${d.flowerType}`);
+                if (d.venueCustomer) lines.push(`Customer: ${d.venueCustomer}`);
+                if (d.venueName) lines.push(`Venue: ${d.venueName}`);
+                if (d.venueDate) lines.push(`Date: ${formatEventDate(d.venueDate)}`);
+                return lines.map((line, i) => <Text key={i} style={styles.lbDetail}>{line}</Text>);
+              })()}
+            </View>
+          ) : null}
         </View>
       </Modal>
     </View>
   );
 }
 
+let commonSearchTimer;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
-  // Navbar
   navbar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12, paddingTop: Platform.OS === "ios" ? 50 : 12,
+    paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
   },
-  navbarTitle: { fontSize: 18, fontWeight: "700", color: "#ff6b8a" },
-  navbarRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  navBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#f3f4f6" },
-  navBtnText: { fontSize: 13, fontWeight: "600", color: "#374151" },
-  userText: { fontSize: 13, color: "#6b7280", maxWidth: 100 },
-  logoutText: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
-  // Page
-  page: { flex: 1 },
+  navTitle: { fontSize: 18, fontWeight: "700", color: "#ff6b8a" },
+  navRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  offlineBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#f3f4f6" },
+  offlineBtnText: { fontSize: 11, fontWeight: "600", color: "#6b7280" },
+  offlineActive: { color: "#22c55e" },
+  userText: { fontSize: 12, color: "#6b7280", maxWidth: 80 },
+  logoutText: { fontSize: 12, fontWeight: "600", color: "#ef4444" },
+  // Tabs
+  tabs: { flexDirection: "row", backgroundColor: "#fff", paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f3f4f6" },
+  tabActive: { backgroundColor: "#ff6b8a" },
+  tabText: { fontSize: 13, fontWeight: "600", color: "#6b7280" },
+  tabTextActive: { color: "#fff" },
+  // Action bar
   actionBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12,
+    paddingHorizontal: 16, paddingVertical: 8,
   },
-  actionBarBtns: { flexDirection: "row", gap: 8 },
-  pageTitle: { fontSize: 22, fontWeight: "700", color: "#1a1a1a" },
-  filterToggleBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#f3f4f6" },
-  filterToggleText: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  filterBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#f3f4f6" },
+  filterBtnText: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  actionBtns: { flexDirection: "row", gap: 8 },
   addBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#ff6b8a" },
-  addBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
-  moveBtn: { marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: "#f59e0b", alignItems: "center", marginBottom: 8 },
-  moveBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  addBtnText: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  moreBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  moreBtnText: { fontSize: 16 },
+  // View title
+  viewTitle: { fontSize: 18, fontWeight: "700", color: "#1a1a1a" },
+  // Common search
+  commonSearch: { paddingHorizontal: 16, paddingBottom: 8, zIndex: 100 },
+  searchRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 10, borderWidth: 1.5, borderColor: "#e5e7eb", paddingHorizontal: 12 },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: "#1a1a1a" },
+  clearSearch: { fontSize: 20, color: "#6b7280", paddingLeft: 8 },
+  fieldRow: { flexDirection: "row", marginTop: 6, gap: 6 },
+  fieldChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: "#f3f4f6", marginRight: 6 },
+  fieldChipActive: { backgroundColor: "#ff6b8a" },
+  fieldChipText: { fontSize: 11, color: "#6b7280", fontWeight: "500" },
+  fieldChipTextActive: { color: "#fff" },
+  suggestions: { backgroundColor: "#fff", borderRadius: 10, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, maxHeight: 200, borderWidth: 1, borderColor: "#e5e7eb" },
+  suggestionItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  suggestionText: { fontSize: 14, color: "#374151" },
+  // Bulk bar
+  bulkBar: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#fef3c7",
+    borderBottomWidth: 1, borderBottomColor: "#fde68a",
+  },
+  bulkText: { fontSize: 14, fontWeight: "600", color: "#92400e", flex: 1 },
+  bulkBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#f59e0b" },
+  bulkBtnText: { fontSize: 13, fontWeight: "600", color: "#fff" },
   // Grid
   grid: { paddingHorizontal: CARD_GAP, paddingBottom: 24 },
   gridRow: { gap: CARD_GAP, marginBottom: CARD_GAP },
-  // Folder Card
-  folderCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 16,
-    alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, position: "relative",
-  },
-  folderIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fef3c7", justifyContent: "center", alignItems: "center", marginBottom: 8 },
-  folderIconText: { fontSize: 28 },
-  folderName: { fontSize: 14, fontWeight: "600", color: "#1a1a1a", textAlign: "center" },
-  folderDeleteBtn: { position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  folderDeleteBtnText: { fontSize: 16, color: "#6b7280", fontWeight: "700" },
-  // Image Card
-  imageCard: {
-    width: cardWidth, backgroundColor: "#fff", borderRadius: 12, overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
-  },
-  imageCardSelected: { borderWidth: 2, borderColor: "#f59e0b" },
-  imageCardImg: { width: "100%", height: cardWidth * 0.75 },
-  imagePlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
-  placeholderText: { color: "#9ca3af", fontSize: 14 },
-  imageCardContent: { padding: 10 },
-  imageCardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
+  folderGrid: { flexDirection: "row", flexWrap: "wrap", gap: CARD_GAP },
+  folderCol: { width: isTablet ? (SCREEN_WIDTH - CARD_GAP * 4) / 3 : (SCREEN_WIDTH - CARD_GAP * 3) / 2 },
   // Center
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 15, color: "#9ca3af", textAlign: "center", padding: 24 },
-  // Modal
+  // Modals
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 },
   modal: { backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 400, maxHeight: "80%" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: "#e5e7eb" },
@@ -636,53 +935,45 @@ const styles = StyleSheet.create({
   modalClose: { fontSize: 24, color: "#6b7280", paddingHorizontal: 8 },
   modalBody: { padding: 16 },
   modalActions: { flexDirection: "row", gap: 12, marginTop: 16 },
-  // Form
   label: { fontSize: 13, fontWeight: "600", color: "#374151", marginTop: 12, marginBottom: 4 },
-  input: { borderWidth: 1.5, borderColor: "#e5e7eb", borderRadius: 10, padding: Platform.OS === "ios" ? 12 : 8, fontSize: 14, color: "#1a1a1a", backgroundColor: "#f9fafb" },
+  input: {
+    borderWidth: 1.5, borderColor: "#e5e7eb", borderRadius: 10,
+    padding: Platform.OS === "ios" ? 12 : 8, fontSize: 14, color: "#1a1a1a", backgroundColor: "#f9fafb",
+  },
   textArea: { minHeight: 60, textAlignVertical: "top" },
-  row2: { flexDirection: "row", gap: 12 },
-  half: { flex: 1 },
-  unitChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 6, backgroundColor: "#f3f4f6" },
-  unitChipActive: { backgroundColor: "#ff6b8a" },
-  unitChipText: { fontSize: 12, color: "#6b7280" },
-  unitChipTextActive: { color: "#fff", fontWeight: "600" },
   cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#f3f4f6", alignItems: "center" },
-  cancelBtnText: { fontSize: 15, fontWeight: "600", color: "#6b7280" },
-  primaryBtn: { paddingVertical: 12, borderRadius: 10, backgroundColor: "#ff6b8a", alignItems: "center" },
-  primaryBtnText: { fontSize: 15, fontWeight: "600", color: "#fff" },
-  secondaryBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#f3f4f6", alignItems: "center", alignSelf: "flex-start" },
-  secondaryBtnText: { fontSize: 14, fontWeight: "600", color: "#374151" },
-  fullBtn: { marginTop: 16, marginBottom: 32 },
-  progressText: { textAlign: "center", color: "#22c55e", fontSize: 14, fontWeight: "500", marginTop: 12 },
-  // Upload Modal
-  uploadModal: { flex: 1, backgroundColor: "#f5f5f5" },
-  uploadTabs: { flexDirection: "row", margin: 16, borderRadius: 12, backgroundColor: "#e5e7eb", padding: 3 },
-  uploadTab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-  uploadTabActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  uploadTabText: { fontSize: 14, fontWeight: "500", color: "#6b7280" },
-  uploadTabTextActive: { color: "#ff6b8a", fontWeight: "600" },
-  uploadForm: { flex: 1, paddingHorizontal: 16 },
-  imagePickerBtn: { borderRadius: 12, overflow: "hidden", marginBottom: 8 },
-  previewImg: { width: "100%", height: 200, borderRadius: 12 },
-  pickPlaceholder: { width: "100%", height: 150, borderRadius: 12, borderWidth: 2, borderColor: "#d1d5db", borderStyle: "dashed", justifyContent: "center", alignItems: "center", backgroundColor: "#f9fafb" },
-  pickPlaceholderText: { fontSize: 14, color: "#9ca3af" },
-  // Batch
-  batchSection: { paddingBottom: 32 },
-  batchRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, backgroundColor: "#fff", padding: 8, borderRadius: 10 },
-  batchThumb: { width: 40, height: 40, borderRadius: 6 },
-  batchInput: { flex: 1, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 6, fontSize: 13 },
-  removeBtn: { fontSize: 20, color: "#ef4444", fontWeight: "700", paddingHorizontal: 8 },
+  cancelBtnText: { fontSize: 14, fontWeight: "600", color: "#6b7280" },
+  primaryBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#ff6b8a", alignItems: "center" },
+  primaryBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  moveItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  moveItemName: { fontSize: 15, color: "#1a1a1a", fontWeight: "500" },
+  // Services
+  serviceItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
+  serviceItemText: { fontSize: 15, color: "#374151" },
+  serviceDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 12 },
+  serviceAddRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  addRowBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: "#ff6b8a" },
+  addRowBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  // Favorites
+  favFolderBtn: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, backgroundColor: "#ff6b8a" },
+  favFolderBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
   // Lightbox
   lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  lightboxClose: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
-  lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  lightboxImg: { width: "90%", height: "60%" },
-  lightboxInfo: { position: "absolute", bottom: 40, left: 20, right: 20, backgroundColor: "rgba(0,0,0,0.7)", padding: 16, borderRadius: 12 },
-  lightboxTitle: { fontSize: 18, fontWeight: "600", color: "#fff" },
-  // Move
-  moveItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  moveItemIcon: { fontSize: 20 },
-  moveItemName: { fontSize: 15, color: "#1a1a1a", fontWeight: "500" },
+  lbClose: { position: "absolute", top: 50, right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  lbCloseText: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  lbNav: { position: "absolute", top: 50, left: 0, right: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", zIndex: 15, gap: 20 },
+  lbNavBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  lbNavText: { color: "#fff", fontSize: 28, fontWeight: "300", marginTop: -2 },
+  lbCounter: { color: "#fff", fontSize: 14, fontWeight: "500" },
+  lbImgWrap: { width: "90%", height: "50%", justifyContent: "center", alignItems: "center" },
+  lbImg: { width: "100%", height: "100%" },
+  lbNoImg: { color: "#9ca3af", fontSize: 16 },
+  lbInfo: { position: "absolute", bottom: 40, left: 20, right: 20, backgroundColor: "rgba(0,0,0,0.7)", padding: 16, borderRadius: 12 },
+  lbInfoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  lbTitle: { fontSize: 18, fontWeight: "600", color: "#fff" },
+  lbFavBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  lbFavBtnText: { fontSize: 18, color: "#f59e0b" },
+  lbDetail: { fontSize: 13, color: "#e5e7eb", marginTop: 2 },
 });
 
 export default HomeScreen;
