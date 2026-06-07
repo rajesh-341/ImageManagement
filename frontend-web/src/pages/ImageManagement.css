@@ -1262,8 +1262,8 @@
 }
 
 .upload-modal .modal {
-  max-width: 1400px;
-  width: 100%;
+  max-width: 80vw;
+  width: 80vw;
   max-height: 90vh;
 }
 
@@ -3573,6 +3573,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  min-width: 100px;
 }
 
 .batch-colour-picker-btn {

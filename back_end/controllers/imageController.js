@@ -468,14 +468,14 @@ const getReport = async (req, res) => {
         f.name,
         f.description,
         f.created_by AS uploaded_by_user_id,
-        u.username AS uploaded_by,
+        ed.employee_details->>'employee_name' AS uploaded_by,
         f.scope,
         f.event_types,
         f.collected_by,
         f.created_at AS upload_date,
         COALESCE(img_counts.image_count, 0) AS image_count
       FROM folders f
-      LEFT JOIN users u ON f.created_by = u.id
+      LEFT JOIN employee_details ed ON f.created_by = ed.employee_id
       LEFT JOIN (
         SELECT folder_name, COUNT(*) AS image_count
         FROM image_management

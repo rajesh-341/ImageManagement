@@ -373,6 +373,7 @@ function ImageManagement() {
     if (isFieldRequired("folder_customerName") && !customerName.trim()) missing.push("Customer Name");
     if (isFieldRequired("folder_venue") && !venueName.trim()) missing.push("Venue");
     if (isFieldRequired("folder_eventDate") && !eventDate) missing.push("Event Date");
+    if (isFieldRequired("folder_collectedBy") && !collectedBy.trim()) missing.push("Collected By");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
       return;
@@ -1134,6 +1135,7 @@ function ImageManagement() {
     if (isFieldRequired("folder_customerName") && !favCustName.trim()) missing.push("Customer Name");
     if (isFieldRequired("folder_venue") && !favVenue.trim()) missing.push("Venue");
     if (isFieldRequired("folder_eventDate") && !favEventDate) missing.push("Event Date");
+    if (isFieldRequired("folder_collectedBy") && !favCollectedBy.trim()) missing.push("Collected By");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
       return;
@@ -1210,6 +1212,7 @@ function ImageManagement() {
 
   const handleOpenUserModal = () => {
     loadUsers();
+    loadDropdownConfig();
     setShowUserModal(true);
   };
 
@@ -1695,7 +1698,7 @@ function ImageManagement() {
     ) : (
       <div className="folder-card-grid">
         {canUpload && (
-          <div className="upload-box-card add-folder-box" onClick={() => setShowAddFolderModal(true)}>
+          <div className="upload-box-card add-folder-box" onClick={() => { loadDropdownConfig(); setShowAddFolderModal(true); }}>
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -1742,7 +1745,7 @@ function ImageManagement() {
 
       {!selectedFavFolder && (
         <div className="folder-card-grid favorites-folders-grid">
-          <div className="upload-box-card add-folder-box" onClick={() => setShowAddFavFolderModal(true)}>
+          <div className="upload-box-card add-folder-box" onClick={() => { loadDropdownConfig(); setShowAddFavFolderModal(true); }}>
             <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -1840,7 +1843,7 @@ function ImageManagement() {
         <>
           <div className="image-grid">
             {canUpload && selectedImageIds.size === 0 && (
-              <div className="upload-box-card" onClick={() => { resetUploadForm(); setUploadTab("single"); setShowUploadModal(true); }}>
+              <div className="upload-box-card" onClick={() => { loadDropdownConfig(); resetUploadForm(); setUploadTab("single"); setShowUploadModal(true); }}>
                 <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 5v14M5 12h14"/>
                 </svg>
@@ -1994,13 +1997,14 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Collected By</label>
+                <label className="label">Collected By{isFieldRequired("folder_collectedBy") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={collectedBy}
                   onChange={(e) => setCollectedBy(e.target.value)}
                   placeholder="Enter collector name"
+                  required={isFieldRequired("folder_collectedBy")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
@@ -2132,13 +2136,14 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Collected By</label>
+                <label className="label">Collected By{isFieldRequired("folder_collectedBy") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={favCollectedBy}
                   onChange={(e) => setFavCollectedBy(e.target.value)}
                   placeholder="Enter collector name"
+                  required={isFieldRequired("folder_collectedBy")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
@@ -3015,6 +3020,7 @@ function ImageManagement() {
                       <label className="form-settings-row"><span>Customer Name</span><input type="checkbox" checked={isFieldRequired("folder_customerName")} onChange={(e) => { const c = {...formConfig, folder_customerName: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("folder_venue")} onChange={(e) => { const c = {...formConfig, folder_venue: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("folder_eventDate")} onChange={(e) => { const c = {...formConfig, folder_eventDate: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Collected By</span><input type="checkbox" checked={isFieldRequired("folder_collectedBy")} onChange={(e) => { const c = {...formConfig, folder_collectedBy: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Event Type</span><input type="checkbox" checked={isFieldRequired("folder_eventType")} onChange={(e) => { const c = {...formConfig, folder_eventType: e.target.checked}; saveFormConfig(c); }} /></label>
                     </div>
                     <div className="form-settings-group">
