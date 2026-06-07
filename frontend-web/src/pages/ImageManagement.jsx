@@ -360,11 +360,7 @@ function ImageManagement() {
     setLoading(true);
     try {
       await ApiService.createFolder(folderName, folderDescription.trim(), folderEventTypes);
-      setCustomerName("");
-      setVenueName("");
-      setEventDate("");
-      setFolderDescription("");
-      setFolderEventTypes([]);
+      resetAddFolderForm();
       setShowAddFolderModal(false);
       loadFolders();
     } catch (err) {
@@ -393,9 +389,8 @@ function ImageManagement() {
     setLoading(true);
     try {
       await ApiService.updateFolder(editingFolder.id, newName, editFolderEventTypes);
+      resetEditFolderForm();
       setShowEditFolderModal(false);
-      setEditingFolder(null);
-      setEditFolderEventTypes([]);
       loadFolders();
       if (showFavorites) loadFavoriteFolders();
     } catch (err) {
@@ -436,7 +431,51 @@ function ImageManagement() {
     setImagePreview("");
     setBatchImages([]);
     setUploadProgress("");
+    setUploadTab("single");
+    setBatchColorPickerIndex(null);
+    setBatchColorSearch("");
     isUploading.current = false;
+  };
+
+  const resetAddFolderForm = () => {
+    setCustomerName("");
+    setVenueName("");
+    setEventDate("");
+    setFolderDescription("");
+    setFolderEventTypes([]);
+    setCustomETInput("");
+    setShowEventTypeDropdown(false);
+  };
+
+  const resetAddFavFolderForm = () => {
+    setFavCustName("");
+    setFavVenue("");
+    setFavEventDate("");
+    setFavFolderDesc("");
+    setFavFolderEventTypes([]);
+    setCustomFavETInput("");
+    setShowFavEventTypeDropdown(false);
+  };
+
+  const resetEditFolderForm = () => {
+    setEditingFolder(null);
+    setEditFolderName("");
+    setEditFolderVenue("");
+    setEditFolderDate("");
+    setEditFolderEventTypes([]);
+    setCustomEditETInput("");
+    setShowEditEventTypeDropdown(false);
+  };
+
+  const resetEditImageForm = () => {
+    setEditingImage(null);
+    setEditData({});
+  };
+
+  const preventNumberAction = (e) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "-" || e.key === "+" || e.key === "e" || e.key === "E") {
+      e.preventDefault();
+    }
   };
 
   const handleBackToFolders = () => {
@@ -1068,11 +1107,7 @@ function ImageManagement() {
     const folderName = `${favCustName.trim()}_${favVenue.trim()}_${favEventDate}`;
     try {
       await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim(), favFolderEventTypes);
-      setFavCustName("");
-      setFavVenue("");
-      setFavEventDate("");
-      setFavFolderDesc("");
-      setFavFolderEventTypes([]);
+      resetAddFavFolderForm();
       setShowAddFavFolderModal(false);
       loadFavoriteFolders();
     } catch (err) {
@@ -1117,8 +1152,8 @@ function ImageManagement() {
     setAllImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
     setFilteredImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
     setFavoriteImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
+    resetEditImageForm();
     setShowEditModal(false);
-    setEditingImage(null);
     try {
       await ApiService.updateImage(editingImage.id, { ...editData, sizeDisplay });
       if (currentFolder) await loadImages();
@@ -1837,7 +1872,7 @@ function ImageManagement() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Folder</h2>
-              <button className="modal-close" onClick={() => setShowAddFolderModal(false)}>×</button>
+              <button className="modal-close" onClick={() => { resetAddFolderForm(); setShowAddFolderModal(false); }}>×</button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleAddFolder(e); }}>
               <div className="form-group">
@@ -1948,7 +1983,7 @@ function ImageManagement() {
                 </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddFolderModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { resetAddFolderForm(); setShowAddFolderModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? "Creating..." : "Create Folder"}
                 </button>
@@ -1964,7 +1999,7 @@ function ImageManagement() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Folder in Favorites</h2>
-              <button className="modal-close" onClick={() => setShowAddFavFolderModal(false)}>×</button>
+              <button className="modal-close" onClick={() => { resetAddFavFolderForm(); setShowAddFavFolderModal(false); }}>×</button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleCreateFavFolder(e); }}>
               <div className="form-group">
@@ -2075,7 +2110,7 @@ function ImageManagement() {
                 </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddFavFolderModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { resetAddFavFolderForm(); setShowAddFavFolderModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Create</button>
               </div>
             </form>
@@ -2089,7 +2124,7 @@ function ImageManagement() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Edit Folder</h2>
-              <button className="modal-close" onClick={() => setShowEditFolderModal(false)}>×</button>
+              <button className="modal-close" onClick={() => { resetEditFolderForm(); setShowEditFolderModal(false); }}>×</button>
             </div>
             <form onSubmit={handleSaveEditFolder}>
               <div className="form-group">
@@ -2185,7 +2220,7 @@ function ImageManagement() {
                 </div>
               )}
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditFolderModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { resetEditFolderForm(); setShowEditFolderModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? "Saving..." : "Save"}
                 </button>
@@ -2277,20 +2312,23 @@ function ImageManagement() {
                     <div className="form-group">
                       <label className="label">Size{isFieldRequired("image_size") && <span className="required">*</span>}</label>
                       <div className="size-input-group-upload">
-                        <input type="number" className="input size-input-sm" placeholder="W"
-                          value={imageData.sizeWidth} min="0"
-                          onWheel={(e) => e.target.blur()}
-                          onChange={(e) => setImageData({...imageData, sizeWidth: e.target.value})} />
-                        <span className="size-sep">x</span>
-                        <input type="number" className="input size-input-sm" placeholder="L"
-                          value={imageData.sizeLength} min="0"
-                          onWheel={(e) => e.target.blur()}
-                          onChange={(e) => setImageData({...imageData, sizeLength: e.target.value})} />
-                        <span className="size-sep">x</span>
-                        <input type="number" className="input size-input-sm" placeholder="H"
-                          value={imageData.sizeHeight} min="0"
-                          onWheel={(e) => e.target.blur()}
-                          onChange={(e) => setImageData({...imageData, sizeHeight: e.target.value})} />
+                         <input type="number" className="input size-input-sm" placeholder="W"
+                           value={imageData.sizeWidth} min="0"
+                           onWheel={(e) => e.target.blur()}
+                           onKeyDown={preventNumberAction}
+                           onChange={(e) => setImageData({...imageData, sizeWidth: e.target.value})} />
+                         <span className="size-sep">x</span>
+                         <input type="number" className="input size-input-sm" placeholder="L"
+                           value={imageData.sizeLength} min="0"
+                           onWheel={(e) => e.target.blur()}
+                           onKeyDown={preventNumberAction}
+                           onChange={(e) => setImageData({...imageData, sizeLength: e.target.value})} />
+                         <span className="size-sep">x</span>
+                         <input type="number" className="input size-input-sm" placeholder="H"
+                           value={imageData.sizeHeight} min="0"
+                           onWheel={(e) => e.target.blur()}
+                           onKeyDown={preventNumberAction}
+                           onChange={(e) => setImageData({...imageData, sizeHeight: e.target.value})} />
                         <select className="input size-unit-input" value={imageData.sizeUnit}
                           onChange={(e) => setImageData({...imageData, sizeUnit: e.target.value})}>
                           {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -2305,12 +2343,14 @@ function ImageManagement() {
                     <div className="form-group">
                       <label className="label">Price Range{isFieldRequired("image_price") && <span className="required">*</span>}</label>
                       <div className="flex-gap">
-                        <input type="number" className="input" placeholder="Min" value={imageData.priceMin} min="0"
-                          onWheel={(e) => e.target.blur()}
-                          onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMin: v}); }} required={isFieldRequired("image_price")} />
-                        <input type="number" className="input" placeholder="Max" value={imageData.priceMax} min="0"
-                          onWheel={(e) => e.target.blur()}
-                          onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMax: v}); }} required={isFieldRequired("image_price")} />
+                         <input type="number" className="input" placeholder="Min" value={imageData.priceMin} min="0"
+                           onWheel={(e) => e.target.blur()}
+                           onKeyDown={preventNumberAction}
+                           onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMin: v}); }} required={isFieldRequired("image_price")} />
+                         <input type="number" className="input" placeholder="Max" value={imageData.priceMax} min="0"
+                           onWheel={(e) => e.target.blur()}
+                           onKeyDown={preventNumberAction}
+                           onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMax: v}); }} required={isFieldRequired("image_price")} />
                       </div>
                     </div>
                   </div>
@@ -2383,18 +2423,21 @@ function ImageManagement() {
                               <td>
                                 <div className="batch-field-with-same">
                                   <div className="batch-size-row">
-                                    <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth} min="0"
-                                      onWheel={(e) => e.target.blur()}
-                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeWidth", v); }} />
-                                    <span>x</span>
-                                    <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength} min="0"
-                                      onWheel={(e) => e.target.blur()}
-                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeLength", v); }} />
-                                    <span>x</span>
-                                    <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight} min="0"
-                                      onWheel={(e) => e.target.blur()}
-                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeHeight", v); }} />
-                                  </div>
+                                     <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth} min="0"
+                                       onWheel={(e) => e.target.blur()}
+                                       onKeyDown={preventNumberAction}
+                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeWidth", v); }} />
+                                     <span>x</span>
+                                     <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength} min="0"
+                                       onWheel={(e) => e.target.blur()}
+                                       onKeyDown={preventNumberAction}
+                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeLength", v); }} />
+                                     <span>x</span>
+                                     <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight} min="0"
+                                       onWheel={(e) => e.target.blur()}
+                                       onKeyDown={preventNumberAction}
+                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeHeight", v); }} />
+                                   </div>
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeWidth || row.keepSame.sizeLength || row.keepSame.sizeHeight ? "active" : ""}`}
                                     onClick={() => { toggleKeepSameField(index, "sizeWidth"); toggleKeepSameField(index, "sizeLength"); toggleKeepSameField(index, "sizeHeight"); }} title="Same as previous row">S</button>}
                                 </div>
@@ -2493,17 +2536,19 @@ function ImageManagement() {
                               <td>
                                 <div className="batch-field-with-same">
                                   <input type="number" className="batch-input-tiny" value={row.priceMin} min="0"
-                                    onWheel={(e) => e.target.blur()}
-                                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMin", v); }} placeholder="₹" />
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMin ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "priceMin")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <input type="number" className="batch-input-tiny" value={row.priceMax} min="0"
-                                    onWheel={(e) => e.target.blur()}
-                                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMax", v); }} placeholder="₹" />
+                                     onWheel={(e) => e.target.blur()}
+                                     onKeyDown={preventNumberAction}
+                                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMin", v); }} placeholder="₹" />
+                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMin ? "active" : ""}`}
+                                     onClick={() => toggleKeepSameField(index, "priceMin")} title="Same as previous row">S</button>}
+                                 </div>
+                               </td>
+                               <td>
+                                 <div className="batch-field-with-same">
+                                   <input type="number" className="batch-input-tiny" value={row.priceMax} min="0"
+                                     onWheel={(e) => e.target.blur()}
+                                     onKeyDown={preventNumberAction}
+                                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMax", v); }} placeholder="₹" />
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMax ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "priceMax")} title="Same as previous row">S</button>}
                                 </div>
@@ -2877,7 +2922,7 @@ function ImageManagement() {
           <div className="modal edit-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Edit Image</h2>
-              <button className="modal-close" onClick={() => setShowEditModal(false)}>×</button>
+              <button className="modal-close" onClick={() => { resetEditImageForm(); setShowEditModal(false); }}>×</button>
             </div>
             <form onSubmit={handleSaveEdit}>
               <div className="form-group">
@@ -2924,16 +2969,19 @@ function ImageManagement() {
                 <label className="label">Size</label>
                 <div className="size-input-group-upload">
                   <input type="number" className="input size-input-sm" placeholder="W" value={editData.sizeWidth} min="0"
-                    onWheel={(e) => e.target.blur()}
-                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeWidth: v}); }} />
-                  <span className="size-sep">x</span>
-                  <input type="number" className="input size-input-sm" placeholder="L" value={editData.sizeLength} min="0"
-                    onWheel={(e) => e.target.blur()}
-                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeLength: v}); }} />
-                  <span className="size-sep">x</span>
-                  <input type="number" className="input size-input-sm" placeholder="H" value={editData.sizeHeight} min="0"
-                    onWheel={(e) => e.target.blur()}
-                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeHeight: v}); }} />
+                     onWheel={(e) => e.target.blur()}
+                     onKeyDown={preventNumberAction}
+                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeWidth: v}); }} />
+                   <span className="size-sep">x</span>
+                   <input type="number" className="input size-input-sm" placeholder="L" value={editData.sizeLength} min="0"
+                     onWheel={(e) => e.target.blur()}
+                     onKeyDown={preventNumberAction}
+                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeLength: v}); }} />
+                   <span className="size-sep">x</span>
+                   <input type="number" className="input size-input-sm" placeholder="H" value={editData.sizeHeight} min="0"
+                     onWheel={(e) => e.target.blur()}
+                     onKeyDown={preventNumberAction}
+                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeHeight: v}); }} />
                   <select className="input size-unit-input" value={editData.sizeUnit}
                     onChange={(e) => setEditData({...editData, sizeUnit: e.target.value})}>
                     {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -2944,17 +2992,19 @@ function ImageManagement() {
                 <div className="form-group">
                   <label className="label">Price Range</label>
                   <div className="flex-gap">
-                    <input type="number" className="input" placeholder="Min" value={editData.priceMin} min="0"
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMin: v}); }} />
-                    <input type="number" className="input" placeholder="Max" value={editData.priceMax} min="0"
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMax: v}); }} />
+                     <input type="number" className="input" placeholder="Min" value={editData.priceMin} min="0"
+                       onWheel={(e) => e.target.blur()}
+                       onKeyDown={preventNumberAction}
+                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMin: v}); }} />
+                     <input type="number" className="input" placeholder="Max" value={editData.priceMax} min="0"
+                       onWheel={(e) => e.target.blur()}
+                       onKeyDown={preventNumberAction}
+                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMax: v}); }} />
                   </div>
                 </div>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { resetEditImageForm(); setShowEditModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? "Saving..." : "Save Changes"}
                 </button>
