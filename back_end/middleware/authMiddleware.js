@@ -20,7 +20,7 @@ function verifyToken(req, res, next) {
   }
 }
 
-const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
+const ADMIN_ROLES = ["Owner", "CEO", "Marketing Head"];
 
 function verifyOwnership(model) {
   return async (req, res, next) => {

@@ -125,10 +125,10 @@ const ApiService = {
     return request(`/folders?scope=${encodeURIComponent(scope)}`);
   },
 
-  async createFolder(folderName, description = "", eventTypes = []) {
+  async createFolder(folderName, description = "", eventTypes = [], collectedBy = "") {
     return request("/folders", {
       method: "POST",
-      body: JSON.stringify({ folderName, description, eventTypes }),
+      body: JSON.stringify({ folderName, description, eventTypes, collectedBy }),
     });
   },
 
@@ -241,10 +241,10 @@ const ApiService = {
     return request("/favorites/folders");
   },
 
-  async createFavoriteFolder(folderName, description = "", eventTypes = []) {
+  async createFavoriteFolder(folderName, description = "", eventTypes = [], collectedBy = "") {
     return request("/favorites/folders", {
       method: "POST",
-      body: JSON.stringify({ folderName, description, eventTypes }),
+      body: JSON.stringify({ folderName, description, eventTypes, collectedBy }),
     });
   },
 
@@ -418,11 +418,15 @@ const ApiService = {
     return request("/dropdown/config");
   },
 
-  async updateDropdownConfig(eventTypes, decorTypes) {
+  async updateDropdownConfig(eventTypes, decorTypes, hiddenEventTypes = [], hiddenDecorTypes = []) {
     return request("/dropdown/config", {
       method: "PUT",
-      body: JSON.stringify({ eventTypes, decorTypes }),
+      body: JSON.stringify({ eventTypes, decorTypes, hiddenEventTypes, hiddenDecorTypes }),
     });
+  },
+
+  async getReport() {
+    return request("/images/report/all");
   },
 
   async syncCloudinary(action = "import") {

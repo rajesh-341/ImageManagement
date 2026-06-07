@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 
-function AutocompleteInput({ options = [], value, onChange, placeholder = "", required = false, className = "" }) {
+function AutocompleteInput({ options = [], value, onChange, placeholder = "", required = false, className = "", showOnEmpty = true }) {
   const [input, setInput] = useState(value || "");
   const [show, setShow] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -9,7 +9,7 @@ function AutocompleteInput({ options = [], value, onChange, placeholder = "", re
 
   const filtered = input.trim()
     ? options.filter((o) => o.toLowerCase().includes(input.toLowerCase()))
-    : options;
+    : showOnEmpty ? options : [];
 
   useEffect(() => {
     setInput(value || "");

@@ -13,6 +13,7 @@ const {
   updateImageFolder,
   updateImage,
   getSuggestions,
+  getReport,
   VIEW_ROLES,
   UPLOAD_ROLES,
   DELETE_ROLES,
@@ -81,6 +82,15 @@ router.put(
   verifyToken,
   allowRoles(DELETE_ROLES),
   updateImage
+);
+
+// Report - accessible only by CEO and Admin
+const REPORT_ROLES = ["ceo", "admin"];
+router.get(
+  "/report/all",
+  verifyToken,
+  allowRoles(REPORT_ROLES),
+  getReport
 );
 
 module.exports = router;

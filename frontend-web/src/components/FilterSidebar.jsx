@@ -22,7 +22,7 @@ const fetchSuggestions = async (field, query) => {
   }
 };
 
-function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, customEventTypes = [], customDecorTypes = [] }) {
+function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, customEventTypes = [], customDecorTypes = [], hiddenEventTypes = [], hiddenDecorTypes = [] }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
   const [selectedDecorTypes, setSelectedDecorTypes] = useState(filters?.decorTypes || []);
   const [selectedEventTypes, setSelectedEventTypes] = useState(filters?.eventTypes || []);
@@ -31,6 +31,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
   const [sizeFilters, setSizeFilters] = useState(filters?.sizeFilters || { width: "", length: "", height: "", unit: "sq.ft" });
   const [venueName, setVenueName] = useState(filters?.venueName || "");
   const [folderName, setFolderName] = useState(filters?.folderName || "");
+  const [collectedByFilter, setCollectedByFilter] = useState(filters?.collectedBy || "");
   const [decorTypeSearch, setDecorTypeSearch] = useState("");
   const [eventTypeSearch, setEventTypeSearch] = useState("");
   const [searchSuggestions, setSearchSuggestions] = useState([]);
@@ -78,8 +79,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     };
     if (venueName) allFilters.placeOfEvent = venueName;
     if (folderName) allFilters.folderName = folderName;
+    if (collectedByFilter) allFilters.collectedBy = collectedByFilter;
     onApply && onApply(allFilters);
-  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, folderName, filters, onApply]);
+  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, folderName, collectedByFilter, filters, onApply]);
 
   buildAndApplyRef.current = buildAndApply;
 
@@ -127,8 +129,8 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     }
   };
 
-  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
-  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))].filter(t => !hiddenEventTypes.includes(t));
+  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))].filter(t => !hiddenDecorTypes.includes(t));
 
   const filteredDecorTypes = allDecorTypes.filter((type) =>
     type.toLowerCase().includes(decorTypeSearch.toLowerCase())
@@ -162,6 +164,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     setSizeFilters({ width: "", length: "", height: "", unit: "sq.ft" });
     setVenueName("");
     setFolderName("");
+    setCollectedByFilter("");
     setDecorTypeSearch("");
     setEventTypeSearch("");
     setSearchSuggestions([]);
@@ -239,6 +242,18 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
               placeholder="Search folder name..."
               value={folderName}
               onChange={(e) => { setFolderName(e.target.value); triggerAutoApply(); }}
+            />
+          </div>
+        </Accordion>
+
+        <Accordion title="Collected By">
+          <div className="filter-section">
+            <input
+              type="text"
+              className="filter-input"
+              placeholder="Search collected by..."
+              value={collectedByFilter}
+              onChange={(e) => { setCollectedByFilter(e.target.value); triggerAutoApply(); }}
             />
           </div>
         </Accordion>

@@ -1,7 +1,7 @@
 const pool = require("../config/db");
 const bcrypt = require("bcryptjs");
 
-const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
+const ADMIN_ROLES = ["Owner", "CEO", "Marketing Head"];
 
 const canManageUsers = (role) => {
   return ADMIN_ROLES.map(r => r.toLowerCase()).includes(role.toLowerCase());

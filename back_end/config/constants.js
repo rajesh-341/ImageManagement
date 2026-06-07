@@ -1,7 +1,7 @@
-const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const DELETE_ROLES = ["Captain", "ViceCaptain", "Admin"];
-const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin", "Owner"];
-const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
+const UPLOAD_ROLES = ["CEO", "Marketing Head", "Admin", "Owner"];
+const DELETE_ROLES = ["CEO", "Marketing Head", "Admin"];
+const VIEW_ROLES = ["CEO", "Marketing Head", "Event Managers", "Admin", "Owner"];
+const FOLDER_VIEW_ROLES = ["CEO", "Marketing Head", "Admin", "Owner"];
 
 const UPLOAD_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 const FLOWER_TYPES = ["Natural", "Artificial", "Both"];

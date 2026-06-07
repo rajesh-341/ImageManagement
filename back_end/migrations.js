@@ -78,33 +78,33 @@ async function runMigrations() {
     }
 
     const empExisting = await pool.query("SELECT id FROM employee_details LIMIT 1");
-    if (empExisting.rows.length === 0) {
-      const ownerRes = await pool.query("SELECT id FROM owner_table LIMIT 1");
-      const ownerId = ownerRes.rows[0]?.id || null;
-      const employees = [
-        { id: "captain", name: "captain", role: "Captain", pw: "captain123" },
-        { id: "vicecaptain", name: "vicecaptain", role: "ViceCaptain", pw: "vicecaptain123" },
-        { id: "facilitator", name: "facilitator", role: "Facilitator", pw: "facilitator123" },
-        { id: "teamlead", name: "teamlead", role: "TeamLead", pw: "teamlead123" },
-        { id: "teammember", name: "teammember", role: "TeamMember", pw: "teammember123" },
-        { id: "marketing", name: "marketing", role: "Marketing", pw: "marketing123" },
-        { id: "admin", name: "admin", role: "Admin", pw: "admin123" },
-      ];
-      for (const emp of employees) {
-        const hashed = await bcrypt.hash(emp.pw, 10);
-        await pool.query(
-          `INSERT INTO employee_details (owner_id, employee_id, employee_details) VALUES ($1, $2, $3)`,
-          [ownerId, emp.id, JSON.stringify({
-            employee_id: emp.id,
-            employee_name: emp.name,
-            Password: hashed,
-            plainPassword: emp.pw,
-            role: emp.role,
-          })]
-        );
-      }
-      console.log("[Migration] employee_details seeded with default employees");
+    if (empExisting.rows.length > 0) {
+      await pool.query("DELETE FROM employee_details");
+      console.log("[Migration] Removed all existing users");
     }
+
+    const ownerRes = await pool.query("SELECT id FROM owner_table LIMIT 1");
+    const ownerId = ownerRes.rows[0]?.id || null;
+    const employees = [
+      { id: "ceo", name: "CEO", role: "CEO", pw: "ceo123" },
+      { id: "marketinghead", name: "Marketing Head", role: "Marketing Head", pw: "mktghead123" },
+      { id: "eventmanager", name: "Event Manager", role: "Event Managers", pw: "eventmgr123" },
+      { id: "admin", name: "admin", role: "Admin", pw: "admin123" },
+    ];
+    for (const emp of employees) {
+      const hashed = await bcrypt.hash(emp.pw, 10);
+      await pool.query(
+        `INSERT INTO employee_details (owner_id, employee_id, employee_details) VALUES ($1, $2, $3)`,
+        [ownerId, emp.id, JSON.stringify({
+          employee_id: emp.id,
+          employee_name: emp.name,
+          Password: hashed,
+          plainPassword: emp.pw,
+          role: emp.role,
+        })]
+      );
+    }
+    console.log("[Migration] employee_details seeded with new roles");
 
     await pool.query(`
       DO $$ BEGIN
@@ -142,14 +142,18 @@ async function runMigrations() {
     `);
     console.log("[Migration] folders.event_types column ready");
 
-    const cleanResult = await pool.query(
-      `UPDATE employee_details 
-       SET employee_details = employee_details #- '{rawPassword}' #- '{plainPassword}'
-       WHERE employee_details ? 'rawPassword' OR employee_details ? 'plainPassword'`
-    );
-    if (cleanResult.rowCount > 0) {
-      console.log(`[Migration] Cleaned plaintext passwords from ${cleanResult.rowCount} employee record(s)`);
-    }
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'folders' AND column_name = 'collected_by'
+        ) THEN
+          ALTER TABLE folders ADD COLUMN collected_by VARCHAR(255) DEFAULT '';
+        END IF;
+      END $$;
+    `);
+    console.log("[Migration] folders.collected_by column ready");
+
   } catch (error) {
     console.error("[Migration] Error:", error.message);
   }

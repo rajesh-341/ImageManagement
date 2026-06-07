@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs").promises;
 const { deleteImage: deleteStorageImage, isLocal } = require("../config/storage");
 
-const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
+const UPLOAD_ROLES = ["CEO", "Marketing Head", "Owner"];
 
 const createFolder = async (req, res) => {
   try {
@@ -15,7 +15,7 @@ const createFolder = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const { folderName, description, eventTypes } = req.body;
+    const { folderName, description, eventTypes, collectedBy } = req.body;
 
     if (!folderName) {
       return res.status(400).json({ message: "Folder name is required" });
@@ -27,8 +27,8 @@ const createFolder = async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO folders (name, description, created_by, scope, event_types) VALUES ($1, $2, $3, 'home', $4) RETURNING *",
-      [folderName, description || "", req.user.userId, JSON.stringify(eventTypes || [])]
+      "INSERT INTO folders (name, description, created_by, scope, event_types, collected_by) VALUES ($1, $2, $3, 'home', $4, $5) RETURNING *",
+      [folderName, description || "", req.user.userId, JSON.stringify(eventTypes || []), collectedBy || ""]
     );
 
     res.status(201).json(result.rows[0]);

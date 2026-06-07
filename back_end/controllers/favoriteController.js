@@ -207,7 +207,7 @@ const getFavoriteFolders = async (req, res) => {
 
 const createFavoriteFolder = async (req, res) => {
   try {
-    const { folderName, description, eventTypes } = req.body;
+    const { folderName, description, eventTypes, collectedBy } = req.body;
     if (!folderName) return res.status(400).json({ message: "Folder name required" });
     if (!req.user || !req.user.userId) return res.status(401).json({ message: "Authentication required" });
 
@@ -220,8 +220,8 @@ const createFavoriteFolder = async (req, res) => {
     }
 
     const result = await pool.query(
-      "INSERT INTO folders (name, description, created_by, scope, event_types) VALUES ($1, $2, $3, 'favourite', $4) RETURNING *",
-      [folderName, description || "", req.user.userId, JSON.stringify(eventTypes || [])]
+      "INSERT INTO folders (name, description, created_by, scope, event_types, collected_by) VALUES ($1, $2, $3, 'favourite', $4, $5) RETURNING *",
+      [folderName, description || "", req.user.userId, JSON.stringify(eventTypes || []), collectedBy || ""]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {

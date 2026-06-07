@@ -1,6 +1,8 @@
-export const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-export const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Admin"];
-export const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
+export const UPLOAD_ROLES = ["CEO", "Marketing Head", "Admin", "Owner"];
+export const EDIT_DELETE_ROLES = ["CEO", "Marketing Head", "Admin"];
+export const FOLDER_VIEW_ROLES = ["CEO", "Marketing Head", "Admin", "Owner"];
+export const MANAGE_USERS_ROLES = ["Owner", "CEO", "Marketing Head"];
+export const REPORT_ROLES = ["CEO", "Admin"];
 
 export const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];
 export const FLOWER_TYPES = ["Natural", "Artificial", "Both", "None"];
@@ -28,4 +30,4 @@ export const BATCH_COLORS = [
 ];
 
 export const MAX_BATCH_UPLOAD = 100;
-export const SAME_FIELDS = ["designName","decorType","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","priceMin","priceMax"];
+export const SAME_FIELDS = ["designName","decorType","venueName","sizeWidth","sizeLength","sizeHeight","sizeUnit","colours","flowerType","priceMin","priceMax"];

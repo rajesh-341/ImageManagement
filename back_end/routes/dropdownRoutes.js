@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require("../config/db");
 const verifyToken = require("../middleware/authMiddleware");
 
-const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+const ADMIN_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
 
 const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.toLowerCase());
 
@@ -21,6 +21,8 @@ router.get("/config", verifyToken, async (req, res) => {
     res.json({
       eventTypes: config.eventTypes || [],
       decorTypes: config.decorTypes || [],
+      hiddenEventTypes: config.hiddenEventTypes || [],
+      hiddenDecorTypes: config.hiddenDecorTypes || [],
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -33,7 +35,7 @@ router.put("/config", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const { eventTypes, decorTypes } = req.body;
+    const { eventTypes, decorTypes, hiddenEventTypes, hiddenDecorTypes } = req.body;
     if (!Array.isArray(eventTypes) || !Array.isArray(decorTypes)) {
       return res.status(400).json({ message: "eventTypes and decorTypes must be arrays" });
     }
@@ -49,6 +51,8 @@ router.put("/config", verifyToken, async (req, res) => {
       ...currentConfig,
       eventTypes,
       decorTypes,
+      ...(hiddenEventTypes !== undefined ? { hiddenEventTypes } : {}),
+      ...(hiddenDecorTypes !== undefined ? { hiddenDecorTypes } : {}),
     };
 
     if (existing.rows.length > 0) {

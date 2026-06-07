@@ -241,7 +241,7 @@ app.get("/api/upload-signature", verifyToken, (req, res) => {
 
 app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
   try {
-    const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
     const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
     if (!allowed) return res.status(403).json({ message: "Access denied" });
@@ -310,7 +310,7 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 
 app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res) => {
   try {
-    const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
     const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
     if (!allowed) return res.status(403).json({ message: "Access denied" });
@@ -386,7 +386,7 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
   const CONCURRENCY = 20;
   const PER_IMAGE_TIMEOUT = 15000;
   const MAX_RETRIES = 2;
-  const DOWNLOAD_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+  const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
 
   try {
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
@@ -581,7 +581,7 @@ const importCloudinaryAssets = async () => {
 
 app.post("/api/sync/cloudinary", verifyToken, async (req, res) => {
   try {
-    const SYNC_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const SYNC_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
     const allowed = SYNC_ROLES.map(r => r.toLowerCase()).includes(userRole);
     if (!allowed) return res.status(403).json({ message: "Access denied" });
@@ -639,7 +639,7 @@ app.get("/api/sync/cloudinary/status", verifyToken, async (req, res) => {
 
 app.get("/api/sync/cloudinary/diagnose", verifyToken, async (req, res) => {
   try {
-    const SYNC_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+    const SYNC_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
     const userRole = req.user.role ? req.user.role.toLowerCase() : "";
     const allowed = SYNC_ROLES.map(r => r.toLowerCase()).includes(userRole);
     if (!allowed) return res.status(403).json({ message: "Access denied" });

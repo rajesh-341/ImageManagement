@@ -2478,13 +2478,11 @@
   flex-shrink: 0;
 }
 
-.btn-sync-cloudinary {
+.btn-report {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
+  gap: 6px;
+  padding: 8px 16px;
   background: linear-gradient(135deg, #667eea, #764ba2);
   border: none;
   border-radius: 10px;
@@ -2492,20 +2490,44 @@
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.btn-sync-cloudinary:hover:not(:disabled) {
+.btn-report:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 
-.btn-sync-cloudinary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.btn-report svg {
+  flex-shrink: 0;
 }
 
-.btn-sync-cloudinary svg {
-  flex-shrink: 0;
+.modal-report .modal-body {
+  padding: 0;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.report-table tbody tr:hover {
+  background-color: #f1f3f5;
+}
+
+.modal-report .modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid #dee2e6;
 }
 
 /* Price Range Inputs */
@@ -3199,8 +3221,28 @@
 
 /* User Management Modal */
 .user-modal .modal {
-  max-width: 900px;
-  width: 95%;
+  max-width: 1200px;
+  width: 98%;
+  max-height: 95vh;
+  overflow-y: auto;
+}
+
+.user-modal .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.user-modal .user-table-container {
+  max-height: none;
+}
+
+.user-modal .user-form-row {
+  flex-wrap: wrap;
+}
+
+.user-modal .user-form-row .input {
+  min-width: 140px;
 }
 
 .user-add-form {
@@ -3922,6 +3964,80 @@
 
 .dropdown-tag-remove:hover {
   background: var(--danger);
+}
+
+.dropdown-tag-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.dropdown-tag-edit:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.dropdown-tag-editing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dropdown-tag-editing .input-sm {
+  width: 120px;
+  padding: 2px 6px;
+  font-size: 12px;
+  height: 24px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  outline: none;
+}
+
+.dropdown-tag-editing .input-sm:focus {
+  border-color: var(--primary-dark);
+  box-shadow: 0 0 0 2px rgba(126, 192, 206, 0.2);
+}
+
+.dropdown-tag-save-btn,
+.dropdown-tag-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.dropdown-tag-save-btn {
+  background: var(--primary);
+  color: #fff;
+}
+
+.dropdown-tag-save-btn:hover {
+  background: var(--primary-dark);
+}
+
+.dropdown-tag-cancel-btn {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+
+.dropdown-tag-cancel-btn:hover {
+  background: #d1d5db;
 }
 
 .dropdown-add-row {

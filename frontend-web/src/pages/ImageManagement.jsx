@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
 import FilterSidebar from "../components/FilterSidebar";
 import ColorPicker from "../components/ColorPicker";
+import ReportModal from "../components/ReportModal";
 import AutocompleteInput from "../components/AutocompleteInput";
 import FolderCard from "../components/FolderCard";
 import FolderBox from "../components/FolderBox";
 import useChunkedRender from "../hooks/useChunkedRender";
 import {
-  UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES,
+  UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES, MANAGE_USERS_ROLES, REPORT_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
   BATCH_COLORS, SAME_FIELDS,
 } from "../constants";
@@ -27,6 +28,7 @@ const COMMON_SEARCH_LABELS = {
   flowerType: "Flower Type",
   designName: "Design Name",
   folderName: "Folder Name",
+  collectedBy: "Collected By",
   all: "All Fields",
 };
 
@@ -64,6 +66,7 @@ function ImageManagement() {
   const [favEventDate, setFavEventDate] = useState("");
   const [favFolderDesc, setFavFolderDesc] = useState("");
   const [favFolderEventTypes, setFavFolderEventTypes] = useState([]);
+  const [favCollectedBy, setFavCollectedBy] = useState("");
   const [selectedFavFolder, setSelectedFavFolder] = useState(null);
   const [showEditFolderModal, setShowEditFolderModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState(null);
@@ -101,6 +104,20 @@ function ImageManagement() {
   const [customFavETInput, setCustomFavETInput] = useState("");
   const [customEditETInput, setCustomEditETInput] = useState("");
   const [newDecorType, setNewDecorType] = useState("");
+  const [hiddenEventTypes, setHiddenEventTypes] = useState([]);
+  const [hiddenDecorTypes, setHiddenDecorTypes] = useState([]);
+  const [editingEventTypeIdx, setEditingEventTypeIdx] = useState(null);
+  const [editingDecorTypeIdx, setEditingDecorTypeIdx] = useState(null);
+  const [editingTagValue, setEditingTagValue] = useState("");
+  const [designNameSugs, setDesignNameSugs] = useState([]);
+  const [venueSugs, setVenueSugs] = useState([]);
+
+  const [batchDesignNameSugs, setBatchDesignNameSugs] = useState([]);
+  const [batchVenueSugs, setBatchVenueSugs] = useState([]);
+  const designNameSugTimer = useRef(null);
+  const venueSugTimer = useRef(null);
+  const batchDesignNameSugTimer = useRef(null);
+  const batchVenueSugTimer = useRef(null);
   const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
   const [showFavEventTypeDropdown, setShowFavEventTypeDropdown] = useState(false);
   const [showEditEventTypeDropdown, setShowEditEventTypeDropdown] = useState(false);
@@ -129,8 +146,8 @@ function ImageManagement() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
-  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes].filter((t, i, arr) => arr.indexOf(t) === i && !hiddenEventTypes.includes(t));
+  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes].filter((t, i, arr) => arr.indexOf(t) === i && !hiddenDecorTypes.includes(t));
 
   const showNotif = (message, type = "error") => {
     setNotification({ message, type });
@@ -153,6 +170,7 @@ function ImageManagement() {
   const [eventDate, setEventDate] = useState("");
   const [folderDescription, setFolderDescription] = useState("");
   const [folderEventTypes, setFolderEventTypes] = useState([]);
+  const [collectedBy, setCollectedBy] = useState("");
 
   const [imageData, setImageData] = useState({
     designName: "",
@@ -166,6 +184,7 @@ function ImageManagement() {
     flowerType: "",
     priceMin: "",
     priceMax: "",
+    venueName: "",
   });
 
   const navigate = useNavigate();
@@ -216,6 +235,8 @@ function ImageManagement() {
       const config = await ApiService.getDropdownConfig();
       if (config.eventTypes) setCustomEventTypes(config.eventTypes);
       if (config.decorTypes) setCustomDecorTypes(config.decorTypes);
+      if (config.hiddenEventTypes) setHiddenEventTypes(config.hiddenEventTypes);
+      if (config.hiddenDecorTypes) setHiddenDecorTypes(config.hiddenDecorTypes);
     } catch (err) {
       console.error("Failed to load dropdown config:", err);
     }
@@ -359,7 +380,7 @@ function ImageManagement() {
     const folderName = `${customerName.trim()}_${venueName.trim()}_${eventDate}`;
     setLoading(true);
     try {
-      await ApiService.createFolder(folderName, folderDescription.trim(), folderEventTypes);
+      await ApiService.createFolder(folderName, folderDescription.trim(), folderEventTypes, collectedBy.trim());
       resetAddFolderForm();
       setShowAddFolderModal(false);
       loadFolders();
@@ -426,7 +447,8 @@ function ImageManagement() {
   };
 
   const resetUploadForm = () => {
-    setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+    const folderVenue = currentFolder ? parseFolderName(currentFolder.name).venue : "";
+    setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "", venueName: folderVenue });
     setSelectedImage(null);
     setImagePreview("");
     setBatchImages([]);
@@ -434,6 +456,8 @@ function ImageManagement() {
     setUploadTab("single");
     setBatchColorPickerIndex(null);
     setBatchColorSearch("");
+    setDesignNameSugs([]);
+    setVenueSugs([]);
     isUploading.current = false;
   };
 
@@ -443,6 +467,7 @@ function ImageManagement() {
     setEventDate("");
     setFolderDescription("");
     setFolderEventTypes([]);
+    setCollectedBy("");
     setCustomETInput("");
     setShowEventTypeDropdown(false);
   };
@@ -453,6 +478,7 @@ function ImageManagement() {
     setFavEventDate("");
     setFavFolderDesc("");
     setFavFolderEventTypes([]);
+    setFavCollectedBy("");
     setCustomFavETInput("");
     setShowFavEventTypeDropdown(false);
   };
@@ -510,7 +536,7 @@ function ImageManagement() {
       SAME_FIELDS.forEach(f => { keepSame[f] = false; });
       return {
         file, preview: URL.createObjectURL(file),
-        designName: "", decorType: "",
+        designName: "", decorType: "", venueName: "",
         sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
         colours: "", flowerType: "", priceMin: "", priceMax: "",
         keepSame,
@@ -578,6 +604,8 @@ function ImageManagement() {
       if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
       if (isFieldRequired("image_size") && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missing.push("Size (W,L,H)");
       if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
+      const rowFolderVenue = currentFolder ? parseFolderName(currentFolder.name).venue : "";
+      if (isFieldRequired("image_venueName") && !row.venueName && !rowFolderVenue) missing.push("Venue");
       if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
       if (row.priceMin && row.priceMax && parseFloat(row.priceMax) <= parseFloat(row.priceMin)) missingRows.push({ row: idx + 1, fields: ["Max price must be > Min price"] });
       if ((row.sizeWidth || row.sizeLength || row.sizeHeight) && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missingRows.push({ row: idx + 1, fields: ["All three size fields required"] });
@@ -629,10 +657,11 @@ function ImageManagement() {
           designName: row.designName,
           decorType: row.decorType,
           venueCustomer: folderCustomer,
-          venueName: folderVenue,
+          venueName: row.venueName || folderVenue,
           flowerType: row.flowerType || null,
           priceMin: row.priceMin,
           priceMax: row.priceMax,
+          collectedBy: currentFolder.collected_by || "",
         };
         await ApiService.uploadImage(metaData);
         return true;
@@ -685,6 +714,8 @@ function ImageManagement() {
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
     if (isFieldRequired("image_size") && (!imageData.sizeWidth || !imageData.sizeLength || !imageData.sizeHeight)) missing.push("Size (W, L, H all required)");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
+    const folderVenueName = currentFolder ? parseFolderName(currentFolder.name).venue : "";
+    if (isFieldRequired("image_venueName") && !imageData.venueName && !folderVenueName) missing.push("Venue");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
       return;
@@ -730,17 +761,18 @@ function ImageManagement() {
         designName: imageData.designName,
         decorType: imageData.decorType,
         venueCustomer: folderCustomer,
-        venueName: folderVenue,
+        venueName: imageData.venueName || folderVenue,
         flowerType: imageData.flowerType,
         priceMin: imageData.priceMin,
         priceMax: imageData.priceMax,
+        collectedBy: currentFolder.collected_by || "",
       };
       setUploadProgress("Saving metadata...");
       await ApiService.uploadImage(metaData);
       setUploadProgress("Uploaded successfully!");
       setSelectedImage(null);
       setImagePreview("");
-      setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
+      setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "", venueName: "" });
       isUploading.current = false;
       try { await loadImages(); } catch {}
       setTimeout(() => {
@@ -976,6 +1008,7 @@ function ImageManagement() {
       if (filterData.flowerTypes && filterData.flowerTypes.length > 0) searchFilters.flowerType = filterData.flowerTypes.join(",");
       if (filterData.placeOfEvent) searchFilters.placeOfEvent = filterData.placeOfEvent;
       if (filterData.folderName) searchFilters.folderName = filterData.folderName;
+      if (filterData.collectedBy) searchFilters.collectedBy = filterData.collectedBy;
       if (filterData.priceRange) {
         if (filterData.priceRange[0] > 0) searchFilters.priceMin = filterData.priceRange[0];
         if (filterData.priceRange[1] < 10000) searchFilters.priceMax = filterData.priceRange[1];
@@ -1031,6 +1064,7 @@ function ImageManagement() {
       else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
       else if (commonSearchType === "designName") searchFilters.designName = term;
       else if (commonSearchType === "folderName") searchFilters.folderName = term;
+      else if (commonSearchType === "collectedBy") searchFilters.collectedBy = term;
       else searchFilters.searchText = term;
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
@@ -1047,7 +1081,7 @@ function ImageManagement() {
   const fetchSuggestions = async (query) => {
     if (suggTimerRef.current) clearTimeout(suggTimerRef.current);
     if (!query.trim()) { setSearchSuggestions([]); setShowSuggestions(false); return; }
-    const sugFieldMap = { venue: "venueName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", designName: "designName", folderName: "folderName", all: "designName" };
+    const sugFieldMap = { venue: "venueName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", designName: "designName", folderName: "folderName", collectedBy: "collectedBy", all: "designName" };
     const field = sugFieldMap[commonSearchType];
     if (!field) { setSearchSuggestions([]); setShowSuggestions(false); return; }
     suggTimerRef.current = setTimeout(async () => {
@@ -1106,7 +1140,7 @@ function ImageManagement() {
     }
     const folderName = `${favCustName.trim()}_${favVenue.trim()}_${favEventDate}`;
     try {
-      await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim(), favFolderEventTypes);
+      await ApiService.createFavoriteFolder(folderName, favFolderDesc.trim(), favFolderEventTypes, favCollectedBy.trim());
       resetAddFavFolderForm();
       setShowAddFavFolderModal(false);
       loadFavoriteFolders();
@@ -1195,6 +1229,44 @@ function ImageManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveEventTypeEdit = async (index, oldVal) => {
+    const newVal = editingTagValue.trim();
+    if (!newVal || newVal === oldVal) { setEditingEventTypeIdx(null); setEditingTagValue(""); return; }
+    const isBuiltIn = EVENT_TYPES.includes(oldVal);
+    if (isBuiltIn) {
+      const newHidden = [...hiddenEventTypes, oldVal];
+      const newCustom = customEventTypes.includes(newVal) ? customEventTypes : [...customEventTypes, newVal];
+      setHiddenEventTypes(newHidden);
+      setCustomEventTypes(newCustom);
+      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, newHidden, hiddenDecorTypes);
+    } else {
+      const newCustom = customEventTypes.map(ct => ct === oldVal ? newVal : ct);
+      setCustomEventTypes(newCustom);
+      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
+    }
+    setEditingEventTypeIdx(null);
+    setEditingTagValue("");
+  };
+
+  const handleSaveDecorTypeEdit = async (index, oldVal) => {
+    const newVal = editingTagValue.trim();
+    if (!newVal || newVal === oldVal) { setEditingDecorTypeIdx(null); setEditingTagValue(""); return; }
+    const isBuiltIn = DECOR_TYPES.includes(oldVal);
+    if (isBuiltIn) {
+      const newHidden = [...hiddenDecorTypes, oldVal];
+      const newCustom = customDecorTypes.includes(newVal) ? customDecorTypes : [...customDecorTypes, newVal];
+      setHiddenDecorTypes(newHidden);
+      setCustomDecorTypes(newCustom);
+      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, newHidden);
+    } else {
+      const newCustom = customDecorTypes.map(ct => ct === oldVal ? newVal : ct);
+      setCustomDecorTypes(newCustom);
+      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, hiddenDecorTypes);
+    }
+    setEditingDecorTypeIdx(null);
+    setEditingTagValue("");
   };
 
   const handleEditUser = (user) => {
@@ -1290,34 +1362,37 @@ function ImageManagement() {
     navigate("/", { replace: true });
   };
 
-  const DOWNLOAD_ALL_ROLES = ["Owner", "Captain", "ViceCaptain", "Admin"];
+  const DOWNLOAD_ALL_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canDownloadAll = user && DOWNLOAD_ALL_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
-  const [syncing, setSyncing] = useState(false);
+  const canManageUsers = user && MANAGE_USERS_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canViewReport = user && REPORT_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportData, setReportData] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
   const isUploading = useRef(false);
 
-  const handleSyncCloudinary = async () => {
-    setSyncing(true);
+  const handleOpenReport = async () => {
+    setReportLoading(true);
+    setShowReportModal(true);
     try {
-      const result = await ApiService.syncCloudinary("import");
-      let msg = `Sync complete: ${result.importedCount} imported`;
-      if (result.skippedCount > 0) msg += `, ${result.skippedCount} skipped`;
-      if (result.errorCount > 0) msg += `, ${result.errorCount} errors`;
-      if (result.totalCloudinary > 0) msg += ` (Cloudinary: ${result.totalCloudinary})`;
-      showNotif(msg, result.errorCount > 0 ? "warning" : "success");
-      if (result.errors && result.errors.length > 0) {
-        console.error("[Sync errors]", result.errors.slice(0, 10));
-      }
-      loadFolders();
-      if (view === "images") loadAllImages();
+      const data = await ApiService.getReport();
+      setReportData(data);
     } catch (err) {
-      showNotif("Sync failed: " + err.message);
+      showNotif("Failed to load report: " + err.message);
+      setShowReportModal(false);
     } finally {
-      setSyncing(false);
+      setReportLoading(false);
     }
   };
+
+  const handleCloseReport = () => {
+    setShowReportModal(false);
+    setReportData([]);
+  };
+
   const displayName = user?.displayName || user?.username || "User";
   const role = user?.role || "N/A";
 
@@ -1469,6 +1544,7 @@ function ImageManagement() {
                 <option value="flowerType">Flower Type</option>
                 <option value="designName">Design Name</option>
                 <option value="folderName">Folder Name</option>
+                <option value="collectedBy">Collected By</option>
                 <option value="all">All Fields</option>
               </select>
               <div className="common-search-input-wrap">
@@ -1519,13 +1595,16 @@ function ImageManagement() {
                 Download All
               </button>
             )}
-            {canDownloadAll && (
-              <button className="btn btn-sync-cloudinary" onClick={handleSyncCloudinary} disabled={syncing} title="Sync Cloudinary">
+            {canViewReport && (
+              <button className="btn btn-report" onClick={handleOpenReport} title="Report">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M23 4v6h-6"/>
-                  <path d="M1 20v-6h6"/>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
                 </svg>
+                Report
               </button>
             )}
           </div>
@@ -1540,6 +1619,8 @@ function ImageManagement() {
             onClose={() => setShowFiltersSidebar(false)}
             customEventTypes={customEventTypes}
             customDecorTypes={customDecorTypes}
+            hiddenEventTypes={hiddenEventTypes}
+            hiddenDecorTypes={hiddenDecorTypes}
           />
         )}
 
@@ -1795,7 +1876,7 @@ function ImageManagement() {
               <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); setSelectedImageIds(new Set()); }}>HOME</button>
             )}
             <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); setSelectedImageIds(new Set()); loadAllImages(); }}>IMAGES</button>
-            {canUpload && (
+            {canManageUsers && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
             <div className="nav-item-dropdown">
@@ -1909,6 +1990,17 @@ function ImageManagement() {
                   value={eventDate}
                   onChange={(e) => setEventDate(e.target.value)}
                   required={isFieldRequired("folder_eventDate")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Collected By</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={collectedBy}
+                  onChange={(e) => setCollectedBy(e.target.value)}
+                  placeholder="Enter collector name"
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
@@ -2036,6 +2128,17 @@ function ImageManagement() {
                   value={favEventDate}
                   onChange={(e) => setFavEventDate(e.target.value)}
                   required={isFieldRequired("folder_eventDate")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Collected By</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={favCollectedBy}
+                  onChange={(e) => setFavCollectedBy(e.target.value)}
+                  placeholder="Enter collector name"
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
@@ -2268,9 +2371,25 @@ function ImageManagement() {
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="label">Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}</label>
-                    <input type="text" className="input" value={imageData.designName}
-                      onChange={(e) => setImageData({...imageData, designName: e.target.value})}
-                      placeholder="Enter design name" required={isFieldRequired("image_designName")} />
+                    <AutocompleteInput
+                      options={designNameSugs}
+                      value={imageData.designName}
+                      onChange={(val) => {
+                        setImageData({...imageData, designName: val});
+                        if (designNameSugTimer.current) clearTimeout(designNameSugTimer.current);
+                        if (val.trim()) {
+                          designNameSugTimer.current = setTimeout(async () => {
+                            const sugs = await ApiService.getSuggestions("designName", val);
+                            setDesignNameSugs(sugs);
+                          }, 200);
+                        } else {
+                          setDesignNameSugs([]);
+                        }
+                      }}
+                      placeholder="Enter design name"
+                      required={isFieldRequired("image_designName")}
+                      showOnEmpty={false}
+                    />
                   </div>
                   <div className="form-group">
                     <label className="label">Decoration Type{isFieldRequired("image_decorType") && <span className="required">*</span>}</label>
@@ -2298,6 +2417,29 @@ function ImageManagement() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Venue{isFieldRequired("image_venueName") && <span className="required">*</span>}</label>
+                  <AutocompleteInput
+                    options={venueSugs}
+                    value={imageData.venueName}
+                    onChange={(val) => {
+                      setImageData({...imageData, venueName: val});
+                      if (venueSugTimer.current) clearTimeout(venueSugTimer.current);
+                      if (val.trim()) {
+                        venueSugTimer.current = setTimeout(async () => {
+                          const sugs = await ApiService.getSuggestions("venueName", val);
+                          setVenueSugs(sugs);
+                        }, 200);
+                      } else {
+                        setVenueSugs([]);
+                      }
+                    }}
+                    placeholder="Enter venue name"
+                    required={isFieldRequired("image_venueName")}
+                    showOnEmpty={false}
+                  />
                 </div>
 
                 <div className="grid-2">
@@ -2384,6 +2526,7 @@ function ImageManagement() {
                           <tr>
                             <th>Image</th>
                             <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
+                            <th>Venue{isFieldRequired("image_venueName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
                             <th>Unit<span className="batch-same-hdr">S</span></th>
@@ -2400,10 +2543,54 @@ function ImageManagement() {
                               <td><div className="batch-thumbnail"><img src={row.preview} alt="" /></div></td>
                               <td>
                                 <div className="batch-field-with-same">
-                                  <input type="text" className="batch-input" value={row.designName}
-                                    onChange={(e) => updateBatchRow(index, "designName", e.target.value)} placeholder="Design" />
+                                  <div className="batch-autocomplete-cell">
+                                    <AutocompleteInput
+                                      options={batchDesignNameSugs}
+                                      value={row.designName}
+                                      onChange={(val) => {
+                                        updateBatchRow(index, "designName", val);
+                                        if (batchDesignNameSugTimer.current) clearTimeout(batchDesignNameSugTimer.current);
+                                        if (val.trim()) {
+                                          batchDesignNameSugTimer.current = setTimeout(async () => {
+                                            const sugs = await ApiService.getSuggestions("designName", val);
+                                            setBatchDesignNameSugs(sugs);
+                                          }, 200);
+                                        } else {
+                                          setBatchDesignNameSugs([]);
+                                        }
+                                      }}
+                                      placeholder="Design"
+                                      showOnEmpty={false}
+                                    />
+                                  </div>
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.designName ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "designName")} title="Same as previous row">S</button>}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="batch-field-with-same">
+                                  <div className="batch-autocomplete-cell">
+                                    <AutocompleteInput
+                                      options={batchVenueSugs}
+                                      value={row.venueName}
+                                      onChange={(val) => {
+                                        updateBatchRow(index, "venueName", val);
+                                        if (batchVenueSugTimer.current) clearTimeout(batchVenueSugTimer.current);
+                                        if (val.trim()) {
+                                          batchVenueSugTimer.current = setTimeout(async () => {
+                                            const sugs = await ApiService.getSuggestions("venueName", val);
+                                            setBatchVenueSugs(sugs);
+                                          }, 200);
+                                        } else {
+                                          setBatchVenueSugs([]);
+                                        }
+                                      }}
+                                      placeholder="Venue"
+                                      showOnEmpty={false}
+                                    />
+                                  </div>
+                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.venueName ? "active" : ""}`}
+                                    onClick={() => toggleKeepSameField(index, "venueName")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
@@ -2692,16 +2879,14 @@ function ImageManagement() {
                 </div>
                 <div className="form-group">
                   <label className="label">Role</label>
-                  <select className="input" value={userForm.role}
-                    onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
-                    <option value="">Select Role</option>
-                    <option value="Captain">Captain</option>
-                    <option value="ViceCaptain">ViceCaptain</option>
-                    <option value="Facilitator">Facilitator</option>
-                    <option value="TeamLead">TeamLead</option>
-                    <option value="TeamMember">TeamMember</option>
-                    <option value="Marketing">Marketing</option>
-                  </select>
+                    <select className="input" value={userForm.role}
+                      onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
+                      <option value="">Select Role</option>
+                      <option value="CEO">CEO</option>
+                      <option value="Marketing Head">Marketing Head</option>
+                      <option value="Event Managers">Event Managers</option>
+                      <option value="Admin">Admin</option>
+                    </select>
                 </div>
                 <div className="form-group">
                   <label className="label">Password (leave blank to keep current)</label>
@@ -2729,12 +2914,10 @@ function ImageManagement() {
                     <select className="input" value={userForm.role}
                       onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
                       <option value="">Role</option>
-                      <option value="Captain">Captain</option>
-                      <option value="ViceCaptain">ViceCaptain</option>
-                      <option value="Facilitator">Facilitator</option>
-                      <option value="TeamLead">TeamLead</option>
-                      <option value="TeamMember">TeamMember</option>
-                      <option value="Marketing">Marketing</option>
+                      <option value="CEO">CEO</option>
+                      <option value="Marketing Head">Marketing Head</option>
+                      <option value="Event Managers">Event Managers</option>
+                      <option value="Admin">Admin</option>
                     </select>
                     <input type="text" className="input" placeholder="Password" value={userForm.password}
                       onChange={(e) => setUserForm({...userForm, password: e.target.value})} required />
@@ -2748,6 +2931,7 @@ function ImageManagement() {
                   <table className="user-table">
                     <thead>
                       <tr>
+                        <th>Display Name</th>
                         <th>Username</th>
                         <th>Role</th>
                         <th>Password</th>
@@ -2756,34 +2940,37 @@ function ImageManagement() {
                     </thead>
                     <tbody>
                       {users.length === 0 ? (
-                        <tr><td colSpan={4} className="empty-table">No users found.</td></tr>
+                        <tr><td colSpan={5} className="empty-table">No users found.</td></tr>
                       ) : (
                         users.map(user => (
                           <tr key={user.id}>
+                            <td>{user.displayName}</td>
                             <td>{user.username}</td>
                             <td><span className={`role-badge ${user.role?.toLowerCase()}`}>{user.role}</span></td>
                             <td className="password-cell">
                               <div className="password-wrapper">
                                 <span className="password-text">
-                                  {visiblePasswords.has(user.id) ? (user.password || "(no password)") : "••••••••"}
+                                  {user?.role === "CEO" && visiblePasswords.has(user.id) ? (user.password || "(no password)") : "••••••••"}
                                 </span>
-                                <button
-                                  className="password-toggle-btn"
-                                  onClick={() => togglePasswordVisibility(user.id)}
-                                  title={visiblePasswords.has(user.id) ? "Hide password" : "Show password"}
-                                >
-                                  {visiblePasswords.has(user.id) ? (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                                      <line x1="1" y1="1" x2="23" y2="23"/>
-                                    </svg>
-                                  ) : (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                      <circle cx="12" cy="12" r="3"/>
-                                    </svg>
-                                  )}
-                                </button>
+                                {user?.role === "CEO" && (
+                                  <button
+                                    className="password-toggle-btn"
+                                    onClick={() => togglePasswordVisibility(user.id)}
+                                    title={visiblePasswords.has(user.id) ? "Hide password" : "Show password"}
+                                  >
+                                    {visiblePasswords.has(user.id) ? (
+                                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                                        <line x1="1" y1="1" x2="23" y2="23"/>
+                                      </svg>
+                                    ) : (
+                                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+                                      </svg>
+                                    )}
+                                  </button>
+                                )}
                               </div>
                             </td>
                             <td className="actions-cell">
@@ -2834,6 +3021,7 @@ function ImageManagement() {
                       <h4>Upload Image</h4>
                       <label className="form-settings-row"><span>Design Name</span><input type="checkbox" checked={isFieldRequired("image_designName")} onChange={(e) => { const c = {...formConfig, image_designName: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Decoration Type</span><input type="checkbox" checked={isFieldRequired("image_decorType")} onChange={(e) => { const c = {...formConfig, image_decorType: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("image_venueName")} onChange={(e) => { const c = {...formConfig, image_venueName: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Flower Type</span><input type="checkbox" checked={isFieldRequired("image_flowerType")} onChange={(e) => { const c = {...formConfig, image_flowerType: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Colour</span><input type="checkbox" checked={isFieldRequired("image_colours")} onChange={(e) => { const c = {...formConfig, image_colours: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Size</span><input type="checkbox" checked={isFieldRequired("image_size")} onChange={(e) => { const c = {...formConfig, image_size: e.target.checked}; saveFormConfig(c); }} /></label>
@@ -2842,23 +3030,52 @@ function ImageManagement() {
                   </div>
                 )}
 
-                {showFormSettings && (user?.role === "Captain" || user?.role === "ViceCaptain" || user?.role === "Admin" || user?.role === "Owner") && (
+                {showFormSettings && (user?.role === "CEO" || user?.role === "Marketing Head" || user?.role === "Admin" || user?.role === "Owner") && (
                   <div className="form-settings-panel" style={{ marginTop: "16px" }}>
                     <h3 className="form-settings-title">Manage Dropdown Options</h3>
-                    <p className="form-settings-hint">Add or remove options for Event Type and Decoration Type dropdowns. Changes apply to all users.</p>
+                    <p className="form-settings-hint">Add, edit, or remove options for dropdowns. Changes apply to all users.</p>
 
                     <div className="form-settings-group">
                       <h4>Event Type</h4>
                       <div className="dropdown-tag-list">
                         {allEventTypes.map((t, i) => (
                           <span key={i} className="dropdown-tag">
-                            {t}
-                            {customEventTypes.includes(t) && !EVENT_TYPES.includes(t) && (
-                              <button type="button" className="dropdown-tag-remove" onClick={async () => {
-                                const updated = customEventTypes.filter(ct => ct !== t);
-                                setCustomEventTypes(updated);
-                                await ApiService.updateDropdownConfig(updated, customDecorTypes);
-                              }}>×</button>
+                            {editingEventTypeIdx === i ? (
+                              <span className="dropdown-tag-editing">
+                                <input type="text" className="input-sm" value={editingTagValue}
+                                  onChange={(e) => setEditingTagValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { handleSaveEventTypeEdit(i, t); }
+                                    if (e.key === "Escape") { setEditingEventTypeIdx(null); setEditingTagValue(""); }
+                                  }}
+                                  autoFocus />
+                                <button type="button" className="dropdown-tag-save-btn"
+                                  onClick={() => handleSaveEventTypeEdit(i, t)}>✓</button>
+                                <button type="button" className="dropdown-tag-cancel-btn"
+                                  onClick={() => { setEditingEventTypeIdx(null); setEditingTagValue(""); }}>×</button>
+                              </span>
+                            ) : (
+                              <>
+                                {t}
+                                <button type="button" className="dropdown-tag-edit"
+                                  onClick={() => { setEditingEventTypeIdx(i); setEditingTagValue(t); }}
+                                  title="Edit">✎</button>
+                                <button type="button" className="dropdown-tag-remove"
+                                  onClick={async () => {
+                                    const isBuiltIn = EVENT_TYPES.includes(t);
+                                    if (isBuiltIn) {
+                                      const newHidden = [...hiddenEventTypes, t];
+                                      setHiddenEventTypes(newHidden);
+                                      const newCustom = customEventTypes.filter(ct => ct !== t);
+                                      setCustomEventTypes(newCustom);
+                                      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, newHidden, hiddenDecorTypes);
+                                    } else {
+                                      const updated = customEventTypes.filter(ct => ct !== t);
+                                      setCustomEventTypes(updated);
+                                      await ApiService.updateDropdownConfig(updated, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
+                                    }
+                                  }}>×</button>
+                              </>
                             )}
                           </span>
                         ))}
@@ -2873,7 +3090,7 @@ function ImageManagement() {
                             const updated = [...customEventTypes, val];
                             setCustomEventTypes(updated);
                             setNewEventType("");
-                            await ApiService.updateDropdownConfig(updated, customDecorTypes);
+                            await ApiService.updateDropdownConfig(updated, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
                           }}>Add</button>
                       </div>
                     </div>
@@ -2883,13 +3100,42 @@ function ImageManagement() {
                       <div className="dropdown-tag-list">
                         {allDecorTypes.map((t, i) => (
                           <span key={i} className="dropdown-tag">
-                            {t}
-                            {customDecorTypes.includes(t) && !DECOR_TYPES.includes(t) && (
-                              <button type="button" className="dropdown-tag-remove" onClick={async () => {
-                                const updated = customDecorTypes.filter(ct => ct !== t);
-                                setCustomDecorTypes(updated);
-                                await ApiService.updateDropdownConfig(customEventTypes, updated);
-                              }}>×</button>
+                            {editingDecorTypeIdx === i ? (
+                              <span className="dropdown-tag-editing">
+                                <input type="text" className="input-sm" value={editingTagValue}
+                                  onChange={(e) => setEditingTagValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { handleSaveDecorTypeEdit(i, t); }
+                                    if (e.key === "Escape") { setEditingDecorTypeIdx(null); setEditingTagValue(""); }
+                                  }}
+                                  autoFocus />
+                                <button type="button" className="dropdown-tag-save-btn"
+                                  onClick={() => handleSaveDecorTypeEdit(i, t)}>✓</button>
+                                <button type="button" className="dropdown-tag-cancel-btn"
+                                  onClick={() => { setEditingDecorTypeIdx(null); setEditingTagValue(""); }}>×</button>
+                              </span>
+                            ) : (
+                              <>
+                                {t}
+                                <button type="button" className="dropdown-tag-edit"
+                                  onClick={() => { setEditingDecorTypeIdx(i); setEditingTagValue(t); }}
+                                  title="Edit">✎</button>
+                                <button type="button" className="dropdown-tag-remove"
+                                  onClick={async () => {
+                                    const isBuiltIn = DECOR_TYPES.includes(t);
+                                    if (isBuiltIn) {
+                                      const newHidden = [...hiddenDecorTypes, t];
+                                      setHiddenDecorTypes(newHidden);
+                                      const newCustom = customDecorTypes.filter(ct => ct !== t);
+                                      setCustomDecorTypes(newCustom);
+                                      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, newHidden);
+                                    } else {
+                                      const updated = customDecorTypes.filter(ct => ct !== t);
+                                      setCustomDecorTypes(updated);
+                                      await ApiService.updateDropdownConfig(customEventTypes, updated, hiddenEventTypes, hiddenDecorTypes);
+                                    }
+                                  }}>×</button>
+                              </>
                             )}
                           </span>
                         ))}
@@ -2904,7 +3150,7 @@ function ImageManagement() {
                             const updated = [...customDecorTypes, val];
                             setCustomDecorTypes(updated);
                             setNewDecorType("");
-                            await ApiService.updateDropdownConfig(customEventTypes, updated);
+                            await ApiService.updateDropdownConfig(customEventTypes, updated, hiddenEventTypes, hiddenDecorTypes);
                           }}>Add</button>
                       </div>
                     </div>
@@ -2927,8 +3173,24 @@ function ImageManagement() {
             <form onSubmit={handleSaveEdit}>
               <div className="form-group">
                 <label className="label">Design Name</label>
-                <input type="text" className="input" value={editData.designName}
-                  onChange={(e) => setEditData({...editData, designName: e.target.value})} />
+                <AutocompleteInput
+                  options={designNameSugs}
+                  value={editData.designName}
+                  onChange={(val) => {
+                    setEditData({...editData, designName: val});
+                    if (designNameSugTimer.current) clearTimeout(designNameSugTimer.current);
+                    if (val.trim()) {
+                      designNameSugTimer.current = setTimeout(async () => {
+                        const sugs = await ApiService.getSuggestions("designName", val);
+                        setDesignNameSugs(sugs);
+                      }, 200);
+                    } else {
+                      setDesignNameSugs([]);
+                    }
+                  }}
+                  placeholder="Enter design name"
+                  showOnEmpty={false}
+                />
               </div>
               <div className="grid-2">
                   <div className="form-group">
@@ -3052,6 +3314,13 @@ function ImageManagement() {
           </div>
         </div>
       )}
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={handleCloseReport}
+        data={reportData}
+        loading={reportLoading}
+      />
     </div>
   );
 }

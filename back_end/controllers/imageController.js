@@ -3,13 +3,13 @@ const cloudinary = require("../config/cloudinary");
 const { deleteImage: deleteStorageImage } = require("../config/storage");
 const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES, FOLDER_VIEW_ROLES } = require("../config/constants");
 
-const ADMIN_ROLES = ["Owner", "Captain", "ViceCaptain"];
+const ADMIN_ROLES = ["Owner", "CEO", "Marketing Head"];
 
 const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.toLowerCase());
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, sizeWidth, sizeLength, sizeHeight, page = 1, limit = 200 } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, sizeWidth, sizeLength, sizeHeight, collectedBy, page = 1, limit = 200 } = req.query;
     
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = parseInt(limit);
@@ -23,7 +23,7 @@ const getImages = async (req, res) => {
 
     const conditions = [];
 
-    if (!folder && !searchText && !eventType && !decorType && !colors && !flowerType && !priceMin && !priceMax && !designName && !placeOfEvent && !folderName && !sizeWidth && !sizeLength && !sizeHeight) {
+    if (!folder && !searchText && !eventType && !decorType && !colors && !flowerType && !priceMin && !priceMax && !designName && !placeOfEvent && !folderName && !sizeWidth && !sizeLength && !sizeHeight && !collectedBy) {
       conditions.push(`(folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL) OR folder_name NOT IN (SELECT name FROM folders))`);
     }
 
@@ -144,6 +144,12 @@ const getImages = async (req, res) => {
       paramIndex++;
     }
 
+    if (collectedBy) {
+      conditions.push(`image_data->>'collectedBy' ILIKE $${paramIndex}`);
+      params.push(`%${collectedBy}%`);
+      paramIndex++;
+    }
+
     if (conditions.length > 0) {
       whereClause = " WHERE " + conditions.join(" AND ");
     }
@@ -211,7 +217,8 @@ const uploadImage = async (req, res) => {
       sizeDisplay,
       flowerType,
       priceMin,
-      priceMax
+      priceMax,
+      collectedBy
     } = req.body;
 
     if (!folderName || !imageUrl) {
@@ -248,7 +255,8 @@ const uploadImage = async (req, res) => {
       flowerType: flowerType || null,
       priceMin: priceMin ? parseFloat(priceMin) : null,
       priceMax: priceMax ? parseFloat(priceMax) : null,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      collectedBy: collectedBy || ""
     };
 
     await pool.query(
@@ -421,6 +429,7 @@ const getSuggestions = async (req, res) => {
       venueName: "image_data->>'venueName'",
       venueCustomer: "image_data->>'venueCustomer'",
       flowerType: "image_data->>'flowerType'",
+      collectedBy: "image_data->>'collectedBy'",
     };
 
     const dbField = fieldMap[field];
@@ -444,6 +453,44 @@ const getSuggestions = async (req, res) => {
   }
 };
 
+const getReport = async (req, res) => {
+  try {
+    const role = req.user.role;
+    const roleLower = role ? role.toLowerCase() : "";
+    const allowedRoles = ["ceo", "admin"];
+    if (!allowedRoles.includes(roleLower)) {
+      return res.status(403).json({ message: "Access denied. Only CEO and Admin can view reports." });
+    }
+
+    const result = await pool.query(`
+      SELECT
+        f.id,
+        f.name,
+        f.description,
+        f.created_by AS uploaded_by_user_id,
+        u.username AS uploaded_by,
+        f.scope,
+        f.event_types,
+        f.collected_by,
+        f.created_at AS upload_date,
+        COALESCE(img_counts.image_count, 0) AS image_count
+      FROM folders f
+      LEFT JOIN users u ON f.created_by = u.id
+      LEFT JOIN (
+        SELECT folder_name, COUNT(*) AS image_count
+        FROM image_management
+        GROUP BY folder_name
+      ) img_counts ON f.name = img_counts.folder_name
+      WHERE (f.scope = 'home' OR f.scope IS NULL)
+      ORDER BY f.created_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getImages,
   getFolders,
@@ -453,6 +500,7 @@ module.exports = {
   updateImageFolder,
   updateImage,
   getSuggestions,
+  getReport,
   UPLOAD_ROLES,
   DELETE_ROLES,
   VIEW_ROLES,
