@@ -23,7 +23,7 @@ const getImages = async (req, res) => {
 
     const conditions = [];
 
-    if (!folder && !searchText && !eventType && !decorType && !colors && !flowerType && !priceMin && !priceMax && !designName && !placeOfEvent) {
+    if (!folder && !searchText && !eventType && !decorType && !colors && !flowerType && !priceMin && !priceMax && !designName && !placeOfEvent && !folderName && !sizeWidth && !sizeLength && !sizeHeight) {
       conditions.push(`(folder_name IN (SELECT name FROM folders WHERE scope = 'home' OR scope IS NULL) OR folder_name NOT IN (SELECT name FROM folders))`);
     }
 
@@ -74,22 +74,22 @@ const getImages = async (req, res) => {
     }
 
           if (placeOfEvent) {
-            conditions.push(`im.place_of_event ILIKE $${paramIndex}`);
+            conditions.push(`image_data->>'venueName' ILIKE $${paramIndex}`);
             params.push(`%${placeOfEvent}%`);
             paramIndex++;
           }
           if (sizeWidth) {
-            conditions.push(`im.size_width = $${paramIndex}`);
+            conditions.push(`image_data->>'sizeWidth' = $${paramIndex}`);
             params.push(sizeWidth);
             paramIndex++;
           }
           if (sizeLength) {
-            conditions.push(`im.size_length = $${paramIndex}`);
+            conditions.push(`image_data->>'sizeLength' = $${paramIndex}`);
             params.push(sizeLength);
             paramIndex++;
           }
           if (sizeHeight) {
-            conditions.push(`im.size_height = $${paramIndex}`);
+            conditions.push(`image_data->>'sizeHeight' = $${paramIndex}`);
             params.push(sizeHeight);
             paramIndex++;
           }
