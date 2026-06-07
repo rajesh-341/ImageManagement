@@ -26,6 +26,7 @@ const COMMON_SEARCH_LABELS = {
   colour: "Colour",
   flowerType: "Flower Type",
   designName: "Design Name",
+  folderName: "Folder Name",
   all: "All Fields",
 };
 
@@ -88,6 +89,7 @@ function ImageManagement() {
   const [visiblePasswords, setVisiblePasswords] = useState(new Set());
   const [notification, setNotification] = useState(null);
   const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
+  const [batchColorSearch, setBatchColorSearch] = useState("");
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
   const [showOtherServices, setShowOtherServices] = useState(false);
@@ -425,6 +427,7 @@ function ImageManagement() {
     setCurrentFolder(folder);
     setView("folders");
     setFilteredImages([]);
+    setSelectedImageIds(new Set());
   };
 
   const resetUploadForm = () => {
@@ -534,8 +537,11 @@ function ImageManagement() {
       if (isFieldRequired("image_designName") && !row.designName) missing.push("Design Name");
       if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
       if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
+      if (isFieldRequired("image_size") && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missing.push("Size (W,L,H)");
       if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
       if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
+      if (row.priceMin && row.priceMax && parseFloat(row.priceMax) <= parseFloat(row.priceMin)) missingRows.push({ row: idx + 1, fields: ["Max price must be > Min price"] });
+      if ((row.sizeWidth || row.sizeLength || row.sizeHeight) && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missingRows.push({ row: idx + 1, fields: ["All three size fields required"] });
     });
 
     if (missingRows.length > 0) {
@@ -617,7 +623,8 @@ function ImageManagement() {
       setUploadProgress(`Successfully uploaded ${successCount} images in ${totalTime}s!${errorCount > 0 ? ` (${errorCount} failed)` : ""}`);
       batchImages.forEach(row => URL.revokeObjectURL(row.preview));
       setBatchImages([]);
-      loadImages();
+      isUploading.current = false;
+      await loadImages();
       setTimeout(() => {
         resetUploadForm();
         setShowUploadModal(false);
@@ -637,9 +644,18 @@ function ImageManagement() {
     if (isFieldRequired("image_designName") && !imageData.designName) missing.push("Design Name");
     if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
+    if (isFieldRequired("image_size") && (!imageData.sizeWidth || !imageData.sizeLength || !imageData.sizeHeight)) missing.push("Size (W, L, H all required)");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
     if (missing.length > 0) {
       showNotif(`Please fill all required fields: ${missing.join(", ")}`, "warning");
+      return;
+    }
+    if (imageData.priceMin && imageData.priceMax && parseFloat(imageData.priceMax) <= parseFloat(imageData.priceMin)) {
+      showNotif("Maximum price must be greater than minimum price", "warning");
+      return;
+    }
+    if ((imageData.sizeWidth || imageData.sizeLength || imageData.sizeHeight) && (!imageData.sizeWidth || !imageData.sizeLength || !imageData.sizeHeight)) {
+      showNotif("All three size fields (Width, Length, Height) are required", "warning");
       return;
     }
     setLoading(true);
@@ -686,7 +702,8 @@ function ImageManagement() {
       setSelectedImage(null);
       setImagePreview("");
       setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "" });
-      try { loadImages(); } catch {}
+      isUploading.current = false;
+      try { await loadImages(); } catch {}
       setTimeout(() => {
         resetUploadForm();
         setShowUploadModal(false);
@@ -919,9 +936,15 @@ function ImageManagement() {
       if (filterData.colors && filterData.colors.length > 0) searchFilters.colors = filterData.colors.join(",");
       if (filterData.flowerTypes && filterData.flowerTypes.length > 0) searchFilters.flowerType = filterData.flowerTypes.join(",");
       if (filterData.placeOfEvent) searchFilters.placeOfEvent = filterData.placeOfEvent;
+      if (filterData.folderName) searchFilters.folderName = filterData.folderName;
       if (filterData.priceRange) {
-        searchFilters.priceMin = filterData.priceRange[0];
-        searchFilters.priceMax = filterData.priceRange[1];
+        if (filterData.priceRange[0] > 0) searchFilters.priceMin = filterData.priceRange[0];
+        if (filterData.priceRange[1] < 10000) searchFilters.priceMax = filterData.priceRange[1];
+      }
+      if (filterData.sizeFilters) {
+        if (filterData.sizeFilters.width) searchFilters.sizeWidth = filterData.sizeFilters.width;
+        if (filterData.sizeFilters.length) searchFilters.sizeLength = filterData.sizeFilters.length;
+        if (filterData.sizeFilters.height) searchFilters.sizeHeight = filterData.sizeFilters.height;
       }
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
@@ -968,6 +991,7 @@ function ImageManagement() {
       else if (commonSearchType === "colour") searchFilters.colors = term;
       else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
       else if (commonSearchType === "designName") searchFilters.designName = term;
+      else if (commonSearchType === "folderName") searchFilters.folderName = term;
       else searchFilters.searchText = term;
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
@@ -984,7 +1008,7 @@ function ImageManagement() {
   const fetchSuggestions = async (query) => {
     if (suggTimerRef.current) clearTimeout(suggTimerRef.current);
     if (!query.trim()) { setSearchSuggestions([]); setShowSuggestions(false); return; }
-    const sugFieldMap = { venue: "venueName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", designName: "designName", all: "designName" };
+    const sugFieldMap = { venue: "venueName", eventType: "eventType", decorType: "decorType", flowerType: "flowerType", designName: "designName", folderName: "folderName", all: "designName" };
     const field = sugFieldMap[commonSearchType];
     if (!field) { setSearchSuggestions([]); setShowSuggestions(false); return; }
     suggTimerRef.current = setTimeout(async () => {
@@ -999,6 +1023,7 @@ function ImageManagement() {
   const handleToggleFavorites = () => {
     const wasShowing = showFavorites;
     setShowFavorites(!wasShowing);
+    setSelectedImageIds(new Set());
     if (!wasShowing) {
       loadFavorites();
       loadFavoriteFolders();
@@ -1009,11 +1034,13 @@ function ImageManagement() {
 
   const handleEnterFavoriteFolder = (folder) => {
     setSelectedFavFolder(folder);
+    setSelectedImageIds(new Set());
     loadFavorites(folder.name);
   };
 
   const handleBackFromFavFolder = () => {
     setSelectedFavFolder(null);
+    setSelectedImageIds(new Set());
     loadFavorites();
   };
 
@@ -1060,8 +1087,6 @@ function ImageManagement() {
       designName: data.designName || "",
       eventType: data.eventType || "",
       decorType: data.decorType || "",
-      venueCustomer: data.venueCustomer || "",
-      venueName: data.venueName || "",
       sizeWidth: data.sizeWidth || "",
       sizeLength: data.sizeLength || "",
       sizeHeight: data.sizeHeight || "",
@@ -1077,6 +1102,14 @@ function ImageManagement() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingImage) return;
+    if ((editData.sizeWidth || editData.sizeLength || editData.sizeHeight) && (!editData.sizeWidth || !editData.sizeLength || !editData.sizeHeight)) {
+      showNotif("All three size fields (Width, Length, Height) are required", "warning");
+      return;
+    }
+    if (editData.priceMin && editData.priceMax && parseFloat(editData.priceMax) <= parseFloat(editData.priceMin)) {
+      showNotif("Maximum price must be greater than minimum price", "warning");
+      return;
+    }
     const sizeDisplay = buildSizeDisplay(editData.sizeWidth, editData.sizeLength, editData.sizeHeight, editData.sizeUnit);
     const updatedImageData = { ...editingImage.image_data, ...editData, sizeDisplay };
     const optimisticImage = { ...editingImage, image_data: updatedImageData };
@@ -1400,6 +1433,7 @@ function ImageManagement() {
                 <option value="colour">Colour</option>
                 <option value="flowerType">Flower Type</option>
                 <option value="designName">Design Name</option>
+                <option value="folderName">Folder Name</option>
                 <option value="all">All Fields</option>
               </select>
               <div className="common-search-input-wrap">
@@ -1469,6 +1503,8 @@ function ImageManagement() {
             filters={filters}
             onFilterChange={handleFilterChange}
             onClose={() => setShowFiltersSidebar(false)}
+            customEventTypes={customEventTypes}
+            customDecorTypes={customDecorTypes}
           />
         )}
 
@@ -1590,14 +1626,12 @@ function ImageManagement() {
 
       {!selectedFavFolder && (
         <div className="folder-card-grid favorites-folders-grid">
-          {canUpload && (
-            <div className="upload-box-card add-folder-box" onClick={() => setShowAddFavFolderModal(true)}>
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              <span>Add Folder</span>
-            </div>
-          )}
+          <div className="upload-box-card add-folder-box" onClick={() => setShowAddFavFolderModal(true)}>
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            <span>Add Folder</span>
+          </div>
           {favoriteFolders.map(folder => (
             <FolderCard
               key={folder.id}
@@ -1722,8 +1756,10 @@ function ImageManagement() {
         <div className="navbar-brand">Event Management</div>
         <div className="navbar-right">
           <div className="nav-menu">
-            <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); }}>HOME</button>
-            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); loadAllImages(); }}>IMAGES</button>
+            {canViewFolders && (
+              <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); setSelectedImageIds(new Set()); }}>HOME</button>
+            )}
+            <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); setSelectedImageIds(new Set()); loadAllImages(); }}>IMAGES</button>
             {canUpload && (
               <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
             )}
@@ -1803,7 +1839,7 @@ function ImageManagement() {
               <h2 className="modal-title">Add Folder</h2>
               <button className="modal-close" onClick={() => setShowAddFolderModal(false)}>×</button>
             </div>
-            <form onSubmit={handleAddFolder}>
+            <form onSubmit={(e) => { e.preventDefault(); handleAddFolder(e); }}>
               <div className="form-group">
                 <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
@@ -1814,6 +1850,7 @@ function ImageManagement() {
                   placeholder="Enter customer name"
                   maxLength={15}
                   required={isFieldRequired("folder_customerName")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -1826,6 +1863,7 @@ function ImageManagement() {
                   placeholder="Enter venue name"
                   maxLength={15}
                   required={isFieldRequired("folder_venue")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -1836,6 +1874,7 @@ function ImageManagement() {
                   value={eventDate}
                   onChange={(e) => setEventDate(e.target.value)}
                   required={isFieldRequired("folder_eventDate")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -1884,15 +1923,19 @@ function ImageManagement() {
                           }}>Add</button>
                       </div>
                       {allEventTypes.map(type => (
-                        <label key={type} className={`custom-multiselect-option ${folderEventTypes.includes(type) ? "selected" : ""}`}
-                          onClick={(e) => {
+                        <label key={type} className={`custom-multiselect-option ${folderEventTypes.includes(type) ? "selected" : ""}`}>
+                          <input type="checkbox" checked={folderEventTypes.includes(type)}
+                            onChange={() => {
+                              setFolderEventTypes(prev =>
+                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              );
+                            }} />
+                          <span onClick={(e) => {
                             e.stopPropagation();
                             setFolderEventTypes(prev =>
                               prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
                             );
-                          }}>
-                          <input type="checkbox" checked={folderEventTypes.includes(type)} readOnly />
-                          <span>{type}</span>
+                          }}>{type}</span>
                         </label>
                       ))}
                     </div>
@@ -1923,7 +1966,7 @@ function ImageManagement() {
               <h2 className="modal-title">Add Folder in Favorites</h2>
               <button className="modal-close" onClick={() => setShowAddFavFolderModal(false)}>×</button>
             </div>
-            <form onSubmit={handleCreateFavFolder}>
+            <form onSubmit={(e) => { e.preventDefault(); handleCreateFavFolder(e); }}>
               <div className="form-group">
                 <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
@@ -1934,6 +1977,7 @@ function ImageManagement() {
                   placeholder="Enter customer name"
                   maxLength={15}
                   required={isFieldRequired("folder_customerName")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -1946,6 +1990,7 @@ function ImageManagement() {
                   placeholder="Enter venue name"
                   maxLength={15}
                   required={isFieldRequired("folder_venue")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -1956,6 +2001,7 @@ function ImageManagement() {
                   value={favEventDate}
                   onChange={(e) => setFavEventDate(e.target.value)}
                   required={isFieldRequired("folder_eventDate")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
@@ -2004,15 +2050,19 @@ function ImageManagement() {
                           }}>Add</button>
                       </div>
                       {allEventTypes.map(type => (
-                        <label key={type} className={`custom-multiselect-option ${favFolderEventTypes.includes(type) ? "selected" : ""}`}
-                          onClick={(e) => {
+                        <label key={type} className={`custom-multiselect-option ${favFolderEventTypes.includes(type) ? "selected" : ""}`}>
+                          <input type="checkbox" checked={favFolderEventTypes.includes(type)}
+                            onChange={() => {
+                              setFavFolderEventTypes(prev =>
+                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              );
+                            }} />
+                          <span onClick={(e) => {
                             e.stopPropagation();
                             setFavFolderEventTypes(prev =>
                               prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
                             );
-                          }}>
-                          <input type="checkbox" checked={favFolderEventTypes.includes(type)} readOnly />
-                          <span>{type}</span>
+                          }}>{type}</span>
                         </label>
                       ))}
                     </div>
@@ -2110,15 +2160,19 @@ function ImageManagement() {
                           }}>Add</button>
                       </div>
                       {allEventTypes.map(type => (
-                        <label key={type} className={`custom-multiselect-option ${editFolderEventTypes.includes(type) ? "selected" : ""}`}
-                          onClick={(e) => {
+                        <label key={type} className={`custom-multiselect-option ${editFolderEventTypes.includes(type) ? "selected" : ""}`}>
+                          <input type="checkbox" checked={editFolderEventTypes.includes(type)}
+                            onChange={() => {
+                              setEditFolderEventTypes(prev =>
+                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              );
+                            }} />
+                          <span onClick={(e) => {
                             e.stopPropagation();
                             setEditFolderEventTypes(prev =>
                               prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
                             );
-                          }}>
-                          <input type="checkbox" checked={editFolderEventTypes.includes(type)} readOnly />
-                          <span>{type}</span>
+                          }}>{type}</span>
                         </label>
                       ))}
                     </div>
@@ -2251,10 +2305,12 @@ function ImageManagement() {
                     <div className="form-group">
                       <label className="label">Price Range{isFieldRequired("image_price") && <span className="required">*</span>}</label>
                       <div className="flex-gap">
-                        <input type="number" className="input" placeholder="Min" value={imageData.priceMin}
-                          onChange={(e) => setImageData({...imageData, priceMin: e.target.value})} required={isFieldRequired("image_price")} />
-                        <input type="number" className="input" placeholder="Max" value={imageData.priceMax}
-                          onChange={(e) => setImageData({...imageData, priceMax: e.target.value})} required={isFieldRequired("image_price")} />
+                        <input type="number" className="input" placeholder="Min" value={imageData.priceMin} min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMin: v}); }} required={isFieldRequired("image_price")} />
+                        <input type="number" className="input" placeholder="Max" value={imageData.priceMax} min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setImageData({...imageData, priceMax: v}); }} required={isFieldRequired("image_price")} />
                       </div>
                     </div>
                   </div>
@@ -2327,14 +2383,17 @@ function ImageManagement() {
                               <td>
                                 <div className="batch-field-with-same">
                                   <div className="batch-size-row">
-                                    <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth}
-                                      onChange={(e) => updateBatchRow(index, "sizeWidth", e.target.value)} />
+                                    <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth} min="0"
+                                      onWheel={(e) => e.target.blur()}
+                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeWidth", v); }} />
                                     <span>x</span>
-                                    <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength}
-                                      onChange={(e) => updateBatchRow(index, "sizeLength", e.target.value)} />
+                                    <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength} min="0"
+                                      onWheel={(e) => e.target.blur()}
+                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeLength", v); }} />
                                     <span>x</span>
-                                    <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight}
-                                      onChange={(e) => updateBatchRow(index, "sizeHeight", e.target.value)} />
+                                    <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight} min="0"
+                                      onWheel={(e) => e.target.blur()}
+                                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeHeight", v); }} />
                                   </div>
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeWidth || row.keepSame.sizeLength || row.keepSame.sizeHeight ? "active" : ""}`}
                                     onClick={() => { toggleKeepSameField(index, "sizeWidth"); toggleKeepSameField(index, "sizeLength"); toggleKeepSameField(index, "sizeHeight"); }} title="Same as previous row">S</button>}
@@ -2354,7 +2413,7 @@ function ImageManagement() {
                                 <div className="batch-field-with-same">
                                   <div className="batch-colour-cell">
                                     <button type="button" className="batch-colour-picker-btn"
-                                      onClick={() => setBatchColorPickerIndex(batchColorPickerIndex === index ? null : index)}
+                                      onClick={() => { setBatchColorPickerIndex(batchColorPickerIndex === index ? null : index); if (batchColorPickerIndex !== index) setBatchColorSearch(""); }}
                                       title="Select colours">
                                       <span className="batch-colour-swatches">
                                         {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours) : []).slice(0, 3).map((c, ci) => (
@@ -2370,16 +2429,22 @@ function ImageManagement() {
                                           <span>Select Colours</span>
                                           <button type="button" className="batch-colour-popup-close" onClick={() => setBatchColorPickerIndex(null)}>×</button>
                                         </div>
+                                        <div className="batch-colour-popup-search">
+                                          <input type="text" className="input input-sm" placeholder="Search colours..."
+                                            value={batchColorSearch}
+                                            onChange={(e) => setBatchColorSearch(e.target.value)} />
+                                        </div>
                                         <div className="batch-colour-popup-grid">
-                                          {BATCH_COLORS.map(color => {
+                                          {BATCH_COLORS.filter(c => c.toLowerCase().includes(batchColorSearch.toLowerCase())).map(color => {
                                             const currentColors = row.colours ? (typeof row.colours === "string" ? row.colours.split(",").map(c => c.trim()).filter(c => c) : row.colours) : [];
                                             const isSelected = currentColors.includes(color);
+                                            const colorHexMap = { "red":"#dc2626","blue":"#2563eb","green":"#22c55e","yellow":"#eab308","orange":"#f97316","purple":"#9333ea","pink":"#ec4899","brown":"#92400e","black":"#1a1a1a","white":"#ffffff","gray":"#6b7280","light blue":"#93c5fd","dark blue":"#1e40af","light green":"#86efac","dark green":"#166534","sky blue":"#38bdf8","navy blue":"#1e3a8a","maroon":"#7f1d1d","olive green":"#808000","beige":"#f5f5dc","cream":"#fef3c7","gold":"#f59e0b","silver":"#9ca3af","bronze":"#cd7f32","copper":"#b87333","rose gold":"#fda4af" };
                                             return (
                                               <button
                                                 key={color}
                                                 type="button"
-                                                className={`batch-colour-option ${isSelected ? "selected" : ""}`}
-                                                style={{ backgroundColor: color.toLowerCase() }}
+                                                className={`batch-colour-option ${isSelected ? "selected" : ""} ${["white","yellow","light blue","light green","sky blue","beige","cream","silver","gold","rose gold","gray","bronze","copper"].includes(color.toLowerCase()) ? "light-color" : ""}`}
+                                                style={{ backgroundColor: colorHexMap[color.toLowerCase()] || color.toLowerCase() }}
                                                 onClick={() => {
                                                   let updated = currentColors;
                                                   if (isSelected) {
@@ -2427,16 +2492,18 @@ function ImageManagement() {
                               </td>
                               <td>
                                 <div className="batch-field-with-same">
-                                  <input type="number" className="batch-input-tiny" value={row.priceMin}
-                                    onChange={(e) => updateBatchRow(index, "priceMin", e.target.value)} placeholder="₹" />
+                                  <input type="number" className="batch-input-tiny" value={row.priceMin} min="0"
+                                    onWheel={(e) => e.target.blur()}
+                                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMin", v); }} placeholder="₹" />
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMin ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "priceMin")} title="Same as previous row">S</button>}
                                 </div>
                               </td>
                               <td>
                                 <div className="batch-field-with-same">
-                                  <input type="number" className="batch-input-tiny" value={row.priceMax}
-                                    onChange={(e) => updateBatchRow(index, "priceMax", e.target.value)} placeholder="₹" />
+                                  <input type="number" className="batch-input-tiny" value={row.priceMax} min="0"
+                                    onWheel={(e) => e.target.blur()}
+                                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMax", v); }} placeholder="₹" />
                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMax ? "active" : ""}`}
                                     onClick={() => toggleKeepSameField(index, "priceMax")} title="Same as previous row">S</button>}
                                 </div>
@@ -2505,9 +2572,6 @@ function ImageManagement() {
             <h3>{lightboxImage.data?.designName || "Untitled"}</h3>
             {renderImageCardDetails(lightboxImage.data)}
             <div className="lightbox-actions">
-              <button className="btn btn-secondary btn-sm" onClick={() => {
-                handleEditImage({ id: lightboxImage.id, image_data: lightboxImage.data });
-              }}>Edit</button>
               <button className="btn btn-secondary btn-sm" onClick={async () => {
                 const choice = await openDownloadModal();
                 if (!choice) return;
@@ -2719,11 +2783,11 @@ function ImageManagement() {
                       <label className="form-settings-row"><span>Customer Name</span><input type="checkbox" checked={isFieldRequired("folder_customerName")} onChange={(e) => { const c = {...formConfig, folder_customerName: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("folder_venue")} onChange={(e) => { const c = {...formConfig, folder_venue: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("folder_eventDate")} onChange={(e) => { const c = {...formConfig, folder_eventDate: e.target.checked}; saveFormConfig(c); }} /></label>
+                      <label className="form-settings-row"><span>Event Type</span><input type="checkbox" checked={isFieldRequired("folder_eventType")} onChange={(e) => { const c = {...formConfig, folder_eventType: e.target.checked}; saveFormConfig(c); }} /></label>
                     </div>
                     <div className="form-settings-group">
                       <h4>Upload Image</h4>
                       <label className="form-settings-row"><span>Design Name</span><input type="checkbox" checked={isFieldRequired("image_designName")} onChange={(e) => { const c = {...formConfig, image_designName: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Event Type</span><input type="checkbox" checked={isFieldRequired("image_eventType")} onChange={(e) => { const c = {...formConfig, image_eventType: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Decoration Type</span><input type="checkbox" checked={isFieldRequired("image_decorType")} onChange={(e) => { const c = {...formConfig, image_decorType: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Flower Type</span><input type="checkbox" checked={isFieldRequired("image_flowerType")} onChange={(e) => { const c = {...formConfig, image_flowerType: e.target.checked}; saveFormConfig(c); }} /></label>
                       <label className="form-settings-row"><span>Colour</span><input type="checkbox" checked={isFieldRequired("image_colours")} onChange={(e) => { const c = {...formConfig, image_colours: e.target.checked}; saveFormConfig(c); }} /></label>
@@ -2859,14 +2923,17 @@ function ImageManagement() {
               <div className="form-group">
                 <label className="label">Size</label>
                 <div className="size-input-group-upload">
-                  <input type="number" className="input size-input-sm" placeholder="W" value={editData.sizeWidth}
-                    onChange={(e) => setEditData({...editData, sizeWidth: e.target.value})} />
+                  <input type="number" className="input size-input-sm" placeholder="W" value={editData.sizeWidth} min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeWidth: v}); }} />
                   <span className="size-sep">x</span>
-                  <input type="number" className="input size-input-sm" placeholder="L" value={editData.sizeLength}
-                    onChange={(e) => setEditData({...editData, sizeLength: e.target.value})} />
+                  <input type="number" className="input size-input-sm" placeholder="L" value={editData.sizeLength} min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeLength: v}); }} />
                   <span className="size-sep">x</span>
-                  <input type="number" className="input size-input-sm" placeholder="H" value={editData.sizeHeight}
-                    onChange={(e) => setEditData({...editData, sizeHeight: e.target.value})} />
+                  <input type="number" className="input size-input-sm" placeholder="H" value={editData.sizeHeight} min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, sizeHeight: v}); }} />
                   <select className="input size-unit-input" value={editData.sizeUnit}
                     onChange={(e) => setEditData({...editData, sizeUnit: e.target.value})}>
                     {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
@@ -2875,24 +2942,14 @@ function ImageManagement() {
               </div>
               <div className="grid-2">
                 <div className="form-group">
-                  <label className="label">Customer Name</label>
-                  <input type="text" className="input" value={editData.venueCustomer}
-                    onChange={(e) => setEditData({...editData, venueCustomer: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label className="label">Venue</label>
-                  <input type="text" className="input" value={editData.venueName}
-                    onChange={(e) => setEditData({...editData, venueName: e.target.value})} />
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
                   <label className="label">Price Range</label>
                   <div className="flex-gap">
-                    <input type="number" className="input" placeholder="Min" value={editData.priceMin}
-                      onChange={(e) => setEditData({...editData, priceMin: e.target.value})} />
-                    <input type="number" className="input" placeholder="Max" value={editData.priceMax}
-                      onChange={(e) => setEditData({...editData, priceMax: e.target.value})} />
+                    <input type="number" className="input" placeholder="Min" value={editData.priceMin} min="0"
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMin: v}); }} />
+                    <input type="number" className="input" placeholder="Max" value={editData.priceMax} min="0"
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) setEditData({...editData, priceMax: v}); }} />
                   </div>
                 </div>
               </div>

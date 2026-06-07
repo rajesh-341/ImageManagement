@@ -1,5 +1,5 @@
 export const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-export const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
+export const EDIT_DELETE_ROLES = ["Captain", "ViceCaptain", "Admin"];
 export const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 
 export const SIZE_UNITS = ["sq.ft", "feet", "inch", "cm", "m"];

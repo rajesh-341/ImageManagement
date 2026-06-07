@@ -179,9 +179,27 @@ const addImagesToFavouriteFolder = async (req, res) => {
 const getFavoriteFolders = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM folders WHERE scope = 'favourite' ORDER BY created_at DESC"
+      "SELECT * FROM folders WHERE scope = 'favourite' AND created_by = $1 ORDER BY created_at DESC",
+      [req.user.userId]
     );
-    res.json(result.rows);
+    const userFolders = result.rows;
+    const allResult = await pool.query(
+      "SELECT DISTINCT folder_id FROM favourite_folder_mapping WHERE employee_id = $1",
+      [req.user.userId]
+    );
+    if (allResult.rows.length > 0) {
+      const mappedFolderIds = allResult.rows.map(r => r.folder_id);
+      const orphanedResult = await pool.query(
+        "SELECT * FROM folders WHERE scope = 'favourite' AND id = ANY($1::int[]) AND (created_by != $2 OR created_by IS NULL) ORDER BY created_at DESC",
+        [mappedFolderIds, req.user.userId]
+      );
+      for (const folder of orphanedResult.rows) {
+        if (!userFolders.some(f => f.id === folder.id)) {
+          userFolders.push(folder);
+        }
+      }
+    }
+    res.json(userFolders);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -191,6 +209,7 @@ const createFavoriteFolder = async (req, res) => {
   try {
     const { folderName, description, eventTypes } = req.body;
     if (!folderName) return res.status(400).json({ message: "Folder name required" });
+    if (!req.user || !req.user.userId) return res.status(401).json({ message: "Authentication required" });
 
     const existing = await pool.query(
       "SELECT id FROM folders WHERE name = $1 AND scope = 'favourite'",

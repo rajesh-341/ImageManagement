@@ -1,5 +1,5 @@
 const UPLOAD_ROLES = ["Captain", "ViceCaptain", "Owner"];
-const DELETE_ROLES = ["Captain", "ViceCaptain", "Owner", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin"];
+const DELETE_ROLES = ["Captain", "ViceCaptain", "Admin"];
 const VIEW_ROLES = ["Captain", "ViceCaptain", "Facilitator", "TeamLead", "TeamMember", "Marketing", "Admin", "Owner"];
 const FOLDER_VIEW_ROLES = ["Captain", "ViceCaptain", "Admin", "Owner"];
 

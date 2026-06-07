@@ -22,7 +22,7 @@ const fetchSuggestions = async (field, query) => {
   }
 };
 
-function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
+function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, customEventTypes = [], customDecorTypes = [] }) {
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
   const [selectedDecorTypes, setSelectedDecorTypes] = useState(filters?.decorTypes || []);
   const [selectedEventTypes, setSelectedEventTypes] = useState(filters?.eventTypes || []);
@@ -30,6 +30,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
   const [priceRange, setPriceRange] = useState(filters?.priceRange || [0, 10000]);
   const [sizeFilters, setSizeFilters] = useState(filters?.sizeFilters || { width: "", length: "", height: "", unit: "sq.ft" });
   const [venueName, setVenueName] = useState(filters?.venueName || "");
+  const [folderName, setFolderName] = useState(filters?.folderName || "");
   const [decorTypeSearch, setDecorTypeSearch] = useState("");
   const [eventTypeSearch, setEventTypeSearch] = useState("");
   const [searchSuggestions, setSearchSuggestions] = useState([]);
@@ -76,8 +77,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
       flowerTypes: selectedFlowerTypes,
     };
     if (venueName) allFilters.placeOfEvent = venueName;
+    if (folderName) allFilters.folderName = folderName;
     onApply && onApply(allFilters);
-  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, filters, onApply]);
+  }, [selectedColors, selectedDecorTypes, selectedEventTypes, selectedFlowerTypes, priceRange, sizeFilters, venueName, folderName, filters, onApply]);
 
   buildAndApplyRef.current = buildAndApply;
 
@@ -125,11 +127,14 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     }
   };
 
-  const filteredDecorTypes = DECOR_TYPES.filter((type) =>
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))];
+  const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))];
+
+  const filteredDecorTypes = allDecorTypes.filter((type) =>
     type.toLowerCase().includes(decorTypeSearch.toLowerCase())
   );
 
-  const filteredEventTypes = EVENT_TYPES.filter((type) =>
+  const filteredEventTypes = allEventTypes.filter((type) =>
     type.toLowerCase().includes(eventTypeSearch.toLowerCase())
   );
 
@@ -156,6 +161,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
     setPriceRange([0, 10000]);
     setSizeFilters({ width: "", length: "", height: "", unit: "sq.ft" });
     setVenueName("");
+    setFolderName("");
     setDecorTypeSearch("");
     setEventTypeSearch("");
     setSearchSuggestions([]);
@@ -190,7 +196,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 <ul className="filter-suggestions-list">
                   {searchSuggestions.map((s, i) => (
                     <li key={i} className="filter-suggestion-item"
-                      onMouseDown={() => { onFilterChange?.({ ...filters, searchText: s }); setShowSearchSugs(false); setSearchSuggestions([]); }}>
+                      onMouseDown={() => { onFilterChange?.({ ...filters, searchText: s, designName: s }); setShowSearchSugs(false); setSearchSuggestions([]); }}>
                       {s}
                     </li>
                   ))}
@@ -222,6 +228,18 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose }) {
                 </ul>
               )}
             </div>
+          </div>
+        </Accordion>
+
+        <Accordion title="Folder Name">
+          <div className="filter-section">
+            <input
+              type="text"
+              className="filter-input"
+              placeholder="Search folder name..."
+              value={folderName}
+              onChange={(e) => { setFolderName(e.target.value); triggerAutoApply(); }}
+            />
           </div>
         </Accordion>
 

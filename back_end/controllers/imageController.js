@@ -9,7 +9,7 @@ const isAdmin = (role) => ADMIN_ROLES.map(r => r.toLowerCase()).includes(role?.t
 
 const getImages = async (req, res) => {
   try {
-    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, page = 1, limit = 200 } = req.query;
+    const { folder, designName, size, decorType, placeOfEvent, venueCustomer, venueName, venueDate, eventName, folderName, eventType, flowerType, colors, priceMin, priceMax, searchText, sizeWidth, sizeLength, sizeHeight, page = 1, limit = 200 } = req.query;
     
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = parseInt(limit);
@@ -73,11 +73,26 @@ const getImages = async (req, res) => {
       decorTypes.forEach(type => params.push(`%${type}%`));
     }
 
-    if (placeOfEvent) {
-      conditions.push(`(image_data->>'venueCustomer' ILIKE $${paramIndex} OR image_data->>'venueName' ILIKE $${paramIndex})`);
-      params.push(`%${placeOfEvent}%`);
-      paramIndex++;
-    }
+          if (placeOfEvent) {
+            conditions.push(`im.place_of_event ILIKE $${paramIndex}`);
+            params.push(`%${placeOfEvent}%`);
+            paramIndex++;
+          }
+          if (sizeWidth) {
+            conditions.push(`im.size_width = $${paramIndex}`);
+            params.push(sizeWidth);
+            paramIndex++;
+          }
+          if (sizeLength) {
+            conditions.push(`im.size_length = $${paramIndex}`);
+            params.push(sizeLength);
+            paramIndex++;
+          }
+          if (sizeHeight) {
+            conditions.push(`im.size_height = $${paramIndex}`);
+            params.push(sizeHeight);
+            paramIndex++;
+          }
     const venueConditions = [];
     if (venueCustomer) {
       venueConditions.push(`image_data->>'venueCustomer' ILIKE $${paramIndex}`);
@@ -117,14 +132,14 @@ const getImages = async (req, res) => {
       colorList.forEach(color => params.push(`["${color}"]`));
     }
 
-    if (priceMin) {
-      conditions.push(`(image_data->>'priceMin' IS NOT NULL AND CAST(image_data->>'priceMin' AS NUMERIC) >= $${paramIndex})`);
+    if (priceMin !== undefined && priceMin !== '' && parseFloat(priceMin) > 0) {
+      conditions.push(`(image_data->>'priceMax' IS NOT NULL AND image_data->>'priceMax' != '' AND CAST(image_data->>'priceMax' AS NUMERIC) >= $${paramIndex})`);
       params.push(parseFloat(priceMin));
       paramIndex++;
     }
 
-    if (priceMax) {
-      conditions.push(`(image_data->>'priceMax' IS NOT NULL AND CAST(image_data->>'priceMax' AS NUMERIC) <= $${paramIndex})`);
+    if (priceMax !== undefined && priceMax !== '' && parseFloat(priceMax) < 10000) {
+      conditions.push(`(image_data->>'priceMin' IS NOT NULL AND image_data->>'priceMin' != '' AND CAST(image_data->>'priceMin' AS NUMERIC) <= $${paramIndex})`);
       params.push(parseFloat(priceMax));
       paramIndex++;
     }
