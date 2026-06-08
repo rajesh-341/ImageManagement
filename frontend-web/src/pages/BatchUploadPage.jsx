@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ApiService from "../services/api";
 import AutocompleteInput from "../components/AutocompleteInput";
-import { COLORS } from "../components/ColorPicker";
+import ColorPicker from "../components/ColorPicker";
 import {
   UPLOAD_ROLES, FLOWER_TYPES, SIZE_UNITS, SAME_FIELDS,
 } from "../constants";
@@ -17,8 +17,6 @@ function BatchUploadPage() {
   const [batchImages, setBatchImages] = useState([]);
   const [uploadProgress, setUploadProgress] = useState("");
   const [loading, setLoading] = useState(false);
-  const [colourSearchTexts, setColourSearchTexts] = useState([]);
-  const [colourPickerOpen, setColourPickerOpen] = useState([]);
   const batchImageRef = useRef(null);
   const isUploading = useRef(false);
 
@@ -116,8 +114,6 @@ function BatchUploadPage() {
       };
     });
     setBatchImages(prev => [...prev, ...newRows]);
-    setColourSearchTexts(prev => [...prev, ...newRows.map(() => "")]);
-    setColourPickerOpen(prev => [...prev, ...newRows.map(() => false)]);
     e.target.value = "";
   };
 
@@ -154,8 +150,6 @@ function BatchUploadPage() {
       const updated = [...prev];
       URL.revokeObjectURL(updated[index].preview);
       updated.splice(index, 1);
-      setColourSearchTexts(prev => { const c = [...prev]; c.splice(index, 1); return c; });
-      setColourPickerOpen(prev => { const c = [...prev]; c.splice(index, 1); return c; });
       return updated;
     });
   };
@@ -493,94 +487,17 @@ function BatchUploadPage() {
                         </div>
                       </div>
                       <div className="batch-field-row">
-                        <div className="batch-field batch-field-colours">
-                          <label>Colours <span className="colour-count">{(row.colours || []).length}/3</span></label>
-                          <div className="batch-colour-select">
-                            {(row.colours || []).length > 0 && (
-                              <div className="batch-colour-tags">
-                                {(row.colours || []).map((c, ci) => {
-                                  const colorObj = COLORS.find(co => co.name === c);
-                                  return (
-                                    <span key={ci} className="batch-colour-tag" style={{ backgroundColor: colorObj?.hex || "#ccc" }}>
-                                      {c}
-                                      <button type="button" className="batch-colour-tag-remove"
-                                        onClick={() => {
-                                          const updated = (row.colours || []).filter((_, i) => i !== ci);
-                                          updateBatchRow(index, "colours", updated);
-                                        }}>×</button>
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            <div className="batch-colour-search-wrap">
-                              <input type="text" className="batch-input batch-colour-search-input"
-                                placeholder="Type colour name..."
-                                value={colourSearchTexts[index] || ""}
-                                onChange={(e) => {
-                                  const newSearch = [...colourSearchTexts];
-                                  newSearch[index] = e.target.value;
-                                  setColourSearchTexts(newSearch);
-                                }}
-                                onFocus={() => {
-                                  const newOpen = [...colourPickerOpen];
-                                  newOpen[index] = true;
-                                  setColourPickerOpen(newOpen);
-                                  const newSearch = [...colourSearchTexts];
-                                  if (!newSearch[index]) newSearch[index] = "";
-                                  setColourSearchTexts(newSearch);
-                                }}
-                                onBlur={() => {
-                                  setTimeout(() => {
-                                    setColourPickerOpen(prev => {
-                                      const c = [...prev];
-                                      c[index] = false;
-                                      return c;
-                                    });
-                                  }, 180);
-                                }}
-                              />
-                              {colourPickerOpen[index] && (
-                                <div className="batch-colour-grid">
-                                  {COLORS.filter(c => c.name.toLowerCase().includes((colourSearchTexts[index] || "").toLowerCase())).map(color => {
-                                    const isSelected = (row.colours || []).includes(color.name);
-                                    const isLightColor = ["White","Yellow","Light Blue","Light Green","Sky Blue","Beige","Cream","Silver","Gold","Rose Gold","Gray","Bronze","Copper"].includes(color.name);
-                                    return (
-                                      <button key={color.name} type="button"
-                                        className={`batch-colour-grid-item ${isSelected ? "selected" : ""} ${isLightColor ? "light-color" : ""}`}
-                                        style={{ backgroundColor: color.hex }}
-                                        onClick={() => {
-                                          let updated = [...(row.colours || [])];
-                                          if (isSelected) {
-                                            updated = updated.filter(c => c !== color.name);
-                                          } else {
-                                            if (updated.length >= 3) return;
-                                            updated.push(color.name);
-                                          }
-                                          updateBatchRow(index, "colours", updated);
-                                        }}
-                                        title={color.name}
-                                      >
-                                        {isSelected && <span className="batch-colour-check" style={{ color: isLightColor ? "#374151" : "#fff" }}>✓</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                            <div className="batch-colour-actions">
-                              {(row.colours || []).length > 0 && (
-                                <button type="button" className="batch-colour-clear-link"
-                                  onClick={() => { updateBatchRow(index, "colours", []); setColourSearchTexts(prev => { const c = [...prev]; c[index] = ""; return c; }); setColourPickerOpen(prev => { const c = [...prev]; c[index] = false; return c; }); }}>
-                                  Clear
-                                </button>
-                              )}
-                              {index > 0 && (
-                                <button type="button" className={`batch-same-btn ${row.keepSame.colours ? "active" : ""}`}
-                                  onClick={() => toggleKeepSameField(index, "colours")} title="Same as previous">S</button>
-                              )}
-                            </div>
-                          </div>
+                        <div className="batch-field">
+                          <label>Colours</label>
+                          <ColorPicker
+                            selectedColors={row.colours}
+                            onChange={(colors) => updateBatchRow(index, "colours", colors)}
+                            label=""
+                          />
+                          {index > 0 && (
+                            <button type="button" className={`batch-same-btn ${row.keepSame.colours ? "active" : ""}`}
+                              onClick={() => toggleKeepSameField(index, "colours")} title="Same as previous">S</button>
+                          )}
                         </div>
                         <div className="batch-field">
                           <label>Flower Type</label>
@@ -628,7 +545,7 @@ function BatchUploadPage() {
 
               <div className="batch-actions">
                 <button type="button" className="batch-btn batch-btn-secondary"
-                  onClick={() => { batchImages.forEach(row => URL.revokeObjectURL(row.preview)); setBatchImages([]); setColourSearchTexts([]); setColourPickerOpen([]); setUploadProgress(""); }}>
+                  onClick={() => { batchImages.forEach(row => URL.revokeObjectURL(row.preview)); setBatchImages([]); setUploadProgress(""); }}>
                   Clear All
                 </button>
                 <button type="submit" className="batch-btn batch-btn-primary" disabled={loading || batchImages.length === 0}>
