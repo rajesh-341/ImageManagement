@@ -3398,43 +3398,33 @@
 
 .role-badge {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
-.role-badge.captain,
-.role-badge.vicecaptain,
-.role-badge.owner {
+.role-badge.ceo {
   background: linear-gradient(135deg, #7EC0CE, #D56493);
 }
 
-.role-badge.facilitator,
-.role-badge.teamlead {
-  background: #DA87A9;
+.role-badge.owner {
+  background: linear-gradient(135deg, #D56493, #7EC0CE);
 }
 
-.role-badge.teammember {
-  background: #7EC0CE;
-}
-
-.role-badge.marketing {
+.role-badge.marketing-head {
   background: #D56493;
 }
 
-.role-badge.facilitator,
-.role-badge.teamlead {
-  background: #64748b;
-}
-
-.role-badge.teammember {
-  background: #7EC0CE;
-}
-
-.role-badge.marketing {
+.role-badge.admin {
   background: #DA87A9;
+}
+
+.role-badge.event-managers {
+  background: #7EC0CE;
 }
 
 .ctrl-select-hint {

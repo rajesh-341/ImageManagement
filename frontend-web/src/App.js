@@ -6,6 +6,8 @@ import "./styles/colors.css";
 
 const LoginPage = React.lazy(() => import("./pages/LoginPage"));
 const ImageManagement = React.lazy(() => import("./pages/ImageManagement"));
+const UsersPage = React.lazy(() => import("./pages/UsersPage"));
+const BatchUploadPage = React.lazy(() => import("./pages/BatchUploadPage"));
 
 function PageLoader() {
   return (
@@ -73,6 +75,22 @@ function App() {
                   <InactivityWrapper>
                     <ImageManagement />
                   </InactivityWrapper>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/batch-upload"
+              element={
+                <ProtectedRoute>
+                  <BatchUploadPage />
                 </ProtectedRoute>
               }
             />

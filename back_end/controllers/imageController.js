@@ -468,7 +468,7 @@ const getReport = async (req, res) => {
         f.name,
         f.description,
         f.created_by AS uploaded_by_user_id,
-        ed.employee_details->>'employee_name' AS uploaded_by,
+        COALESCE(ed.employee_details->>'employee_name', f.created_by) AS uploaded_by,
         f.scope,
         f.event_types,
         f.collected_by,

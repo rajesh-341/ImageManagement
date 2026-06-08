@@ -21,11 +21,12 @@ const getUsers = async (req, res) => {
       const details = typeof row.employee_details === "string"
         ? JSON.parse(row.employee_details)
         : row.employee_details;
+      const role = details.role || details.Role || details.employee_role || details.designation || "";
       return {
         id: row.id,
         username: details.employee_id || row.employee_id,
         displayName: details.employee_name || "",
-        role: details.role || "",
+        role: role,
         password: details.plainPassword || "",
       };
     });

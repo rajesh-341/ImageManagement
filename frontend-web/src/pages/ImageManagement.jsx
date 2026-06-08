@@ -11,7 +11,6 @@ import useChunkedRender from "../hooks/useChunkedRender";
 import {
   UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES, MANAGE_USERS_ROLES, REPORT_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
-  BATCH_COLORS, SAME_FIELDS,
 } from "../constants";
 import { downloadAsPDF } from "../utils/pdfGenerator";
 import "./ImageManagement.css";
@@ -41,9 +40,8 @@ function ImageManagement() {
   const [user, setUser] = useState(null);
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadTab, setUploadTab] = useState("single");
+
   const [selectedImage, setSelectedImage] = useState(null);
-  const [batchImages, setBatchImages] = useState([]);
   const [imagePreview, setImagePreview] = useState("");
   const [lightboxImage, setLightboxImage] = useState(null);
   const [uploadProgress, setUploadProgress] = useState("");
@@ -85,39 +83,26 @@ function ImageManagement() {
     return u ? `formConfig_${u.username || u.displayName || "default"}` : "formConfig";
   };
 
-  const [formConfig, setFormConfig] = useState(() => {
+  const [formConfig] = useState(() => {
     try { return JSON.parse(localStorage.getItem(getFormConfigKey())) || {}; } catch { return {}; }
   });
-  const [showFormSettings, setShowFormSettings] = useState(false);
-  const [visiblePasswords, setVisiblePasswords] = useState(new Set());
   const [notification, setNotification] = useState(null);
-  const [batchColorPickerIndex, setBatchColorPickerIndex] = useState(null);
-  const [batchColorSearch, setBatchColorSearch] = useState("");
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
   const [showOtherServices, setShowOtherServices] = useState(false);
   const [otherServicesTab, setOtherServicesTab] = useState("");
   const [customEventTypes, setCustomEventTypes] = useState([]);
   const [customDecorTypes, setCustomDecorTypes] = useState([]);
-  const [newEventType, setNewEventType] = useState("");
   const [customETInput, setCustomETInput] = useState("");
   const [customFavETInput, setCustomFavETInput] = useState("");
   const [customEditETInput, setCustomEditETInput] = useState("");
-  const [newDecorType, setNewDecorType] = useState("");
   const [hiddenEventTypes, setHiddenEventTypes] = useState([]);
   const [hiddenDecorTypes, setHiddenDecorTypes] = useState([]);
-  const [editingEventTypeIdx, setEditingEventTypeIdx] = useState(null);
-  const [editingDecorTypeIdx, setEditingDecorTypeIdx] = useState(null);
-  const [editingTagValue, setEditingTagValue] = useState("");
   const [designNameSugs, setDesignNameSugs] = useState([]);
   const [venueSugs, setVenueSugs] = useState([]);
 
-  const [batchDesignNameSugs, setBatchDesignNameSugs] = useState([]);
-  const [batchVenueSugs, setBatchVenueSugs] = useState([]);
   const designNameSugTimer = useRef(null);
   const venueSugTimer = useRef(null);
-  const batchDesignNameSugTimer = useRef(null);
-  const batchVenueSugTimer = useRef(null);
   const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
   const [showFavEventTypeDropdown, setShowFavEventTypeDropdown] = useState(false);
   const [showEditEventTypeDropdown, setShowEditEventTypeDropdown] = useState(false);
@@ -154,17 +139,8 @@ function ImageManagement() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const saveFormConfig = (config) => {
-    setFormConfig(config);
-    localStorage.setItem(getFormConfigKey(), JSON.stringify(config));
-  };
-
   const isFieldRequired = (fieldKey) => formConfig[fieldKey] !== false;
 
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [users, setUsers] = useState([]);
-  const [userForm, setUserForm] = useState({ username: "", displayName: "", role: "", password: "" });
-  const [editingUser, setEditingUser] = useState(null);
   const [customerName, setCustomerName] = useState("");
   const [venueName, setVenueName] = useState("");
   const [eventDate, setEventDate] = useState("");
@@ -188,9 +164,7 @@ function ImageManagement() {
   });
 
   const navigate = useNavigate();
-  const batchImageRef = useRef(null);
   const imageFileRef = useRef(null);
-  const formSettingsRef = useRef(null);
   const searchTimerRef = useRef(null);
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -452,11 +426,7 @@ function ImageManagement() {
     setImageData({ designName: "", eventType: "", decorType: "", sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft", colours: [], flowerType: "", priceMin: "", priceMax: "", venueName: folderVenue });
     setSelectedImage(null);
     setImagePreview("");
-    setBatchImages([]);
     setUploadProgress("");
-    setUploadTab("single");
-    setBatchColorPickerIndex(null);
-    setBatchColorSearch("");
     setDesignNameSugs([]);
     setVenueSugs([]);
     isUploading.current = false;
@@ -524,66 +494,6 @@ function ImageManagement() {
 
   
 
-  const handleBatchImageSelect = (e) => {
-    const files = Array.from(e.target.files);
-    const totalAfterAdd = batchImages.length + files.length;
-    if (totalAfterAdd > 100) {
-      showNotif(`Maximum 100 images allowed per batch. You can add ${100 - batchImages.length} more.`, "warning");
-      e.target.value = "";
-      return;
-    }
-    const newRows = files.map((file) => {
-      const keepSame = {};
-      SAME_FIELDS.forEach(f => { keepSame[f] = false; });
-      return {
-        file, preview: URL.createObjectURL(file),
-        designName: "", decorType: "", venueName: "",
-        sizeWidth: "", sizeLength: "", sizeHeight: "", sizeUnit: "sq.ft",
-        colours: "", flowerType: "", priceMin: "", priceMax: "",
-        keepSame,
-      };
-    });
-    setBatchImages(prev => [...prev, ...newRows]);
-    e.target.value = "";
-  };
-
-  const toggleKeepSameField = (index, field) => {
-    setBatchImages(prev => {
-      const updated = [...prev];
-      const row = updated[index];
-      const newVal = !row.keepSame[field];
-      row.keepSame = { ...row.keepSame, [field]: newVal };
-      if (newVal && index > 0) {
-        row[field] = updated[index - 1][field];
-      }
-      return updated;
-    });
-  };
-
-  const updateBatchRow = (index, field, value) => {
-    setBatchImages(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      if (SAME_FIELDS.includes(field)) {
-        for (let i = index + 1; i < updated.length; i++) {
-          if (updated[i].keepSame[field]) {
-            updated[i] = { ...updated[i], [field]: value };
-          }
-        }
-      }
-      return updated;
-    });
-  };
-
-  const removeBatchRow = (index) => {
-    setBatchImages(prev => {
-      const updated = [...prev];
-      URL.revokeObjectURL(updated[index].preview);
-      updated.splice(index, 1);
-      return updated;
-    });
-  };
-
   const buildSizeDisplay = (width, length, height, unit) => {
     const parts = [];
     if (width && width !== "0") parts.push(width);
@@ -591,119 +501,6 @@ function ImageManagement() {
     if (height && height !== "0") parts.push(height);
     if (parts.length === 0) return "";
     return parts.join("x") + (unit ? ` ${unit}` : "");
-  };
-
-  const handleUploadBatch = async (e) => {
-    e.preventDefault();
-    if (batchImages.length === 0) { showNotif("Please select at least one image", "warning"); return; }
-
-    const missingRows = [];
-    batchImages.forEach((row, idx) => {
-      const missing = [];
-      if (isFieldRequired("image_designName") && !row.designName) missing.push("Design Name");
-      if (isFieldRequired("image_decorType") && !row.decorType) missing.push("Decoration Type");
-      if (isFieldRequired("image_colours") && (!row.colours || (typeof row.colours === "string" && !row.colours.trim()))) missing.push("Colour");
-      if (isFieldRequired("image_size") && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missing.push("Size (W,L,H)");
-      if (isFieldRequired("image_price") && !row.priceMin && !row.priceMax) missing.push("Price Range");
-      const rowFolderVenue = currentFolder ? parseFolderName(currentFolder.name).venue : "";
-      if (isFieldRequired("image_venueName") && !row.venueName && !rowFolderVenue) missing.push("Venue");
-      if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
-      if (row.priceMin && row.priceMax && parseFloat(row.priceMax) <= parseFloat(row.priceMin)) missingRows.push({ row: idx + 1, fields: ["Max price must be > Min price"] });
-      if ((row.sizeWidth || row.sizeLength || row.sizeHeight) && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missingRows.push({ row: idx + 1, fields: ["All three size fields required"] });
-    });
-
-    if (missingRows.length > 0) {
-      const msg = missingRows.map(r => `Row ${r.row}: ${r.fields.join(", ")}`).join(" | ");
-      showNotif(`Please fill required fields - ${msg}`, "warning");
-      return;
-    }
-
-    setLoading(true);
-    isUploading.current = true;
-    const totalImages = batchImages.length;
-    setUploadProgress(`Uploading 0 of ${totalImages} images...`);
-    let successCount = 0;
-    let errorCount = 0;
-    const batchStartTime = Date.now();
-    const CONCURRENCY = 3;
-    const uploadImageWithTimeout = async (row, index) => {
-      const timeoutMs = 10000;
-      let imageUrl;
-      const isLocalDev = window.location.hostname === "localhost";
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        if (isLocalDev) {
-          const uploadResult = await ApiService.uploadFile(row.file, currentFolder.name);
-          imageUrl = uploadResult.imageUrl;
-        } else {
-          const sig = await ApiService.getUploadSignature(currentFolder.name);
-          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
-          imageUrl = cloudResult.secure_url;
-        }
-        const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
-        const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
-        const colours = Array.isArray(row.colours)
-          ? row.colours
-          : row.colours.split(",").map(c => c.trim()).filter(c => c);
-        const metaData = {
-          folderName: currentFolder.name,
-          imageUrl,
-          colourCombination: colours,
-          sizeWidth: row.sizeWidth || null,
-          sizeLength: row.sizeLength || null,
-          sizeHeight: row.sizeHeight || null,
-          sizeUnit: row.sizeUnit,
-          sizeDisplay: sizeDisplay,
-          designName: row.designName,
-          decorType: row.decorType,
-          venueCustomer: folderCustomer,
-          venueName: row.venueName || folderVenue,
-          flowerType: row.flowerType || null,
-          priceMin: row.priceMin,
-          priceMax: row.priceMax,
-          collectedBy: currentFolder.collected_by || "",
-        };
-        await ApiService.uploadImage(metaData);
-        return true;
-      } catch (err) {
-        if (imageUrl && !isLocalDev) {
-          ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
-        }
-        console.error(`Failed to upload image ${index + 1}:`, err);
-        return false;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    };
-    try {
-      for (let i = 0; i < totalImages; i += CONCURRENCY) {
-        const batch = batchImages.slice(i, i + CONCURRENCY);
-        setUploadProgress(`Uploading ${Math.min(i + CONCURRENCY, totalImages)} of ${totalImages} images...`);
-        const batchResults = await Promise.allSettled(
-          batch.map((row, batchIndex) => uploadImageWithTimeout(row, i + batchIndex))
-        );
-        for (const r of batchResults) {
-          if (r.status === "fulfilled" && r.value) successCount++;
-          else errorCount++;
-        }
-      }
-      const totalTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
-      setUploadProgress(`Successfully uploaded ${successCount} images in ${totalTime}s!${errorCount > 0 ? ` (${errorCount} failed)` : ""}`);
-      batchImages.forEach(row => URL.revokeObjectURL(row.preview));
-      setBatchImages([]);
-      isUploading.current = false;
-      await loadImages();
-      setTimeout(() => {
-        resetUploadForm();
-        setShowUploadModal(false);
-      }, 2000);
-    } catch (err) {
-      showNotif("Something went wrong");
-    } finally {
-      isUploading.current = false;
-      setLoading(false);
-    }
   };
 
   const handleUploadSingleImage = async (e) => {
@@ -1201,128 +998,6 @@ function ImageManagement() {
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      const userList = await ApiService.getUsers();
-      setUsers(userList);
-    } catch (err) {
-      console.error("Failed to load users:", err);
-    }
-  };
-
-  const handleOpenUserModal = () => {
-    loadUsers();
-    loadDropdownConfig();
-    setShowUserModal(true);
-  };
-
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    if (!userForm.username || !userForm.displayName || !userForm.role || !userForm.password) {
-      showNotif("All fields are required", "warning");
-      return;
-    }
-    setLoading(true);
-    try {
-      await ApiService.createUser(userForm);
-      setUserForm({ username: "", displayName: "", role: "", password: "" });
-      loadUsers();
-    } catch (err) {
-      showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveEventTypeEdit = async (index, oldVal) => {
-    const newVal = editingTagValue.trim();
-    if (!newVal || newVal === oldVal) { setEditingEventTypeIdx(null); setEditingTagValue(""); return; }
-    const isBuiltIn = EVENT_TYPES.includes(oldVal);
-    if (isBuiltIn) {
-      const newHidden = [...hiddenEventTypes, oldVal];
-      const newCustom = customEventTypes.includes(newVal) ? customEventTypes : [...customEventTypes, newVal];
-      setHiddenEventTypes(newHidden);
-      setCustomEventTypes(newCustom);
-      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, newHidden, hiddenDecorTypes);
-    } else {
-      const newCustom = customEventTypes.map(ct => ct === oldVal ? newVal : ct);
-      setCustomEventTypes(newCustom);
-      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
-    }
-    setEditingEventTypeIdx(null);
-    setEditingTagValue("");
-  };
-
-  const handleSaveDecorTypeEdit = async (index, oldVal) => {
-    const newVal = editingTagValue.trim();
-    if (!newVal || newVal === oldVal) { setEditingDecorTypeIdx(null); setEditingTagValue(""); return; }
-    const isBuiltIn = DECOR_TYPES.includes(oldVal);
-    if (isBuiltIn) {
-      const newHidden = [...hiddenDecorTypes, oldVal];
-      const newCustom = customDecorTypes.includes(newVal) ? customDecorTypes : [...customDecorTypes, newVal];
-      setHiddenDecorTypes(newHidden);
-      setCustomDecorTypes(newCustom);
-      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, newHidden);
-    } else {
-      const newCustom = customDecorTypes.map(ct => ct === oldVal ? newVal : ct);
-      setCustomDecorTypes(newCustom);
-      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, hiddenDecorTypes);
-    }
-    setEditingDecorTypeIdx(null);
-    setEditingTagValue("");
-  };
-
-  const handleEditUser = (user) => {
-    setEditingUser(user);
-    setUserForm({
-      username: user.username,
-      displayName: user.displayName,
-      role: user.role,
-      password: "",
-    });
-  };
-
-  const handleUpdateUser = async (e) => {
-    e.preventDefault();
-    if (!userForm.username || !userForm.displayName || !userForm.role) {
-      showNotif("Username, display name, and role are required", "warning");
-      return;
-    }
-    setLoading(true);
-    try {
-      await ApiService.updateUser(editingUser.id, userForm);
-      setEditingUser(null);
-      setUserForm({ username: "", displayName: "", role: "", password: "" });
-      loadUsers();
-    } catch (err) {
-      showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteUser = async (id, username) => {
-    if (!window.confirm(`Delete user "${username}"?`)) return;
-    setLoading(true);
-    try {
-      await ApiService.deleteUser(id);
-      loadUsers();
-    } catch (err) {
-      showNotif("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const togglePasswordVisibility = (userId) => {
-    setVisiblePasswords(prev => {
-      const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
-      return next;
-    });
-  };
-
   const renderImageCardDetails = (data) => {
     if (!data) return null;
     const sizeDisplay = data.sizeDisplay || buildSizeDisplay(data.sizeWidth, data.sizeLength, data.sizeHeight, data.sizeUnit);
@@ -1370,7 +1045,7 @@ function ImageManagement() {
   const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canDownloadAll = user && DOWNLOAD_ALL_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
-  const canManageUsers = user && MANAGE_USERS_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
+  const canViewUsers = user && (MANAGE_USERS_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase()) || user.role?.toLowerCase() === "admin");
   const canViewReport = user && REPORT_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportData, setReportData] = useState([]);
@@ -1843,12 +1518,21 @@ function ImageManagement() {
         <>
           <div className="image-grid">
             {canUpload && selectedImageIds.size === 0 && (
-              <div className="upload-box-card" onClick={() => { loadDropdownConfig(); resetUploadForm(); setUploadTab("single"); setShowUploadModal(true); }}>
-                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                <span>Upload Image</span>
-              </div>
+              <>
+                <div className="upload-box-card" onClick={() => { loadDropdownConfig(); resetUploadForm(); setShowUploadModal(true); }}>
+                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  <span>Upload Image</span>
+                </div>
+                <div className="upload-box-card" onClick={() => navigate("/batch-upload")}>
+                  <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M5 12h14"/>
+                    <rect x="2" y="2" width="20" height="20" rx="2"/>
+                  </svg>
+                  <span>Batch Upload</span>
+                </div>
+              </>
             )}
             {chunkedFolderImages.visibleItems.map((image, index) => renderImageCard(image, index, chunkedFolderImages.visibleItems))}
             {chunkedFolderImages.totalCount > chunkedFolderImages.visibleCount && (
@@ -1879,8 +1563,8 @@ function ImageManagement() {
               <button className={`nav-item ${!showFavorites && !currentFolder && view === "folders" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setShowFavorites(false); setCurrentFolder(null); setView("folders"); setFilteredImages([]); setSelectedImageIds(new Set()); }}>HOME</button>
             )}
             <button className={`nav-item ${view === "images" ? "active" : ""}`} onClick={() => { setCommonSearch(""); commonSearchPrevView.current = null; setView("images"); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); setSelectedImageIds(new Set()); loadAllImages(); }}>IMAGES</button>
-            {canManageUsers && (
-              <button className="nav-item" onClick={handleOpenUserModal}>USERS</button>
+            {canViewUsers && (
+              <button className="nav-item" onClick={() => navigate("/users")}>USERS</button>
             )}
             <div className="nav-item-dropdown">
               <button
@@ -2347,12 +2031,7 @@ function ImageManagement() {
               <button className="modal-close" onClick={() => { resetUploadForm(); setShowUploadModal(false); }}>×</button>
             </div>
 
-            <div className="upload-tabs">
-              <button className={`upload-tab ${uploadTab === "single" ? "active" : ""}`} onClick={() => setUploadTab("single")}>Single Image</button>
-              <button className={`upload-tab ${uploadTab === "batch" ? "active" : ""}`} onClick={() => setUploadTab("batch")}>Batch Upload</button>
-            </div>
 
-            {uploadTab === "single" && (
               <form onSubmit={handleUploadSingleImage}>
                 <div className="form-group">
                   <label className="label">Select Image</label>
@@ -2513,260 +2192,6 @@ function ImageManagement() {
               </form>
             )}
 
-            {uploadTab === "batch" && (
-              <form onSubmit={handleUploadBatch}>
-                <div className="batch-upload-section">
-                  <div className="batch-image-selector">
-                    <button type="button" className="btn btn-secondary" onClick={() => batchImageRef.current?.click()}>
-                      + Add Images
-                    </button>
-                    <input ref={batchImageRef} type="file" accept="image/*" multiple onChange={handleBatchImageSelect} style={{ display: "none" }} />
-                    <span className="batch-hint">Select multiple images to add them to the table</span>
-                  </div>
-
-                  {batchImages.length > 0 && (
-                    <div className="batch-table-container">
-                      <table className="batch-table">
-                        <thead>
-                          <tr>
-                            <th>Image</th>
-                            <th>Design Name{isFieldRequired("image_designName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Venue{isFieldRequired("image_venueName") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Decor Type{isFieldRequired("image_decorType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Size{isFieldRequired("image_size") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Unit<span className="batch-same-hdr">S</span></th>
-                            <th>Colours{isFieldRequired("image_colours") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Flower{isFieldRequired("image_flowerType") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Min{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th>Max{isFieldRequired("image_price") && <span className="required">*</span>}<span className="batch-same-hdr">S</span></th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {batchImages.map((row, index) => (
-                            <tr key={index}>
-                              <td><div className="batch-thumbnail"><img src={row.preview} alt="" /></div></td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-autocomplete-cell">
-                                    <AutocompleteInput
-                                      options={batchDesignNameSugs}
-                                      value={row.designName}
-                                      onChange={(val) => {
-                                        updateBatchRow(index, "designName", val);
-                                        if (batchDesignNameSugTimer.current) clearTimeout(batchDesignNameSugTimer.current);
-                                        if (val.trim()) {
-                                          batchDesignNameSugTimer.current = setTimeout(async () => {
-                                            const sugs = await ApiService.getSuggestions("designName", val);
-                                            setBatchDesignNameSugs(sugs);
-                                          }, 200);
-                                        } else {
-                                          setBatchDesignNameSugs([]);
-                                        }
-                                      }}
-                                      placeholder="Design"
-                                      showOnEmpty={false}
-                                    />
-                                  </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.designName ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "designName")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-autocomplete-cell">
-                                    <AutocompleteInput
-                                      options={batchVenueSugs}
-                                      value={row.venueName}
-                                      onChange={(val) => {
-                                        updateBatchRow(index, "venueName", val);
-                                        if (batchVenueSugTimer.current) clearTimeout(batchVenueSugTimer.current);
-                                        if (val.trim()) {
-                                          batchVenueSugTimer.current = setTimeout(async () => {
-                                            const sugs = await ApiService.getSuggestions("venueName", val);
-                                            setBatchVenueSugs(sugs);
-                                          }, 200);
-                                        } else {
-                                          setBatchVenueSugs([]);
-                                        }
-                                      }}
-                                      placeholder="Venue"
-                                      showOnEmpty={false}
-                                    />
-                                  </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.venueName ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "venueName")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-autocomplete-cell">
-                                    <AutocompleteInput
-                                      options={allDecorTypes}
-                                      value={row.decorType}
-                                      onChange={(val) => updateBatchRow(index, "decorType", val)}
-                                      placeholder="Decor Type"
-                                    />
-                                  </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.decorType ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "decorType")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-size-row">
-                                     <input type="number" className="batch-input-sm" placeholder="W" value={row.sizeWidth} min="0"
-                                       onWheel={(e) => e.target.blur()}
-                                       onKeyDown={preventNumberAction}
-                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeWidth", v); }} />
-                                     <span>x</span>
-                                     <input type="number" className="batch-input-sm" placeholder="L" value={row.sizeLength} min="0"
-                                       onWheel={(e) => e.target.blur()}
-                                       onKeyDown={preventNumberAction}
-                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeLength", v); }} />
-                                     <span>x</span>
-                                     <input type="number" className="batch-input-sm" placeholder="H" value={row.sizeHeight} min="0"
-                                       onWheel={(e) => e.target.blur()}
-                                       onKeyDown={preventNumberAction}
-                                       onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "sizeHeight", v); }} />
-                                   </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeWidth || row.keepSame.sizeLength || row.keepSame.sizeHeight ? "active" : ""}`}
-                                    onClick={() => { toggleKeepSameField(index, "sizeWidth"); toggleKeepSameField(index, "sizeLength"); toggleKeepSameField(index, "sizeHeight"); }} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <select className="batch-select-sm" value={row.sizeUnit}
-                                    onChange={(e) => updateBatchRow(index, "sizeUnit", e.target.value)}>
-                                    {SIZE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                  </select>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.sizeUnit ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "sizeUnit")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <div className="batch-colour-cell">
-                                    <button type="button" className="batch-colour-picker-btn"
-                                      onClick={() => { setBatchColorPickerIndex(batchColorPickerIndex === index ? null : index); if (batchColorPickerIndex !== index) setBatchColorSearch(""); }}
-                                      title="Select colours">
-                                      <span className="batch-colour-swatches">
-                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours) : []).slice(0, 3).map((c, ci) => (
-                                          <span key={ci} className="batch-colour-dot" style={{ backgroundColor: c.toLowerCase() }} />
-                                        ))}
-                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours).length : 0) > 0 && <span className="batch-colour-count">{typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()).length : row.colours.length}</span>}
-                                        {(row.colours ? (typeof row.colours === "string" ? row.colours.split(",").filter(c => c.trim()) : row.colours).length : 0) === 0 && <span className="batch-colour-placeholder">🎨</span>}
-                                      </span>
-                                    </button>
-                                    {batchColorPickerIndex === index && (
-                                      <div className="batch-colour-popup">
-                                        <div className="batch-colour-popup-header">
-                                          <span>Select Colours</span>
-                                          <button type="button" className="batch-colour-popup-close" onClick={() => setBatchColorPickerIndex(null)}>×</button>
-                                        </div>
-                                        <div className="batch-colour-popup-search">
-                                          <input type="text" className="input input-sm" placeholder="Search colours..."
-                                            value={batchColorSearch}
-                                            onChange={(e) => setBatchColorSearch(e.target.value)} />
-                                        </div>
-                                        <div className="batch-colour-popup-grid">
-                                          {BATCH_COLORS.filter(c => c.toLowerCase().includes(batchColorSearch.toLowerCase())).map(color => {
-                                            const currentColors = row.colours ? (typeof row.colours === "string" ? row.colours.split(",").map(c => c.trim()).filter(c => c) : row.colours) : [];
-                                            const isSelected = currentColors.includes(color);
-                                            const colorHexMap = { "red":"#dc2626","blue":"#2563eb","green":"#22c55e","yellow":"#eab308","orange":"#f97316","purple":"#9333ea","pink":"#ec4899","brown":"#92400e","black":"#1a1a1a","white":"#ffffff","gray":"#6b7280","light blue":"#93c5fd","dark blue":"#1e40af","light green":"#86efac","dark green":"#166534","sky blue":"#38bdf8","navy blue":"#1e3a8a","maroon":"#7f1d1d","olive green":"#808000","beige":"#f5f5dc","cream":"#fef3c7","gold":"#f59e0b","silver":"#9ca3af","bronze":"#cd7f32","copper":"#b87333","rose gold":"#fda4af" };
-                                            return (
-                                              <button
-                                                key={color}
-                                                type="button"
-                                                className={`batch-colour-option ${isSelected ? "selected" : ""} ${["white","yellow","light blue","light green","sky blue","beige","cream","silver","gold","rose gold","gray","bronze","copper"].includes(color.toLowerCase()) ? "light-color" : ""}`}
-                                                style={{ backgroundColor: colorHexMap[color.toLowerCase()] || color.toLowerCase() }}
-                                                onClick={() => {
-                                                  let updated = currentColors;
-                                                  if (isSelected) {
-                                                    updated = updated.filter(c => c !== color);
-                                                  } else {
-                                                    if (updated.length >= 3) { return; }
-                                                    updated = [...updated, color];
-                                                  }
-                                                  updateBatchRow(index, "colours", updated.join(","));
-                                                }}
-                                                title={color}
-                                              >
-                                                {isSelected && "✓"}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                        <div className="batch-colour-popup-footer">
-                                          <button type="button" className="batch-colour-clear-btn"
-                                            onClick={() => { updateBatchRow(index, "colours", ""); setBatchColorPickerIndex(null); }}>
-                                            Clear
-                                          </button>
-                                          <button type="button" className="batch-colour-done-btn"
-                                            onClick={() => setBatchColorPickerIndex(null)}>
-                                            Done
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.colours ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "colours")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <select className="batch-select" value={row.flowerType}
-                                    onChange={(e) => updateBatchRow(index, "flowerType", e.target.value)}>
-                                    <option value="">Flower</option>
-                                    {FLOWER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                  </select>
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.flowerType ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "flowerType")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="batch-field-with-same">
-                                  <input type="number" className="batch-input-tiny" value={row.priceMin} min="0"
-                                     onWheel={(e) => e.target.blur()}
-                                     onKeyDown={preventNumberAction}
-                                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMin", v); }} placeholder="₹" />
-                                   {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMin ? "active" : ""}`}
-                                     onClick={() => toggleKeepSameField(index, "priceMin")} title="Same as previous row">S</button>}
-                                 </div>
-                               </td>
-                               <td>
-                                 <div className="batch-field-with-same">
-                                   <input type="number" className="batch-input-tiny" value={row.priceMax} min="0"
-                                     onWheel={(e) => e.target.blur()}
-                                     onKeyDown={preventNumberAction}
-                                     onChange={(e) => { const v = e.target.value; if (v === "" || parseFloat(v) >= 0) updateBatchRow(index, "priceMax", v); }} placeholder="₹" />
-                                  {index > 0 && <button type="button" className={`batch-same-btn ${row.keepSame.priceMax ? "active" : ""}`}
-                                    onClick={() => toggleKeepSameField(index, "priceMax")} title="Same as previous row">S</button>}
-                                </div>
-                              </td>
-                              <td><button type="button" className="batch-remove-btn" onClick={() => removeBatchRow(index)}>×</button></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {uploadProgress && <div className="upload-progress">{uploadProgress}</div>}
-
-                  <div className="batch-actions">
-                    <button type="button" className="btn btn-secondary" onClick={() => { setBatchImages([]); setUploadProgress(""); }}>Clear All</button>
-                    <button type="submit" className="btn btn-primary" disabled={loading || batchImages.length === 0}>
-                      {loading ? "Uploading..." : `Upload ${batchImages.length} Image(s)`}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => { resetUploadForm(); setShowUploadModal(false); }}>Cancel</button>
-                  </div>
-                </div>
-              </form>
-            )}
-
-
           </div>
         </div>
       )}
@@ -2861,310 +2286,7 @@ function ImageManagement() {
         </div>
       )}
 
-      {/* User Management Modal */}
-      {showUserModal && (
-        <div className="modal-overlay">
-          <div className="modal user-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">User Management</h2>
-              <button className="modal-close" onClick={() => setShowUserModal(false)}>×</button>
-            </div>
 
-            {editingUser ? (
-              <form onSubmit={handleUpdateUser}>
-                <div className="form-group">
-                  <label className="label">Username</label>
-                  <input type="text" className="input" value={userForm.username}
-                    onChange={(e) => setUserForm({...userForm, username: e.target.value})} required />
-                </div>
-                <div className="form-group">
-                  <label className="label">Display Name</label>
-                  <input type="text" className="input" value={userForm.displayName}
-                    onChange={(e) => setUserForm({...userForm, displayName: e.target.value})} required />
-                </div>
-                <div className="form-group">
-                  <label className="label">Role</label>
-                    <select className="input" value={userForm.role}
-                      onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
-                      <option value="">Select Role</option>
-                      <option value="CEO">CEO</option>
-                      <option value="Marketing Head">Marketing Head</option>
-                      <option value="Event Managers">Event Managers</option>
-                      <option value="Admin">Admin</option>
-                    </select>
-                </div>
-                <div className="form-group">
-                  <label className="label">Password (leave blank to keep current)</label>
-                  <input type="text" className="input" value={userForm.password}
-                    onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                    placeholder="Enter new password" />
-                </div>
-                <div className="modal-actions">
-                  <button type="button" className="btn btn-secondary" onClick={() => { setEditingUser(null); setUserForm({ username: "", displayName: "", role: "", password: "" }); }}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? "Saving..." : "Save Changes"}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <>
-                <form onSubmit={handleAddUser} className="user-add-form">
-                  <div className="user-form-row">
-                    <input type="text" className="input" placeholder="Username" value={userForm.username}
-                      onChange={(e) => setUserForm({...userForm, username: e.target.value})} required />
-                    <input type="text" className="input" placeholder="Display Name" value={userForm.displayName}
-                      onChange={(e) => setUserForm({...userForm, displayName: e.target.value})} required />
-                    <select className="input" value={userForm.role}
-                      onChange={(e) => setUserForm({...userForm, role: e.target.value})} required>
-                      <option value="">Role</option>
-                      <option value="CEO">CEO</option>
-                      <option value="Marketing Head">Marketing Head</option>
-                      <option value="Event Managers">Event Managers</option>
-                      <option value="Admin">Admin</option>
-                    </select>
-                    <input type="text" className="input" placeholder="Password" value={userForm.password}
-                      onChange={(e) => setUserForm({...userForm, password: e.target.value})} required />
-                    <button type="submit" className="btn btn-primary" disabled={loading}>
-                      {loading ? "Adding..." : "Add"}
-                    </button>
-                  </div>
-                </form>
-
-                <div className="user-table-container">
-                  <table className="user-table">
-                    <thead>
-                      <tr>
-                        <th>Display Name</th>
-                        <th>Username</th>
-                        <th>Role</th>
-                        <th>Password</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.length === 0 ? (
-                        <tr><td colSpan={5} className="empty-table">No users found.</td></tr>
-                      ) : (
-                        users.map(user => (
-                          <tr key={user.id}>
-                            <td>{user.displayName}</td>
-                            <td>{user.username}</td>
-                            <td><span className={`role-badge ${user.role?.toLowerCase()}`}>{user.role}</span></td>
-                            <td className="password-cell">
-                              <div className="password-wrapper">
-                                <span className="password-text">
-                                  {visiblePasswords.has(user.id) ? (user.password || "(no password)") : "••••••••"}
-                                </span>
-                                <button
-                                  className="password-toggle-btn"
-                                  onClick={() => togglePasswordVisibility(user.id)}
-                                  title={visiblePasswords.has(user.id) ? "Hide password" : "Show password"}
-                                >
-                                  {visiblePasswords.has(user.id) ? (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                                      <line x1="1" y1="1" x2="23" y2="23"/>
-                                    </svg>
-                                  ) : (
-                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                      <circle cx="12" cy="12" r="3"/>
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                            <td className="actions-cell">
-                              <button className="icon-btn icon-btn-edit" onClick={() => handleEditUser(user)} title="Edit user">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                </svg>
-                              </button>
-                              <button className="icon-btn icon-btn-delete" onClick={() => handleDeleteUser(user.id, user.username)} title="Delete user">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <polyline points="3 6 5 6 21 6"/>
-                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                  <line x1="10" y1="11" x2="10" y2="17"/>
-                                  <line x1="14" y1="11" x2="14" y2="17"/>
-                                </svg>
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {canUpload && (
-                  <button className="btn btn-secondary" onClick={() => {
-                    const next = !showFormSettings;
-                    setShowFormSettings(next);
-                    if (next) setTimeout(() => formSettingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-                  }} style={{ marginTop: "16px", width: "100%" }}>
-                    {showFormSettings ? "Close Form Settings" : "Form Settings"}
-                  </button>
-                )}
-
-                {showFormSettings && (
-                  <div className="form-settings-panel" ref={formSettingsRef}>
-                    <h3 className="form-settings-title">Mandatory Field Settings</h3>
-                    <p className="form-settings-hint">Toggle fields between mandatory (<span className="required-star">*</span>) and optional</p>
-                    <div className="form-settings-group">
-                      <h4>Add Folder</h4>
-                      <label className="form-settings-row"><span>Customer Name</span><input type="checkbox" checked={isFieldRequired("folder_customerName")} onChange={(e) => { const c = {...formConfig, folder_customerName: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("folder_venue")} onChange={(e) => { const c = {...formConfig, folder_venue: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Event Date</span><input type="checkbox" checked={isFieldRequired("folder_eventDate")} onChange={(e) => { const c = {...formConfig, folder_eventDate: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Collected By</span><input type="checkbox" checked={isFieldRequired("folder_collectedBy")} onChange={(e) => { const c = {...formConfig, folder_collectedBy: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Event Type</span><input type="checkbox" checked={isFieldRequired("folder_eventType")} onChange={(e) => { const c = {...formConfig, folder_eventType: e.target.checked}; saveFormConfig(c); }} /></label>
-                    </div>
-                    <div className="form-settings-group">
-                      <h4>Upload Image</h4>
-                      <label className="form-settings-row"><span>Design Name</span><input type="checkbox" checked={isFieldRequired("image_designName")} onChange={(e) => { const c = {...formConfig, image_designName: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Decoration Type</span><input type="checkbox" checked={isFieldRequired("image_decorType")} onChange={(e) => { const c = {...formConfig, image_decorType: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Venue</span><input type="checkbox" checked={isFieldRequired("image_venueName")} onChange={(e) => { const c = {...formConfig, image_venueName: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Flower Type</span><input type="checkbox" checked={isFieldRequired("image_flowerType")} onChange={(e) => { const c = {...formConfig, image_flowerType: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Colour</span><input type="checkbox" checked={isFieldRequired("image_colours")} onChange={(e) => { const c = {...formConfig, image_colours: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Size</span><input type="checkbox" checked={isFieldRequired("image_size")} onChange={(e) => { const c = {...formConfig, image_size: e.target.checked}; saveFormConfig(c); }} /></label>
-                      <label className="form-settings-row"><span>Price Range</span><input type="checkbox" checked={isFieldRequired("image_price")} onChange={(e) => { const c = {...formConfig, image_price: e.target.checked}; saveFormConfig(c); }} /></label>
-                    </div>
-                  </div>
-                )}
-
-                {showFormSettings && (user?.role === "CEO" || user?.role === "Marketing Head" || user?.role === "Admin" || user?.role === "Owner") && (
-                  <div className="form-settings-panel" style={{ marginTop: "16px" }}>
-                    <h3 className="form-settings-title">Manage Dropdown Options</h3>
-                    <p className="form-settings-hint">Add, edit, or remove options for dropdowns. Changes apply to all users.</p>
-
-                    <div className="form-settings-group">
-                      <h4>Event Type</h4>
-                      <div className="dropdown-tag-list">
-                        {allEventTypes.map((t, i) => (
-                          <span key={i} className="dropdown-tag">
-                            {editingEventTypeIdx === i ? (
-                              <span className="dropdown-tag-editing">
-                                <input type="text" className="input-sm" value={editingTagValue}
-                                  onChange={(e) => setEditingTagValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") { handleSaveEventTypeEdit(i, t); }
-                                    if (e.key === "Escape") { setEditingEventTypeIdx(null); setEditingTagValue(""); }
-                                  }}
-                                  autoFocus />
-                                <button type="button" className="dropdown-tag-save-btn"
-                                  onClick={() => handleSaveEventTypeEdit(i, t)}>✓</button>
-                                <button type="button" className="dropdown-tag-cancel-btn"
-                                  onClick={() => { setEditingEventTypeIdx(null); setEditingTagValue(""); }}>×</button>
-                              </span>
-                            ) : (
-                              <>
-                                {t}
-                                <button type="button" className="dropdown-tag-edit"
-                                  onClick={() => { setEditingEventTypeIdx(i); setEditingTagValue(t); }}
-                                  title="Edit">✎</button>
-                                <button type="button" className="dropdown-tag-remove"
-                                  onClick={async () => {
-                                    const isBuiltIn = EVENT_TYPES.includes(t);
-                                    if (isBuiltIn) {
-                                      const newHidden = [...hiddenEventTypes, t];
-                                      setHiddenEventTypes(newHidden);
-                                      const newCustom = customEventTypes.filter(ct => ct !== t);
-                                      setCustomEventTypes(newCustom);
-                                      await ApiService.updateDropdownConfig(newCustom, customDecorTypes, newHidden, hiddenDecorTypes);
-                                    } else {
-                                      const updated = customEventTypes.filter(ct => ct !== t);
-                                      setCustomEventTypes(updated);
-                                      await ApiService.updateDropdownConfig(updated, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
-                                    }
-                                  }}>×</button>
-                              </>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="dropdown-add-row">
-                        <input type="text" className="input" placeholder="New event type..." value={newEventType}
-                          onChange={(e) => setNewEventType(e.target.value)} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={!newEventType.trim()}
-                          onClick={async () => {
-                            const val = newEventType.trim();
-                            if (!val || allEventTypes.includes(val)) return;
-                            const updated = [...customEventTypes, val];
-                            setCustomEventTypes(updated);
-                            setNewEventType("");
-                            await ApiService.updateDropdownConfig(updated, customDecorTypes, hiddenEventTypes, hiddenDecorTypes);
-                          }}>Add</button>
-                      </div>
-                    </div>
-
-                    <div className="form-settings-group">
-                      <h4>Decoration Type</h4>
-                      <div className="dropdown-tag-list">
-                        {allDecorTypes.map((t, i) => (
-                          <span key={i} className="dropdown-tag">
-                            {editingDecorTypeIdx === i ? (
-                              <span className="dropdown-tag-editing">
-                                <input type="text" className="input-sm" value={editingTagValue}
-                                  onChange={(e) => setEditingTagValue(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") { handleSaveDecorTypeEdit(i, t); }
-                                    if (e.key === "Escape") { setEditingDecorTypeIdx(null); setEditingTagValue(""); }
-                                  }}
-                                  autoFocus />
-                                <button type="button" className="dropdown-tag-save-btn"
-                                  onClick={() => handleSaveDecorTypeEdit(i, t)}>✓</button>
-                                <button type="button" className="dropdown-tag-cancel-btn"
-                                  onClick={() => { setEditingDecorTypeIdx(null); setEditingTagValue(""); }}>×</button>
-                              </span>
-                            ) : (
-                              <>
-                                {t}
-                                <button type="button" className="dropdown-tag-edit"
-                                  onClick={() => { setEditingDecorTypeIdx(i); setEditingTagValue(t); }}
-                                  title="Edit">✎</button>
-                                <button type="button" className="dropdown-tag-remove"
-                                  onClick={async () => {
-                                    const isBuiltIn = DECOR_TYPES.includes(t);
-                                    if (isBuiltIn) {
-                                      const newHidden = [...hiddenDecorTypes, t];
-                                      setHiddenDecorTypes(newHidden);
-                                      const newCustom = customDecorTypes.filter(ct => ct !== t);
-                                      setCustomDecorTypes(newCustom);
-                                      await ApiService.updateDropdownConfig(customEventTypes, newCustom, hiddenEventTypes, newHidden);
-                                    } else {
-                                      const updated = customDecorTypes.filter(ct => ct !== t);
-                                      setCustomDecorTypes(updated);
-                                      await ApiService.updateDropdownConfig(customEventTypes, updated, hiddenEventTypes, hiddenDecorTypes);
-                                    }
-                                  }}>×</button>
-                              </>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="dropdown-add-row">
-                        <input type="text" className="input" placeholder="New decoration type..." value={newDecorType}
-                          onChange={(e) => setNewDecorType(e.target.value)} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={!newDecorType.trim()}
-                          onClick={async () => {
-                            const val = newDecorType.trim();
-                            if (!val || allDecorTypes.includes(val)) return;
-                            const updated = [...customDecorTypes, val];
-                            setCustomDecorTypes(updated);
-                            setNewDecorType("");
-                            await ApiService.updateDropdownConfig(customEventTypes, updated, hiddenEventTypes, hiddenDecorTypes);
-                          }}>Add</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Edit Modal */}
       {showEditModal && editingImage && (
