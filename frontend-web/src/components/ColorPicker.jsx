@@ -85,6 +85,7 @@ function ColorPicker({ selectedColors = [], onChange, label = "Color" }) {
                   }`}
                   style={{ backgroundColor: color.hex, borderColor: selectedColors.includes(color.name) ? color.hex : undefined }}
                   title={color.name}
+                  onClick={(e) => { e.stopPropagation(); toggleColor(color.name); }}
                 >
                   {selectedColors.includes(color.name) && (
                     <span className="color-swatch-check" style={{ color: ["White","Yellow","Light Blue","Light Green","Sky Blue","Beige","Cream","Silver","Gold","Rose Gold","Gray","Bronze","Copper"].includes(color.name) ? "#374151" : "#fff" }}>✓</span>
