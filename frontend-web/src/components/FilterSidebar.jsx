@@ -37,16 +37,28 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [venueSuggestions, setVenueSuggestions] = useState([]);
   const [folderNameSuggestions, setFolderNameSuggestions] = useState([]);
+  const [collectedBySuggestions, setCollectedBySuggestions] = useState([]);
+  const [eventTypeSuggestions, setEventTypeSuggestions] = useState([]);
+  const [decorTypeSuggestions, setDecorTypeSuggestions] = useState([]);
   const [showSearchSugs, setShowSearchSugs] = useState(false);
   const [showVenueSugs, setShowVenueSugs] = useState(false);
   const [showFolderNameSugs, setShowFolderNameSugs] = useState(false);
+  const [showCollectedBySugs, setShowCollectedBySugs] = useState(false);
+  const [showEventTypeSugs, setShowEventTypeSugs] = useState(false);
+  const [showDecorTypeSugs, setShowDecorTypeSugs] = useState(false);
   const autoApplyTimer = useRef(null);
   const searchSugTimer = useRef(null);
   const venueSugTimer = useRef(null);
   const folderNameSugTimer = useRef(null);
+  const collectedBySugTimer = useRef(null);
+  const eventTypeSugTimer = useRef(null);
+  const decorTypeSugTimer = useRef(null);
   const searchWrapRef = useRef(null);
   const venueWrapRef = useRef(null);
   const folderNameWrapRef = useRef(null);
+  const collectedByWrapRef = useRef(null);
+  const eventTypeWrapRef = useRef(null);
+  const decorTypeWrapRef = useRef(null);
 
   const AUTO_APPLY_DELAY = 500;
   const SUGGESTION_DELAY = 250;
@@ -58,6 +70,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
       if (searchSugTimer.current) clearTimeout(searchSugTimer.current);
       if (venueSugTimer.current) clearTimeout(venueSugTimer.current);
       if (folderNameSugTimer.current) clearTimeout(folderNameSugTimer.current);
+      if (collectedBySugTimer.current) clearTimeout(collectedBySugTimer.current);
+      if (eventTypeSugTimer.current) clearTimeout(eventTypeSugTimer.current);
+      if (decorTypeSugTimer.current) clearTimeout(decorTypeSugTimer.current);
     };
   }, []);
 
@@ -66,6 +81,9 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
       if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) setShowSearchSugs(false);
       if (venueWrapRef.current && !venueWrapRef.current.contains(e.target)) setShowVenueSugs(false);
       if (folderNameWrapRef.current && !folderNameWrapRef.current.contains(e.target)) setShowFolderNameSugs(false);
+      if (collectedByWrapRef.current && !collectedByWrapRef.current.contains(e.target)) setShowCollectedBySugs(false);
+      if (eventTypeWrapRef.current && !eventTypeWrapRef.current.contains(e.target)) setShowEventTypeSugs(false);
+      if (decorTypeWrapRef.current && !decorTypeWrapRef.current.contains(e.target)) setShowDecorTypeSugs(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -151,6 +169,52 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     }
   };
 
+  const handleCollectedByChange = (val) => {
+    setCollectedByFilter(val);
+    triggerAutoApply();
+    if (collectedBySugTimer.current) clearTimeout(collectedBySugTimer.current);
+    if (val.trim()) {
+      collectedBySugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("collectedBy", val);
+        setCollectedBySuggestions(results);
+        setShowCollectedBySugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setCollectedBySuggestions([]);
+      setShowCollectedBySugs(false);
+    }
+  };
+
+  const handleEventTypeChange = (val) => {
+    setEventTypeSearch(val);
+    if (eventTypeSugTimer.current) clearTimeout(eventTypeSugTimer.current);
+    if (val.trim()) {
+      eventTypeSugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("eventType", val);
+        setEventTypeSuggestions(results);
+        setShowEventTypeSugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setEventTypeSuggestions([]);
+      setShowEventTypeSugs(false);
+    }
+  };
+
+  const handleDecorTypeChange = (val) => {
+    setDecorTypeSearch(val);
+    if (decorTypeSugTimer.current) clearTimeout(decorTypeSugTimer.current);
+    if (val.trim()) {
+      decorTypeSugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("decorType", val);
+        setDecorTypeSuggestions(results);
+        setShowDecorTypeSugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setDecorTypeSuggestions([]);
+      setShowDecorTypeSugs(false);
+    }
+  };
+
   const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))].filter(t => !hiddenEventTypes.includes(t));
   const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))].filter(t => !hiddenDecorTypes.includes(t));
 
@@ -192,7 +256,13 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     setSearchSuggestions([]);
     setVenueSuggestions([]);
     setFolderNameSuggestions([]);
+    setCollectedBySuggestions([]);
+    setEventTypeSuggestions([]);
+    setDecorTypeSuggestions([]);
     setShowFolderNameSugs(false);
+    setShowCollectedBySugs(false);
+    setShowEventTypeSugs(false);
+    setShowDecorTypeSugs(false);
     onClear && onClear();
   };
 
@@ -284,26 +354,52 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
         </Accordion>
 
         <Accordion title="Collected By">
-          <div className="filter-section">
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Search collected by..."
-              value={collectedByFilter}
-              onChange={(e) => { setCollectedByFilter(e.target.value); triggerAutoApply(); }}
-            />
+          <div className="filter-section" ref={collectedByWrapRef}>
+            <div className="filter-suggest-wrap">
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Search collected by..."
+                value={collectedByFilter}
+                onChange={(e) => handleCollectedByChange(e.target.value)}
+                onFocus={() => { if (collectedBySuggestions.length > 0) setShowCollectedBySugs(true); }}
+              />
+              {showCollectedBySugs && collectedBySuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {collectedBySuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { setCollectedByFilter(s); setShowCollectedBySugs(false); setCollectedBySuggestions([]); triggerAutoApply(); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </Accordion>
 
         <Accordion title="Event Type">
-          <div className="filter-section">
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Search event type..."
-              value={eventTypeSearch}
-              onChange={(e) => setEventTypeSearch(e.target.value)}
-            />
+          <div className="filter-section" ref={eventTypeWrapRef}>
+            <div className="filter-suggest-wrap">
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Search event type..."
+                value={eventTypeSearch}
+                onChange={(e) => handleEventTypeChange(e.target.value)}
+                onFocus={() => { if (eventTypeSuggestions.length > 0) setShowEventTypeSugs(true); }}
+              />
+              {showEventTypeSugs && eventTypeSuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {eventTypeSuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { setEventTypeSearch(s); setShowEventTypeSugs(false); setEventTypeSuggestions([]); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="decor-type-list">
               {filteredEventTypes.map((type) => (
                 <label key={type} className="checkbox-item">
@@ -320,14 +416,27 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
         </Accordion>
 
         <Accordion title="Decoration Type">
-          <div className="filter-section">
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Search decoration type..."
-              value={decorTypeSearch}
-              onChange={(e) => setDecorTypeSearch(e.target.value)}
-            />
+          <div className="filter-section" ref={decorTypeWrapRef}>
+            <div className="filter-suggest-wrap">
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Search decoration type..."
+                value={decorTypeSearch}
+                onChange={(e) => handleDecorTypeChange(e.target.value)}
+                onFocus={() => { if (decorTypeSuggestions.length > 0) setShowDecorTypeSugs(true); }}
+              />
+              {showDecorTypeSugs && decorTypeSuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {decorTypeSuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { setDecorTypeSearch(s); setShowDecorTypeSugs(false); setDecorTypeSuggestions([]); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="decor-type-list">
               {filteredDecorTypes.map((type) => (
                 <label key={type} className="checkbox-item">
