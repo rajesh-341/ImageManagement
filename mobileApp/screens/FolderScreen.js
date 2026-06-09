@@ -24,14 +24,40 @@ function FolderScreen({ route, navigation }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [uploadProgress, setUploadProgress] = useState("");
+  const [favouriteIds, setFavouriteIds] = useState(new Set());
 
   useEffect(() => {
     const init = async () => {
       const u = await offlineStorage.getUser();
       setUser(u);
+      loadFavouriteIds();
     };
     init();
   }, []);
+
+  const loadFavouriteIds = async () => {
+    try {
+      const favs = await ApiService.getFavorites();
+      setFavouriteIds(new Set((favs || []).map(f => f.id)));
+    } catch (err) {
+      console.error("Failed to load favourite ids:", err);
+    }
+  };
+
+  const handleToggleFavourite = async (imageId) => {
+    try {
+      if (favouriteIds.has(imageId)) {
+        await ApiService.removeFavorite(imageId);
+        favouriteIds.delete(imageId);
+      } else {
+        await ApiService.addFavorite(imageId);
+        favouriteIds.add(imageId);
+      }
+      setFavouriteIds(new Set(favouriteIds));
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -108,6 +134,7 @@ function FolderScreen({ route, navigation }) {
 
   const renderItem = ({ item }) => {
     const imgUrl = getImgUrl(item);
+    const isFav = favouriteIds.has(item.id);
 
     return (
       <View style={styles.card}>
@@ -119,6 +146,12 @@ function FolderScreen({ route, navigation }) {
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.favToggleOnCard} onPress={() => handleToggleFavourite(item.id)}>
+          <Text style={[styles.favToggleText, isFav && styles.favToggleTextActive]}>
+            {isFav ? "♥" : "♡"}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.cardContent}>
@@ -255,6 +288,13 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
   deleteBtn: { marginTop: 8, paddingVertical: 6, borderRadius: 6, backgroundColor: "#fef2f2", alignItems: "center" },
   deleteBtnText: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
+  favToggleOnCard: {
+    position: "absolute", top: 8, right: 8, width: 32, height: 32,
+    borderRadius: 16, backgroundColor: "rgba(255,255,255,0.9)",
+    justifyContent: "center", alignItems: "center", zIndex: 10,
+  },
+  favToggleText: { fontSize: 18, color: "#9ca3af" },
+  favToggleTextActive: { color: "#ef4444" },
   // Upload Modal
   uploadModal: { flex: 1, backgroundColor: "#f5f5f5" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, paddingTop: Platform.OS === "ios" ? 50 : 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" },

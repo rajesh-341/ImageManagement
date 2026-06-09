@@ -167,6 +167,52 @@ class ApiService {
   async moveImageToFolder(imageId, folderName) {
     return this.updateImageFolder(imageId, folderName);
   }
+
+  // Favourites
+  async getFavorites(folder = null) {
+    const endpoint = folder
+      ? `/favorites?folder=${encodeURIComponent(folder)}`
+      : "/favorites";
+    return this.request(endpoint);
+  }
+
+  async addFavorite(imageId) {
+    return this.request("/favorites", {
+      method: "POST",
+      body: JSON.stringify({ imageId }),
+    });
+  }
+
+  async removeFavorite(imageId) {
+    return this.request(`/favorites/${imageId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getFavoriteFolders() {
+    return this.request("/favorites/folders");
+  }
+
+  async createFavoriteFolder(folderName, description = "") {
+    return this.request("/favorites/folders", {
+      method: "POST",
+      body: JSON.stringify({ folderName, description }),
+    });
+  }
+
+  async addImagesToFavouriteFolder(folderId, imageIds) {
+    return this.request("/favorites/folder-images/batch", {
+      method: "POST",
+      body: JSON.stringify({ folderId, imageIds }),
+    });
+  }
+
+  async removeImageFromFavouriteFolder(folderId, imageId) {
+    return this.request("/favorites/folder-images", {
+      method: "DELETE",
+      body: JSON.stringify({ folderId, imageId }),
+    });
+  }
 }
 
 export default new ApiService();

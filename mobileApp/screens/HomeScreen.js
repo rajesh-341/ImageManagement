@@ -45,6 +45,7 @@ function HomeScreen({ navigation }) {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [selectedImagesForMove, setSelectedImagesForMove] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [favouriteIds, setFavouriteIds] = useState(new Set());
 
   useEffect(() => {
     const init = async () => {
@@ -61,6 +62,7 @@ function HomeScreen({ navigation }) {
   useEffect(() => {
     if (user) {
       loadFolders();
+      loadFavouriteIds();
     }
   }, [user]);
 
@@ -70,6 +72,30 @@ function HomeScreen({ navigation }) {
       setFolders(list);
     } catch (err) {
       console.error("Failed to load folders:", err);
+    }
+  };
+
+  const loadFavouriteIds = async () => {
+    try {
+      const favs = await ApiService.getFavorites();
+      setFavouriteIds(new Set((favs || []).map(f => f.id)));
+    } catch (err) {
+      console.error("Failed to load favourite ids:", err);
+    }
+  };
+
+  const handleToggleFavourite = async (imageId) => {
+    try {
+      if (favouriteIds.has(imageId)) {
+        await ApiService.removeFavorite(imageId);
+        favouriteIds.delete(imageId);
+      } else {
+        await ApiService.addFavorite(imageId);
+        favouriteIds.add(imageId);
+      }
+      setFavouriteIds(new Set(favouriteIds));
+    } catch (err) {
+      Alert.alert("Error", err.message);
     }
   };
 
@@ -219,6 +245,7 @@ function HomeScreen({ navigation }) {
   const renderImageCard = ({ item, isFilteredView = false }) => {
     const imgUrl = getImgUrl(item);
     const isSelected = selectedImagesForMove.has(item.id);
+    const isFav = favouriteIds.has(item.id);
 
     return (
       <View style={[styles.imageCard, isSelected && styles.imageCardSelected]}>
@@ -230,6 +257,12 @@ function HomeScreen({ navigation }) {
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.favToggleOnCard} onPress={() => handleToggleFavourite(item.id)}>
+          <Text style={[styles.favToggleText, isFav && styles.favToggleTextActive]}>
+            {isFav ? "♥" : "♡"}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.imageCardContent}>
@@ -307,6 +340,9 @@ function HomeScreen({ navigation }) {
           <Text style={styles.userText} numberOfLines={1}>
             {user?.displayName || user?.username}
           </Text>
+          <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate("Favourites")}>
+            <Text style={styles.navBtnText}>♥ Favourites</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={async () => { await ApiService.logout(); navigation.replace("Login"); }}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
@@ -625,6 +661,13 @@ const styles = StyleSheet.create({
   placeholderText: { color: "#9ca3af", fontSize: 14 },
   imageCardContent: { padding: 10 },
   imageCardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
+  favToggleOnCard: {
+    position: "absolute", top: 8, right: 8, width: 32, height: 32,
+    borderRadius: 16, backgroundColor: "rgba(255,255,255,0.9)",
+    justifyContent: "center", alignItems: "center", zIndex: 10,
+  },
+  favToggleText: { fontSize: 18, color: "#9ca3af" },
+  favToggleTextActive: { color: "#ef4444" },
   // Center
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 15, color: "#9ca3af", textAlign: "center", padding: 24 },
