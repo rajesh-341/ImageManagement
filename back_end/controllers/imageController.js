@@ -430,6 +430,7 @@ const getSuggestions = async (req, res) => {
       venueCustomer: "image_data->>'venueCustomer'",
       flowerType: "image_data->>'flowerType'",
       collectedBy: "image_data->>'collectedBy'",
+      folderName: "folder_name",
     };
 
     const dbField = fieldMap[field];

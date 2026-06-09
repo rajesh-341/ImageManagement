@@ -36,13 +36,17 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
   const [eventTypeSearch, setEventTypeSearch] = useState("");
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [venueSuggestions, setVenueSuggestions] = useState([]);
+  const [folderNameSuggestions, setFolderNameSuggestions] = useState([]);
   const [showSearchSugs, setShowSearchSugs] = useState(false);
   const [showVenueSugs, setShowVenueSugs] = useState(false);
+  const [showFolderNameSugs, setShowFolderNameSugs] = useState(false);
   const autoApplyTimer = useRef(null);
   const searchSugTimer = useRef(null);
   const venueSugTimer = useRef(null);
+  const folderNameSugTimer = useRef(null);
   const searchWrapRef = useRef(null);
   const venueWrapRef = useRef(null);
+  const folderNameWrapRef = useRef(null);
 
   const AUTO_APPLY_DELAY = 500;
   const SUGGESTION_DELAY = 250;
@@ -53,6 +57,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
       if (autoApplyTimer.current) clearTimeout(autoApplyTimer.current);
       if (searchSugTimer.current) clearTimeout(searchSugTimer.current);
       if (venueSugTimer.current) clearTimeout(venueSugTimer.current);
+      if (folderNameSugTimer.current) clearTimeout(folderNameSugTimer.current);
     };
   }, []);
 
@@ -60,6 +65,7 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     const handleClick = (e) => {
       if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) setShowSearchSugs(false);
       if (venueWrapRef.current && !venueWrapRef.current.contains(e.target)) setShowVenueSugs(false);
+      if (folderNameWrapRef.current && !folderNameWrapRef.current.contains(e.target)) setShowFolderNameSugs(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -129,6 +135,22 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     }
   };
 
+  const handleFolderNameChange = (val) => {
+    setFolderName(val);
+    triggerAutoApply();
+    if (folderNameSugTimer.current) clearTimeout(folderNameSugTimer.current);
+    if (val.trim()) {
+      folderNameSugTimer.current = setTimeout(async () => {
+        const results = await fetchSuggestions("folderName", val);
+        setFolderNameSuggestions(results);
+        setShowFolderNameSugs(true);
+      }, SUGGESTION_DELAY);
+    } else {
+      setFolderNameSuggestions([]);
+      setShowFolderNameSugs(false);
+    }
+  };
+
   const allEventTypes = [...EVENT_TYPES, ...customEventTypes.filter(t => !EVENT_TYPES.includes(t))].filter(t => !hiddenEventTypes.includes(t));
   const allDecorTypes = [...DECOR_TYPES, ...customDecorTypes.filter(t => !DECOR_TYPES.includes(t))].filter(t => !hiddenDecorTypes.includes(t));
 
@@ -169,6 +191,8 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
     setEventTypeSearch("");
     setSearchSuggestions([]);
     setVenueSuggestions([]);
+    setFolderNameSuggestions([]);
+    setShowFolderNameSugs(false);
     onClear && onClear();
   };
 
@@ -235,14 +259,27 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
         </Accordion>
 
         <Accordion title="Folder Name">
-          <div className="filter-section">
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Search folder name..."
-              value={folderName}
-              onChange={(e) => { setFolderName(e.target.value); triggerAutoApply(); }}
-            />
+          <div className="filter-section" ref={folderNameWrapRef}>
+            <div className="filter-suggest-wrap">
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Search folder name..."
+                value={folderName}
+                onChange={(e) => handleFolderNameChange(e.target.value)}
+                onFocus={() => { if (folderNameSuggestions.length > 0) setShowFolderNameSugs(true); }}
+              />
+              {showFolderNameSugs && folderNameSuggestions.length > 0 && (
+                <ul className="filter-suggestions-list">
+                  {folderNameSuggestions.map((s, i) => (
+                    <li key={i} className="filter-suggestion-item"
+                      onMouseDown={() => { setFolderName(s); setShowFolderNameSugs(false); setFolderNameSuggestions([]); triggerAutoApply(); }}>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </Accordion>
 
