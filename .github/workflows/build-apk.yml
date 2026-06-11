@@ -1,0 +1,88 @@
+name: Build Android APK & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          DATE_TAG=$(date +'%Y%m%d')
+          VERSION_NAME="1.0.$DATE_TAG"
+          VERSION_CODE="$DATE_TAG"
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          echo "tag=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Write bundled version.json
+        run: |
+          echo "{\"versionCode\": $VERSION_CODE, \"versionName\": \"$VERSION_NAME\"}" > mobileApp/version.json
+          cat mobileApp/version.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: mobileApp
+
+      - name: Build release APK
+        run: cd android && ./gradlew assembleRelease
+        working-directory: mobileApp
+        env:
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          APK="mobileApp/android/app/build/outputs/apk/release/app-release.apk"
+          APK_NAME="ImageManagement-v$VERSION_NAME.apk"
+          cp "$APK" "release-assets/$APK_NAME"
+          cat > release-assets/latest.json <<EOF
+          {
+            "versionCode": $VERSION_CODE,
+            "versionName": "$VERSION_NAME",
+            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/$APK_NAME",
+            "releaseUrl": "https://github.com/${{ github.repository }}/releases/tag/v$VERSION_NAME"
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Release v${{ env.VERSION_NAME }}
+          body: |
+            ## Auto-generated Release
+
+            **Version:** ${{ env.VERSION_NAME }}
+            **Build:** ${{ env.VERSION_CODE }}
+            **Date:** ${{ steps.version.outputs.date }}
+
+            ### Installation
+            Download the APK below and install it on your Android device.
+            If you already have the app installed, it will prompt you to update automatically.
+          files: |
+            release-assets/*
+          fail_on_unmatched_files: true

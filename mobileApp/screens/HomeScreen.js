@@ -9,6 +9,7 @@ import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import ImageMeta from "../components/ImageMeta";
 import FilterSidebar from "../components/FilterSidebar";
+import UpdateService from "../services/updateService";
 import { UPLOAD_ROLES, SIZE_UNIT_OPTIONS } from "../utils/constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -17,7 +18,7 @@ const isTablet = SCREEN_WIDTH >= 768;
 const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
 const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function HomeScreen({ navigation }) {
@@ -46,6 +47,9 @@ function HomeScreen({ navigation }) {
   const [selectedImagesForMove, setSelectedImagesForMove] = useState(new Set());
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [favouriteIds, setFavouriteIds] = useState(new Set());
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateProgress, setUpdateProgress] = useState(null);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -63,8 +67,43 @@ function HomeScreen({ navigation }) {
     if (user) {
       loadFolders();
       loadFavouriteIds();
+      checkForUpdates();
     }
   }, [user]);
+
+  const checkForUpdates = async () => {
+    const result = await UpdateService.checkForUpdate();
+    if (result.available) {
+      setUpdateInfo(result);
+    }
+  };
+
+  const handleUpdateNow = async () => {
+    if (!updateInfo?.apkUrl) return;
+    setUpdateDownloading(true);
+    setUpdateProgress(0);
+    try {
+      const apkPath = await UpdateService.downloadUpdate(
+        updateInfo.apkUrl,
+        (pct) => setUpdateProgress(pct)
+      );
+      setUpdateProgress(1);
+      await UpdateService.installUpdate(apkPath);
+      setUpdateInfo(null);
+    } catch (err) {
+      Alert.alert("Update Failed", err.message || "Could not download the update. Try again later.");
+    } finally {
+      setUpdateDownloading(false);
+      setUpdateProgress(null);
+    }
+  };
+
+  const handleSkipUpdate = async () => {
+    if (updateInfo?.versionCode) {
+      await UpdateService.skipVersion(updateInfo.versionCode);
+    }
+    setUpdateInfo(null);
+  };
 
   const loadFolders = async () => {
     try {
@@ -575,6 +614,47 @@ function HomeScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Update Modal */}
+      {updateInfo && (
+        <Modal visible transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Update Available v{updateInfo.versionName}</Text>
+              </View>
+              <View style={styles.modalBody}>
+                {updateProgress !== null && updateProgress < 1 ? (
+                  <>
+                    <Text style={styles.updateProgressLabel}>
+                      Downloading... {(updateProgress * 100).toFixed(0)}%
+                    </Text>
+                    <View style={styles.updateProgressBar}>
+                      <View style={[styles.updateProgressFill, { width: `${(updateProgress * 100).toFixed(0)}%` }]} />
+                    </View>
+                  </>
+                ) : updateProgress === 1 ? (
+                  <Text style={styles.updateProgressLabel}>Installing...</Text>
+                ) : (
+                  <>
+                    <Text style={styles.updateReleaseNotes}>
+                      {updateInfo.releaseNotes || "A new version is available. Tap Update to get the latest features and fixes."}
+                    </Text>
+                    <View style={styles.modalActions}>
+                      <TouchableOpacity style={styles.cancelBtn} onPress={handleSkipUpdate} disabled={updateDownloading}>
+                        <Text style={styles.cancelBtnText}>Skip</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.primaryBtn} onPress={handleUpdateNow} disabled={updateDownloading}>
+                        <Text style={styles.primaryBtnText}>{updateDownloading ? "Downloading..." : "Update"}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {/* Move to Folder Modal */}
       <Modal visible={showMoveModal} transparent animationType="fade" onRequestClose={() => setShowMoveModal(false)}>
         <View style={styles.modalOverlay}>
@@ -726,6 +806,11 @@ const styles = StyleSheet.create({
   moveItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
   moveItemIcon: { fontSize: 20 },
   moveItemName: { fontSize: 15, color: "#1a1a1a", fontWeight: "500" },
+  // Update
+  updateProgressLabel: { fontSize: 14, color: "#374151", textAlign: "center", marginBottom: 8, fontWeight: "500" },
+  updateProgressBar: { height: 8, backgroundColor: "#e5e7eb", borderRadius: 4, overflow: "hidden", marginBottom: 16 },
+  updateProgressFill: { height: "100%", backgroundColor: "#ff6b8a", borderRadius: 4 },
+  updateReleaseNotes: { fontSize: 14, color: "#6b7280", lineHeight: 20, marginBottom: 16 },
 });
 
 export default HomeScreen;
