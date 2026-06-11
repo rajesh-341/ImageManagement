@@ -45,8 +45,10 @@ jobs:
         working-directory: mobileApp
 
       - name: Build release APK
-        run: cd android && ./gradlew assembleRelease
-        working-directory: mobileApp
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
+        working-directory: mobileApp/android
         env:
           VERSION_CODE: ${{ env.VERSION_CODE }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
