@@ -26,3 +26,6 @@ yarn-error.log*
 
 # Coverage
 coverage/
+
+# Sensitive build artifacts
+release-keystore-base64.txt
