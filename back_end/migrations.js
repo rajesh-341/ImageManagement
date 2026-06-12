@@ -77,12 +77,6 @@ async function runMigrations() {
       console.log("[Migration] owner_table seeded with default data");
     }
 
-    const empExisting = await pool.query("SELECT id FROM employee_details LIMIT 1");
-    if (empExisting.rows.length > 0) {
-      await pool.query("DELETE FROM employee_details");
-      console.log("[Migration] Removed all existing users");
-    }
-
     const ownerRes = await pool.query("SELECT id FROM owner_table LIMIT 1");
     const ownerId = ownerRes.rows[0]?.id || null;
     const employees = [
@@ -92,17 +86,23 @@ async function runMigrations() {
       { id: "admin", name: "admin", role: "Admin", pw: "admin123" },
     ];
     for (const emp of employees) {
-      const hashed = await bcrypt.hash(emp.pw, 10);
-      await pool.query(
-        `INSERT INTO employee_details (owner_id, employee_id, employee_details) VALUES ($1, $2, $3)`,
-        [ownerId, emp.id, JSON.stringify({
-          employee_id: emp.id,
-          employee_name: emp.name,
-          Password: hashed,
-          plainPassword: emp.pw,
-          role: emp.role,
-        })]
+      const existing = await pool.query(
+        "SELECT id FROM employee_details WHERE employee_id = $1",
+        [emp.id]
       );
+      if (existing.rows.length === 0) {
+        const hashed = await bcrypt.hash(emp.pw, 10);
+        await pool.query(
+          `INSERT INTO employee_details (owner_id, employee_id, employee_details) VALUES ($1, $2, $3)`,
+          [ownerId, emp.id, JSON.stringify({
+            employee_id: emp.id,
+            employee_name: emp.name,
+            Password: hashed,
+            plainPassword: emp.pw,
+            role: emp.role,
+          })]
+        );
+      }
     }
     console.log("[Migration] employee_details seeded with new roles");
 
