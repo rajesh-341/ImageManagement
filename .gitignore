@@ -26,5 +26,3 @@ yarn-error.log*
 
 # Coverage
 coverage/
-
-# Sensitive build artifacts
