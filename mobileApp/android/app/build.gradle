@@ -95,6 +95,7 @@ android {
         release {
             storeFile file('release.keystore')
             storePassword System.getenv('RELEASE_STORE_PASSWORD')
+            storeType 'pkcs12'
             keyAlias 'release'
             keyPassword System.getenv('RELEASE_KEY_PASSWORD')
         }
