@@ -46,18 +46,20 @@ jobs:
 
       - name: Decode release keystore
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > mobileApp/android/app/release.keystore
+          tr -d '\r' < release-keystore-base64.txt | base64 -d > mobileApp/android/app/release.keystore
+          file mobileApp/android/app/release.keystore
+          ls -la mobileApp/android/app/release.keystore
 
       - name: Build release APK
         run: |
           chmod +x gradlew
+          RELEASE_STORE_PASSWORD="${RELEASE_STORE_PASSWORD:-ImageM@n@ge!2024}" \
+          RELEASE_KEY_PASSWORD="${RELEASE_KEY_PASSWORD:-ImageM@n@ge!2024}" \
           ./gradlew assembleRelease
         working-directory: mobileApp/android
         env:
           VERSION_CODE: ${{ env.VERSION_CODE }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Prepare release assets
         run: |
