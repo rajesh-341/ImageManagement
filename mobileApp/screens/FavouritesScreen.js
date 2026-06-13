@@ -14,7 +14,7 @@ const CARD_GAP = 12;
 const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
 const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function FavouritesScreen({ navigation }) {
@@ -170,7 +170,7 @@ function FavouritesScreen({ navigation }) {
       if (filterData.venueFilter) sf.placeOfEvent = filterData.venueFilter;
       if (filterData.priceRange) { sf.priceMin = filterData.priceRange[0]; sf.priceMax = filterData.priceRange[1]; }
       const data = await ApiService.searchImages(sf);
-      setFilteredImages(data);
+      setFilteredImages(Array.isArray(data) ? data : (data.images || []));
     } catch (err) {
       Alert.alert("Search failed", err.message);
     } finally {
@@ -183,7 +183,12 @@ function FavouritesScreen({ navigation }) {
     setFilteredImages([]);
   };
 
-  const getImgUrl = (img) => img?.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "";
+  const getImgUrl = (img) => {
+    const url = img?.image_data?.imageUrl;
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${IMAGE_BASE_URL}${url}`;
+  };
 
   const renderImageCard = ({ item }) => {
     const imgUrl = getImgUrl(item);

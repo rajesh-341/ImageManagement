@@ -15,6 +15,7 @@ import ApiService from "../services/apiService";
 function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -136,14 +137,20 @@ function LoginScreen({ navigation }) {
                   autoCapitalize="none"
                 />
               </View>
-              <View style={styles.inputGroup}>
+              <View style={styles.passwordGroup}>
                 <TextInput
-                  style={styles.input}
+                  style={styles.passwordInput}
                   placeholder="Password"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
                 />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Text style={styles.eyeIcon}>{showPassword ? "👁" : "👁‍🗨"}</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -415,6 +422,32 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 0,
+  },
+  passwordGroup: {
+    position: "relative",
+    marginBottom: 0,
+  },
+  passwordInput: {
+    borderWidth: 2,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    paddingRight: 50,
+    fontSize: 15,
+    color: "#1a1a1a",
+    backgroundColor: "#fff",
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  eyeIcon: {
+    fontSize: 20,
   },
   input: {
     borderWidth: 2,

@@ -14,7 +14,6 @@ import { UPLOAD_ROLES, SIZE_UNIT_OPTIONS } from "../utils/constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 12;
-const isTablet = SCREEN_WIDTH >= 768;
 const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
 const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
@@ -23,14 +22,11 @@ const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function HomeScreen({ navigation }) {
   const [user, setUser] = useState(null);
+  const [allImages, setAllImages] = useState([]);
   const [folders, setFolders] = useState([]);
   const [filteredImages, setFilteredImages] = useState([]);
   const [activeFilters, setActiveFilters] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState("folders");
-  const [showAddFolderModal, setShowAddFolderModal] = useState(false);
-  const [folderName, setFolderName] = useState("");
-  const [folderDescription, setFolderDescription] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [filters, setFilters] = useState({});
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -39,7 +35,7 @@ function HomeScreen({ navigation }) {
   const [imagePreview, setImagePreview] = useState("");
   const [imageData, setImageData] = useState({
     designName: "", size: "", sizeUnit: "inch", colours: "",
-    placeOfEvent: "", decorType: "", eventName: "",
+    placeOfEvent: "", decorType: "", eventName: "", folderName: "",
   });
   const [batchImages, setBatchImages] = useState([]);
   const [uploadProgress, setUploadProgress] = useState("");
@@ -65,6 +61,7 @@ function HomeScreen({ navigation }) {
 
   useEffect(() => {
     if (user) {
+      loadAllImages();
       loadFolders();
       loadFavouriteIds();
       checkForUpdates();
@@ -105,6 +102,16 @@ function HomeScreen({ navigation }) {
     setUpdateInfo(null);
   };
 
+  const loadAllImages = async () => {
+    try {
+      const result = await ApiService.getImages();
+      const images = Array.isArray(result) ? result : (result.images || []);
+      setAllImages(images);
+    } catch (err) {
+      console.error("Failed to load images:", err);
+    }
+  };
+
   const loadFolders = async () => {
     try {
       const list = await ApiService.getFolders();
@@ -138,38 +145,6 @@ function HomeScreen({ navigation }) {
     }
   };
 
-  const handleAddFolder = async () => {
-    if (!folderName.trim()) { Alert.alert("Error", "Please enter a folder name"); return; }
-    setLoading(true);
-    try {
-      await ApiService.createFolder(folderName.trim(), folderDescription.trim());
-      setFolderName(""); setFolderDescription("");
-      setShowAddFolderModal(false);
-      loadFolders();
-    } catch (err) {
-      Alert.alert("Error", "Failed to create folder: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteFolder = (id, name) => {
-    Alert.alert("Delete Folder", `Delete "${name}" and all its images?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => {
-        setLoading(true);
-        try {
-          await ApiService.deleteFolder(id);
-          loadFolders();
-        } catch (err) {
-          Alert.alert("Error", err.message);
-        } finally {
-          setLoading(false);
-        }
-      }},
-    ]);
-  };
-
   const handleApplyFilters = async (filterData) => {
     setActiveFilters(filterData);
     setLoading(true);
@@ -183,7 +158,7 @@ function HomeScreen({ navigation }) {
       if (filterData.venueFilter) sf.placeOfEvent = filterData.venueFilter;
       if (filterData.priceRange) { sf.priceMin = filterData.priceRange[0]; sf.priceMax = filterData.priceRange[1]; }
       const data = await ApiService.searchImages(sf);
-      setFilteredImages(data);
+      setFilteredImages(Array.isArray(data) ? data : (data.images || []));
     } catch (err) {
       Alert.alert("Search failed", err.message);
     } finally {
@@ -194,6 +169,7 @@ function HomeScreen({ navigation }) {
   const handleClearFilters = () => {
     setActiveFilters(null);
     setFilteredImages([]);
+    loadAllImages();
   };
 
   const handleImageSelect = () => {
@@ -232,7 +208,7 @@ function HomeScreen({ navigation }) {
       setSelectedImage(null);
       setImagePreview("");
       setImageData({ designName: "", size: "", sizeUnit: "inch", colours: "", placeOfEvent: "", decorType: "", eventName: "", folderName: "" });
-      setTimeout(() => { setShowUploadModal(false); setUploadProgress(""); }, 1500);
+      setTimeout(() => { setShowUploadModal(false); setUploadProgress(""); loadAllImages(); }, 1500);
     } catch (err) {
       Alert.alert("Upload failed", err.message);
     } finally {
@@ -258,28 +234,12 @@ function HomeScreen({ navigation }) {
 
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
 
-  const getImgUrl = (img) => img?.image_data?.imageUrl ? `${IMAGE_BASE_URL}${img.image_data.imageUrl}` : "";
-
-  const renderFolderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.folderCard}
-      onPress={() => navigation.navigate("Folder", { folder: item, imageBaseUrl: IMAGE_BASE_URL })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.folderIcon}>
-        <Text style={styles.folderIconText}>📁</Text>
-      </View>
-      <Text style={styles.folderName} numberOfLines={1}>{item.name}</Text>
-      {canUpload && (
-        <TouchableOpacity
-          style={styles.folderDeleteBtn}
-          onPress={() => handleDeleteFolder(item.id, item.name)}
-        >
-          <Text style={styles.folderDeleteBtnText}>×</Text>
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  );
+  const getImgUrl = (img) => {
+    const url = img?.image_data?.imageUrl;
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${IMAGE_BASE_URL}${url}`;
+  };
 
   const renderImageCard = ({ item, isFilteredView = false }) => {
     const imgUrl = getImgUrl(item);
@@ -315,56 +275,43 @@ function HomeScreen({ navigation }) {
       };
 
   const renderMainContent = () => {
+    const displayImages = activeFilters ? filteredImages : allImages;
+
     return (
       <View style={styles.page}>
         <View style={styles.actionBar}>
-          <Text style={styles.pageTitle}>Folders</Text>
+          <Text style={styles.pageTitle}>{activeFilters ? "Filtered Images" : "All Images"}</Text>
           <View style={styles.actionBarBtns}>
             <TouchableOpacity style={styles.filterToggleBtn} onPress={() => setShowFilter(true)}>
               <Text style={styles.filterToggleText}>Filters</Text>
             </TouchableOpacity>
             {canUpload && (
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddFolderModal(true)}>
-                <Text style={styles.addBtnText}>+ Add Folder</Text>
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowUploadModal(true)}>
+                <Text style={styles.addBtnText}>+ Upload</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {activeFilters ? (
-          loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
-          ) : filteredImages.length === 0 ? (
-            <View style={styles.center}><Text style={styles.emptyText}>No images match your filters.</Text></View>
-          ) : (
-            <FlatList
-              data={filteredImages}
-              renderItem={(props) => renderImageCard({ ...props, isFilteredView: true })}
-              keyExtractor={item => item.id?.toString()}
-              numColumns={numColumns}
-              key={`filter-${numColumns}`}
-              contentContainerStyle={styles.grid}
-              columnWrapperStyle={styles.gridRow}
-              showsVerticalScrollIndicator={false}
-            />
-          )
+        {loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color="#ff6b8a" /></View>
+        ) : displayImages.length === 0 ? (
+          <View style={styles.center}>
+            <Text style={styles.emptyText}>
+              {activeFilters ? "No images match your filters." : "No images yet."}
+            </Text>
+          </View>
         ) : (
-          <>
-            {folders.length === 0 ? (
-              <View style={styles.center}><Text style={styles.emptyText}>No folders yet. Create one to get started!</Text></View>
-            ) : (
-              <FlatList
-                data={folders}
-                renderItem={renderFolderItem}
-                keyExtractor={item => item.id?.toString()}
-                numColumns={isTablet ? 3 : 2}
-                key={`folder-${isTablet ? 3 : 2}`}
-                contentContainerStyle={styles.grid}
-                columnWrapperStyle={styles.gridRow}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
-          </>
+          <FlatList
+            data={displayImages}
+            renderItem={(props) => renderImageCard({ ...props, isFilteredView: true })}
+            keyExtractor={item => item.id?.toString()}
+            numColumns={numColumns}
+            key={`img-${numColumns}`}
+            contentContainerStyle={styles.grid}
+            columnWrapperStyle={styles.gridRow}
+            showsVerticalScrollIndicator={false}
+          />
         )}
       </View>
     );
@@ -389,36 +336,6 @@ function HomeScreen({ navigation }) {
       </View>
 
       {renderMainContent()}
-
-      {/* Add Folder Modal */}
-      <Modal visible={showAddFolderModal} transparent animationType="fade" onRequestClose={() => setShowAddFolderModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Folder</Text>
-              <TouchableOpacity onPress={() => setShowAddFolderModal(false)}>
-                <Text style={styles.modalClose}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={styles.label}>Folder Name</Text>
-              <TextInput style={styles.input} value={folderName}
-                onChangeText={setFolderName} placeholder="Enter folder name" />
-              <Text style={styles.label}>Description (Optional)</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={folderDescription}
-                onChangeText={setFolderDescription} placeholder="Enter description" multiline numberOfLines={3} />
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddFolderModal(false)}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.primaryBtn} onPress={handleAddFolder} disabled={loading}>
-                  <Text style={styles.primaryBtnText}>{loading ? "Creating..." : "Create Folder"}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Filter Sidebar */}
       <FilterSidebar
@@ -507,6 +424,10 @@ function HomeScreen({ navigation }) {
                   </View>
                 </View>
 
+                <Text style={styles.label}>Folder (optional)</Text>
+                <TextInput style={styles.input} value={imageData.folderName}
+                  onChangeText={t => setImageData({...imageData, folderName: t})} placeholder="Folder name (default: General)" />
+
                 <Text style={styles.label}>Decor Name</Text>
                 <TextInput style={styles.input} value={imageData.decorType}
                   onChangeText={t => setImageData({...imageData, decorType: t})} placeholder="Decor name" />
@@ -586,6 +507,7 @@ function HomeScreen({ navigation }) {
                     setLoading(false);
                     Alert.alert("Upload Complete", `${success} uploaded, ${errors} failed in ${totalTime}s`);
                     setShowUploadModal(false);
+                    loadAllImages();
                   }} disabled={loading}>
                     <Text style={styles.primaryBtnText}>{loading ? "Uploading..." : `Upload ${batchImages.length} Image(s)`}</Text>
                   </TouchableOpacity>
@@ -713,22 +635,9 @@ const styles = StyleSheet.create({
   filterToggleText: { fontSize: 14, fontWeight: "600", color: "#374151" },
   addBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#ff6b8a" },
   addBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
-  moveBtn: { marginHorizontal: 16, padding: 12, borderRadius: 10, backgroundColor: "#f59e0b", alignItems: "center", marginBottom: 8 },
-  moveBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
   // Grid
   grid: { paddingHorizontal: CARD_GAP, paddingBottom: 24 },
   gridRow: { gap: CARD_GAP, marginBottom: CARD_GAP },
-  // Folder Card
-  folderCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 16,
-    alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, position: "relative",
-  },
-  folderIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fef3c7", justifyContent: "center", alignItems: "center", marginBottom: 8 },
-  folderIconText: { fontSize: 28 },
-  folderName: { fontSize: 14, fontWeight: "600", color: "#1a1a1a", textAlign: "center" },
-  folderDeleteBtn: { position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  folderDeleteBtnText: { fontSize: 16, color: "#6b7280", fontWeight: "700" },
   // Image Card
   imageCard: {
     width: cardWidth, backgroundColor: "#fff", borderRadius: 12, overflow: "hidden",
@@ -762,7 +671,6 @@ const styles = StyleSheet.create({
   // Form
   label: { fontSize: 13, fontWeight: "600", color: "#374151", marginTop: 12, marginBottom: 4 },
   input: { borderWidth: 1.5, borderColor: "#e5e7eb", borderRadius: 10, padding: Platform.OS === "ios" ? 12 : 8, fontSize: 14, color: "#1a1a1a", backgroundColor: "#f9fafb" },
-  textArea: { minHeight: 60, textAlignVertical: "top" },
   row2: { flexDirection: "row", gap: 12 },
   half: { flex: 1 },
   unitChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 6, backgroundColor: "#f3f4f6" },

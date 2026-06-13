@@ -130,7 +130,12 @@ function FolderScreen({ route, navigation }) {
 
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
 
-  const getImgUrl = (img) => img?.image_data?.imageUrl ? `${imageBaseUrl}${img.image_data.imageUrl}` : "";
+  const getImgUrl = (img) => {
+    const url = img?.image_data?.imageUrl;
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${imageBaseUrl}${url}`;
+  };
 
   const renderItem = ({ item }) => {
     const imgUrl = getImgUrl(item);
