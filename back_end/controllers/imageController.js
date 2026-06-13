@@ -287,33 +287,47 @@ const deleteImage = async (req, res) => {
   try {
     const role = req.user.role;
     const roleLower = role ? role.toLowerCase() : "";
-    
+
     const canDelete = DELETE_ROLES.map(r => r.toLowerCase()).includes(roleLower);
-    
+
     if (!canDelete) {
       return res.status(403).json({ message: "Delete access denied" });
     }
 
     const { id } = req.params;
 
-    const selectQuery = "SELECT image_data FROM image_management WHERE id = $1";
+    const selectQuery = "SELECT image_data, folder_name FROM image_management WHERE id = $1";
     const selectResult = await pool.query(selectQuery, [id]);
 
     if (selectResult.rows.length === 0) {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    const parsedData = typeof selectResult.rows[0].image_data === "string"
-      ? JSON.parse(selectResult.rows[0].image_data)
-      : selectResult.rows[0].image_data;
+    const row = selectResult.rows[0];
+    const folderName = row.folder_name;
+    const parsedData = typeof row.image_data === "string"
+      ? JSON.parse(row.image_data)
+      : row.image_data;
     if (parsedData && parsedData.imageUrl) {
       await deleteStorageImage(parsedData.imageUrl);
     }
 
-    const query = "DELETE FROM image_management WHERE id = $1 RETURNING *";
-    const result = await pool.query(query, [id]);
+    await pool.query("DELETE FROM image_management WHERE id = $1", [id]);
 
-    res.json({ message: "Image deleted successfully" });
+    let folderDeleted = false;
+    const remaining = await pool.query(
+      "SELECT COUNT(*) AS cnt FROM image_management WHERE folder_name = $1",
+      [folderName]
+    );
+    if (parseInt(remaining.rows[0].cnt) === 0) {
+      const folderResult = await pool.query(
+        "DELETE FROM folders WHERE name = $1 AND (scope = 'home' OR scope IS NULL) RETURNING id",
+        [folderName]
+      );
+      folderDeleted = folderResult.rows.length > 0;
+    }
+
+    res.json({ message: "Image deleted successfully", folderDeleted, folderName });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -597,9 +597,16 @@ function ImageManagement() {
     setFavoriteImages(prev => prev.filter(img => img.id !== id));
     setSelectedImageIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     try {
-      await ApiService.deleteImage(id);
-      if (currentFolder) await loadImages();
+      const res = await ApiService.deleteImage(id);
+      if (res && res.folderDeleted && currentFolder && currentFolder.name === res.folderName) {
+        setCurrentFolder(null);
+        setImages([]);
+        setView("folders");
+      } else if (currentFolder) {
+        await loadImages();
+      }
       if (showFavorites) await loadFavorites(selectedFavFolder?.name);
+      loadFolders();
     } catch (err) {
       if (currentFolder) await loadImages();
       showNotif("Something went wrong");
@@ -612,11 +619,17 @@ function ImageManagement() {
     setLoading(true);
     try {
       for (const id of selectedImageIds) {
-        await ApiService.deleteImage(id);
+        const res = await ApiService.deleteImage(id);
+        if (res && res.folderDeleted && currentFolder && currentFolder.name === res.folderName) {
+          setCurrentFolder(null);
+          setImages([]);
+          setView("folders");
+        }
       }
       setSelectedImageIds(new Set());
-      loadImages();
+      if (currentFolder) loadImages();
       if (showFavorites) loadFavorites(selectedFavFolder?.name);
+      loadFolders();
     } catch (err) {
       showNotif("Something went wrong");
     } finally {
@@ -979,7 +992,8 @@ function ImageManagement() {
       return;
     }
     const sizeDisplay = buildSizeDisplay(editData.sizeWidth, editData.sizeLength, editData.sizeHeight, editData.sizeUnit);
-    const updatedImageData = { ...editingImage.image_data, ...editData, sizeDisplay };
+    const { colours: editColours, ...editRest } = editData;
+    const updatedImageData = { ...editingImage.image_data, ...editRest, colourCombination: editColours, sizeDisplay };
     const optimisticImage = { ...editingImage, image_data: updatedImageData };
     setImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
     setAllImages(prev => prev.map(img => img.id === editingImage.id ? optimisticImage : img));
@@ -988,7 +1002,7 @@ function ImageManagement() {
     resetEditImageForm();
     setShowEditModal(false);
     try {
-      await ApiService.updateImage(editingImage.id, { ...editData, sizeDisplay });
+      await ApiService.updateImage(editingImage.id, { ...editRest, colourCombination: editColours, sizeDisplay });
       if (currentFolder) await loadImages();
       if (showFavorites) await loadFavorites(selectedFavFolder?.name);
       if (view === "images") await loadAllImages();
