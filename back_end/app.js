@@ -19,6 +19,7 @@ const folderRoutes = require("./routes/folderRoutes");
 const favoriteRoutes = require("./routes/favoriteRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dropdownRoutes = require("./routes/dropdownRoutes");
+const cleanupRoutes = require("./routes/cleanupRoutes");
 const { logout, me } = require("./controllers/authController");
 const verifyToken = require("./middleware/authMiddleware");
 const pool = require("./config/db");
@@ -218,6 +219,7 @@ app.use("/api/folders", folderRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/dropdown", dropdownRoutes);
+app.use("/api/admin/cleanup", cleanupRoutes);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
