@@ -1,4 +1,5 @@
-const cloudinary = require('./cloudinary');
+const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getR2Client, R2_BUCKET_NAME, R2_PUBLIC_URL, isR2Configured } = require('./r2');
 const path = require('path');
 const fs = require('fs').promises;
 const sharp = require('sharp');
@@ -14,6 +15,15 @@ const processBuffer = async (buffer) => {
     .toBuffer();
 };
 
+const extractKeyFromR2Url = (imageUrl) => {
+  const urlObj = new URL(imageUrl);
+  let key = urlObj.pathname.replace(/^\//, '');
+  if (key.startsWith(R2_BUCKET_NAME + '/')) {
+    key = key.slice(R2_BUCKET_NAME.length + 1);
+  }
+  return key;
+};
+
 const saveImage = async (buffer, folder) => {
   const sanitizedFolder = folder.replace(/[^a-zA-Z0-9_\-]/g, '_').toLowerCase();
   const processed = await processBuffer(buffer);
@@ -27,20 +37,21 @@ const saveImage = async (buffer, folder) => {
     return { imageUrl: `/uploads/${sanitizedFolder}/${filename}`, filename };
   }
 
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: `image_management/${sanitizedFolder}`,
-        format: 'webp',
-        public_id: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-      },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve({ imageUrl: result.secure_url, filename: result.public_id });
-      }
-    );
-    stream.end(processed);
+  const key = `image_management/${sanitizedFolder}/${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+
+  const command = new PutObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+    Body: processed,
+    ContentType: 'image/webp',
   });
+
+  await getR2Client().send(command);
+
+  const baseUrl = R2_PUBLIC_URL || `${process.env.R2_ENDPOINT}/${R2_BUCKET_NAME}`;
+  const imageUrl = `${baseUrl.replace(/\/+$/, '')}/${key}`;
+
+  return { imageUrl, filename: key };
 };
 
 const deleteImage = async (imageUrl) => {
@@ -56,26 +67,20 @@ const deleteImage = async (imageUrl) => {
   }
 
   if (imageUrl.startsWith('/uploads/')) {
-    console.warn(`[Cloudinary] Skipping local-format URL in cloudinary mode: ${imageUrl}`);
     return;
   }
 
   try {
-    const urlObj = new URL(imageUrl);
-    const pathParts = urlObj.pathname.split('/');
-    const uploadIndex = pathParts.indexOf('upload');
-    if (uploadIndex === -1 || uploadIndex + 1 >= pathParts.length) {
-      throw new Error(`Cannot parse Cloudinary public_id from URL: ${imageUrl}`);
-    }
-    const publicIdParts = pathParts.slice(uploadIndex + 2);
-    const fullPublicId = publicIdParts.join('/').replace(/\.[^.]+$/, '');
+    const key = extractKeyFromR2Url(imageUrl);
 
-    const result = await cloudinary.uploader.destroy(fullPublicId, { invalidate: true });
-    if (result.result !== 'ok') {
-      console.warn(`[Cloudinary] Destroy returned: ${JSON.stringify(result)} for public_id: ${fullPublicId}`);
-    }
+    const command = new DeleteObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+    });
+
+    await getR2Client().send(command);
   } catch (err) {
-    console.error('[Cloudinary] Delete failed:', err.message);
+    console.error('[R2] Delete failed:', err.message);
     throw err;
   }
 };

@@ -311,7 +311,7 @@ function ImageManagement() {
   const getFullResUrl = useCallback((imageData) => {
     const rawUrl = imageData?.imageUrl || "";
     if (!rawUrl) return "";
-    return rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`;
+    return rawUrl.startsWith("http") ? rawUrl : `${IMAGE_BASE_URL}${rawUrl}`;
   }, []);
 
   const preloadAdjacent = useCallback((imageArray, index) => {
@@ -320,9 +320,8 @@ function ImageManagement() {
       if (idx >= 0 && idx < imageArray.length) {
         const url = imageArray[idx]?.image_data?.imageUrl;
         if (url && url.startsWith("http")) {
-          const fullUrl = url.replace("/upload/", "/upload/w_800,h_600,c_fit,f_auto,q_auto/");
           const img = new Image();
-          img.src = fullUrl;
+          img.src = url;
         }
       }
     }
@@ -533,17 +532,8 @@ function ImageManagement() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-      const isLocalDev = window.location.hostname === "localhost";
-
-      const uploadPromise = isLocalDev
-        ? ApiService.uploadFile(selectedImage, currentFolder.name)
-        : (async () => {
-            const sig = await ApiService.getUploadSignature(currentFolder.name);
-            return ApiService.uploadDirectToCloudinary(selectedImage, sig);
-          })();
-
-      const uploadResult = await uploadPromise;
-      imageUrl = uploadResult.imageUrl || uploadResult.secure_url;
+      const uploadResult = await ApiService.uploadFile(selectedImage, currentFolder.name);
+      imageUrl = uploadResult.imageUrl;
 
       const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(currentFolder.name);
       const sizeDisplay = buildSizeDisplay(imageData.sizeWidth, imageData.sizeLength, imageData.sizeHeight, imageData.sizeUnit);
@@ -578,8 +568,8 @@ function ImageManagement() {
         setShowUploadModal(false);
       }, 1500);
     } catch (err) {
-      if (imageUrl && !window.location.hostname.includes("localhost")) {
-        ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
+      if (imageUrl) {
+        ApiService.destroyImage(imageUrl).catch(() => {});
       }
       showNotif(err.name === "AbortError" ? "Upload timed out. Please try again." : "Something went wrong");
     } finally {
@@ -1126,7 +1116,7 @@ function ImageManagement() {
 
   const renderImageCard = useCallback((image, index, imageArray, showActions = true) => {
     const rawUrl = image.image_data?.imageUrl || "";
-    const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl.replace("/upload/", "/upload/w_300,h_200,c_fill,f_auto,q_auto/") : `${IMAGE_BASE_URL}${rawUrl}`) : "";
+    const imgUrl = rawUrl ? (rawUrl.startsWith("http") ? rawUrl : `${IMAGE_BASE_URL}${rawUrl}`) : "";
     const isFav = favoriteImages.some(fav => fav.id === image.id);
     const isSelected = selectedImageIds.has(image.id);
     const data = image.image_data || {};

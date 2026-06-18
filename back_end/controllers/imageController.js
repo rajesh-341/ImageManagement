@@ -1,5 +1,4 @@
 const pool = require("../config/db");
-const cloudinary = require("../config/cloudinary");
 const { deleteImage: deleteStorageImage } = require("../config/storage");
 const { UPLOAD_ROLES, DELETE_ROLES, VIEW_ROLES, FOLDER_VIEW_ROLES } = require("../config/constants");
 

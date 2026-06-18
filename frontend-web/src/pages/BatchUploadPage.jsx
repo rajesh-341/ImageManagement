@@ -215,16 +215,9 @@ function BatchUploadPage() {
 
     const uploadImageWithTimeout = async (row, index) => {
       let imageUrl;
-      const isLocalDev = window.location.hostname === "localhost";
       try {
-        if (isLocalDev) {
-          const uploadResult = await ApiService.uploadFile(row.file, selectedFolder.name);
-          imageUrl = uploadResult.imageUrl;
-        } else {
-          const sig = await ApiService.getUploadSignature(selectedFolder.name);
-          const cloudResult = await ApiService.uploadDirectToCloudinary(row.file, sig);
-          imageUrl = cloudResult.secure_url;
-        }
+        const uploadResult = await ApiService.uploadFile(row.file, selectedFolder.name);
+        imageUrl = uploadResult.imageUrl;
         const { customerName: folderCustomer, venue: folderVenue } = parseFolderName(selectedFolder.name);
         const sizeDisplay = buildSizeDisplay(row.sizeWidth, row.sizeLength, row.sizeHeight, row.sizeUnit);
         const colours = Array.isArray(row.colours)
@@ -251,8 +244,8 @@ function BatchUploadPage() {
         await ApiService.uploadImage(metaData);
         return true;
       } catch (err) {
-        if (imageUrl && !isLocalDev) {
-          ApiService.destroyCloudinaryImage(imageUrl).catch(() => {});
+        if (imageUrl) {
+          ApiService.destroyImage(imageUrl).catch(() => {});
         }
         console.error(`Failed to upload image ${index + 1}:`, err);
         return false;
