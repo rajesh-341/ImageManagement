@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -9,8 +11,6 @@ const multer = require("multer");
 const { saveImage, isLocal } = require("./config/storage");
 const path = require("path");
 const { ZipArchive } = require("archiver");
-
-require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
 const imageRoutes = require("./routes/imageRoutes");
