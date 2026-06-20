@@ -7,9 +7,13 @@ const KEYS = {
   FOLDERS: "folders",
   OFFLINE_MODE: "offline_mode",
   DOWNLOAD_PATH: "download_path",
+  FAVOURITES: "favourites",
+  IMAGE_CACHE_PATHS: "image_cache_paths",
+  IMAGE_VERSIONS: "image_versions",
+  LAST_SYNC: "last_sync",
+  SYNC_IN_PROGRESS: "sync_in_progress",
 };
 
-// Store user data
 export const storeUser = async (user) => {
   try {
     await AsyncStorage.setItem(KEYS.USER, JSON.stringify(user));
@@ -18,7 +22,6 @@ export const storeUser = async (user) => {
   }
 };
 
-// Get stored user
 export const getUser = async () => {
   try {
     const userData = await AsyncStorage.getItem(KEYS.USER);
@@ -29,7 +32,6 @@ export const getUser = async () => {
   }
 };
 
-// Store token
 export const storeToken = async (token) => {
   try {
     await AsyncStorage.setItem(KEYS.TOKEN, token);
@@ -38,7 +40,6 @@ export const storeToken = async (token) => {
   }
 };
 
-// Get stored token
 export const getToken = async () => {
   try {
     return await AsyncStorage.getItem(KEYS.TOKEN);
@@ -48,7 +49,6 @@ export const getToken = async () => {
   }
 };
 
-// Clear auth data
 export const clearAuth = async () => {
   try {
     await AsyncStorage.multiRemove([KEYS.USER, KEYS.TOKEN]);
@@ -57,7 +57,6 @@ export const clearAuth = async () => {
   }
 };
 
-// Store images for offline
 export const storeImages = async (images) => {
   try {
     await AsyncStorage.setItem(KEYS.IMAGES, JSON.stringify(images));
@@ -66,7 +65,6 @@ export const storeImages = async (images) => {
   }
 };
 
-// Get stored images
 export const getImages = async () => {
   try {
     const imagesData = await AsyncStorage.getItem(KEYS.IMAGES);
@@ -77,7 +75,6 @@ export const getImages = async () => {
   }
 };
 
-// Store folders for offline
 export const storeFolders = async (folders) => {
   try {
     await AsyncStorage.setItem(KEYS.FOLDERS, JSON.stringify(folders));
@@ -86,7 +83,6 @@ export const storeFolders = async (folders) => {
   }
 };
 
-// Get stored folders
 export const getFolders = async () => {
   try {
     const foldersData = await AsyncStorage.getItem(KEYS.FOLDERS);
@@ -97,7 +93,6 @@ export const getFolders = async () => {
   }
 };
 
-// Set offline mode
 export const setOfflineMode = async (enabled) => {
   try {
     await AsyncStorage.setItem(KEYS.OFFLINE_MODE, JSON.stringify(enabled));
@@ -106,7 +101,6 @@ export const setOfflineMode = async (enabled) => {
   }
 };
 
-// Get offline mode status
 export const isOfflineMode = async () => {
   try {
     const mode = await AsyncStorage.getItem(KEYS.OFFLINE_MODE);
@@ -117,7 +111,6 @@ export const isOfflineMode = async () => {
   }
 };
 
-// Store download path
 export const storeDownloadPath = async (path) => {
   try {
     await AsyncStorage.setItem(KEYS.DOWNLOAD_PATH, path);
@@ -126,7 +119,6 @@ export const storeDownloadPath = async (path) => {
   }
 };
 
-// Get download path
 export const getDownloadPath = async () => {
   try {
     return await AsyncStorage.getItem(KEYS.DOWNLOAD_PATH);
@@ -136,13 +128,107 @@ export const getDownloadPath = async () => {
   }
 };
 
-// Clear all offline data
+export const storeFavourites = async (favourites) => {
+  try {
+    await AsyncStorage.setItem(KEYS.FAVOURITES, JSON.stringify(favourites));
+  } catch (error) {
+    console.error("Error storing favourites:", error);
+  }
+};
+
+export const getFavourites = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.FAVOURITES);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error("Error getting favourites:", error);
+    return [];
+  }
+};
+
+export const storeImageCachePaths = async (cacheMap) => {
+  try {
+    await AsyncStorage.setItem(KEYS.IMAGE_CACHE_PATHS, JSON.stringify(cacheMap));
+  } catch (error) {
+    console.error("Error storing image cache paths:", error);
+  }
+};
+
+export const getImageCachePaths = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.IMAGE_CACHE_PATHS);
+    return data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.error("Error getting image cache paths:", error);
+    return {};
+  }
+};
+
+export const storeImageVersions = async (versions) => {
+  try {
+    await AsyncStorage.setItem(KEYS.IMAGE_VERSIONS, JSON.stringify(versions));
+  } catch (error) {
+    console.error("Error storing image versions:", error);
+  }
+};
+
+export const getImageVersions = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.IMAGE_VERSIONS);
+    return data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.error("Error getting image versions:", error);
+    return {};
+  }
+};
+
+export const setLastSync = async (timestamp) => {
+  try {
+    await AsyncStorage.setItem(KEYS.LAST_SYNC, JSON.stringify(timestamp));
+  } catch (error) {
+    console.error("Error setting last sync:", error);
+  }
+};
+
+export const getLastSync = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.LAST_SYNC);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error("Error getting last sync:", error);
+    return null;
+  }
+};
+
+export const setSyncInProgress = async (inProgress) => {
+  try {
+    await AsyncStorage.setItem(KEYS.SYNC_IN_PROGRESS, JSON.stringify(inProgress));
+  } catch (error) {
+    console.error("Error setting sync in progress:", error);
+  }
+};
+
+export const getSyncInProgress = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SYNC_IN_PROGRESS);
+    return data ? JSON.parse(data) : false;
+  } catch (error) {
+    console.error("Error getting sync in progress:", error);
+    return false;
+  }
+};
+
 export const clearOfflineData = async () => {
   try {
     await AsyncStorage.multiRemove([
       KEYS.IMAGES,
       KEYS.FOLDERS,
       KEYS.OFFLINE_MODE,
+      KEYS.FAVOURITES,
+      KEYS.IMAGE_CACHE_PATHS,
+      KEYS.IMAGE_VERSIONS,
+      KEYS.LAST_SYNC,
+      KEYS.SYNC_IN_PROGRESS,
     ]);
   } catch (error) {
     console.error("Error clearing offline data:", error);
@@ -163,5 +249,15 @@ export default {
   isOfflineMode,
   storeDownloadPath,
   getDownloadPath,
+  storeFavourites,
+  getFavourites,
+  storeImageCachePaths,
+  getImageCachePaths,
+  storeImageVersions,
+  getImageVersions,
+  setLastSync,
+  getLastSync,
+  setSyncInProgress,
+  getSyncInProgress,
   clearOfflineData,
 };

@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
-  Image, Dimensions, Platform,
+  Image, Dimensions, Platform, PanResponder,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
-import ImageMeta from "../components/ImageMeta";
+import offlineManager from "../offline/offlineManager";
 import FilterSidebar from "../components/FilterSidebar";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -18,6 +19,7 @@ const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function FavouritesScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
   const [favouriteImages, setFavouriteImages] = useState([]);
@@ -33,8 +35,11 @@ function FavouritesScreen({ navigation }) {
   const [selectedImageForMove, setSelectedImageForMove] = useState(null);
   const [selectedTargetFolder, setSelectedTargetFolder] = useState(null);
 
-  const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const imagesRef = useRef([]);
 
+  const [offlineMode, setOfflineMode] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [activeFilters, setActiveFilters] = useState(null);
   const [filteredImages, setFilteredImages] = useState([]);
@@ -48,6 +53,8 @@ function FavouritesScreen({ navigation }) {
       } else {
         setUser(userData);
       }
+      const isOff = await offlineStorage.isOfflineMode();
+      setOfflineMode(isOff);
     };
     init();
   }, [navigation]);
@@ -190,13 +197,72 @@ function FavouritesScreen({ navigation }) {
     return `${IMAGE_BASE_URL}${url}`;
   };
 
-  const renderImageCard = ({ item }) => {
-    const imgUrl = getImgUrl(item);
+  const getEffectiveImgUrl = (img) => {
+    const remoteUrl = getImgUrl(img);
+    if (!remoteUrl) return "";
+    if (offlineMode && img?.id) {
+      return `file://${offlineManager.getLocalImagePath(img.id)}`;
+    }
+    return remoteUrl;
+  };
+
+  const currentLightboxImage = lightboxVisible && imagesRef.current[lightboxIndex]
+    ? { url: offlineMode ? getEffectiveImgUrl(imagesRef.current[lightboxIndex]) : getImgUrl(imagesRef.current[lightboxIndex]), data: imagesRef.current[lightboxIndex].image_data, id: imagesRef.current[lightboxIndex].id }
+    : null;
+
+  const goToPrevious = useCallback(() => {
+    setLightboxIndex(prev => Math.max(0, prev - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setLightboxIndex(prev => Math.min(imagesRef.current.length - 1, prev + 1));
+  }, []);
+
+  const lightboxPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx > 50) goToPrevious();
+        else if (gs.dx < -50) goToNext();
+      },
+    })
+  ).current;
+
+  const renderLightboxField = (label, value) => (
+    <View style={styles.lbFieldRow}>
+      <Text style={styles.lbFieldLabel}>{label}</Text>
+      <Text style={styles.lbFieldValue}>{value || "Not Available"}</Text>
+    </View>
+  );
+
+  const formatSize = (d) => {
+    if (!d) return null;
+    if (d.sizeDisplay) return d.sizeDisplay;
+    const parts = [];
+    if (d.sizeWidth) parts.push(d.sizeWidth);
+    if (d.sizeLength) parts.push(d.sizeLength);
+    if (d.sizeHeight) parts.push(d.sizeHeight);
+    if (parts.length > 0) return `${parts.join(" x ")} ${d.sizeUnit || ""}`.trim();
+    if (d.size) return `${d.size} ${d.sizeUnit || ""}`.trim();
+    return null;
+  };
+
+  const formatPrice = (d) => {
+    if (!d) return null;
+    if (d.priceMin != null && d.priceMax != null) return `₹${d.priceMin} - ₹${d.priceMax}`;
+    if (d.priceMin != null) return `₹${d.priceMin}`;
+    if (d.priceMax != null) return `₹${d.priceMax}`;
+    return null;
+  };
+
+  const renderImageCard = ({ item, index }) => {
+    const imgUrl = offlineMode ? getEffectiveImgUrl(item) : getImgUrl(item);
     const isFav = favouriteImages.some(img => img.id === item.id);
+    const currentDisplayImages = activeFilters ? filteredImages : favouriteImages;
 
     return (
       <View style={styles.imageCard}>
-        <TouchableOpacity onPress={() => setLightboxImage({ url: imgUrl, data: item.image_data, id: item.id })} activeOpacity={0.9}>
+        <TouchableOpacity onPress={() => { imagesRef.current = currentDisplayImages; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
           {imgUrl ? (
             <Image source={{ uri: imgUrl }} style={styles.imageCardImg} resizeMode="cover" />
           ) : (
@@ -216,7 +282,6 @@ function FavouritesScreen({ navigation }) {
           <Text style={styles.imageCardTitle} numberOfLines={1}>
             {item.image_data?.designName || "Untitled"}
           </Text>
-          <ImageMeta data={item.image_data} />
           {currentFolder && (
             <TouchableOpacity style={styles.moveBtn} onPress={() => {
               setSelectedImageForMove(item.id);
@@ -304,7 +369,7 @@ function FavouritesScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Navbar */}
-      <View style={styles.navbar}>
+      <View style={[styles.navbar, { paddingTop: Math.max(insets.top, 12) }]}>
         <TouchableOpacity onPress={() => {
           if (currentFolder) {
             handleBackToFolders();
@@ -448,20 +513,47 @@ function FavouritesScreen({ navigation }) {
       </Modal>
 
       {/* Lightbox */}
-      <Modal visible={!!lightboxImage} transparent animationType="fade" onRequestClose={() => setLightboxImage(null)}>
-        <View style={styles.lightboxOverlay}>
-          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxImage(null)}>
-            <Text style={styles.lightboxCloseText}>X</Text>
+      <Modal visible={lightboxVisible} transparent animationType="fade" onRequestClose={() => setLightboxVisible(false)}>
+        <View style={styles.lightboxOverlay} {...lightboxPanResponder.panHandlers}>
+          <TouchableOpacity style={[styles.lightboxClose, { top: insets.top + 10 }]} onPress={() => setLightboxVisible(false)}>
+            <Text style={styles.lightboxCloseText}>✕</Text>
           </TouchableOpacity>
-          {lightboxImage?.url ? (
-            <Image source={{ uri: lightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
+
+          {currentLightboxImage?.url ? (
+            <>
+              <Image source={{ uri: currentLightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
+              {lightboxIndex > 0 && (
+                <TouchableOpacity style={[styles.lbArrow, styles.lbArrowLeft]} onPress={goToPrevious}>
+                  <Text style={styles.lbArrowText}>‹</Text>
+                </TouchableOpacity>
+              )}
+              {lightboxIndex < imagesRef.current.length - 1 && (
+                <TouchableOpacity style={[styles.lbArrow, styles.lbArrowRight]} onPress={goToNext}>
+                  <Text style={styles.lbArrowText}>›</Text>
+                </TouchableOpacity>
+              )}
+              <View style={[styles.lbCounter, { top: insets.top + 10 }]}>
+                <Text style={styles.lbCounterText}>{lightboxIndex + 1} / {imagesRef.current.length}</Text>
+              </View>
+            </>
           ) : (
             <View style={styles.center}><Text style={styles.emptyText}>Image not available</Text></View>
           )}
-          <View style={styles.lightboxInfo}>
-            <Text style={styles.lightboxTitle}>{lightboxImage?.data?.designName || "Untitled"}</Text>
-            <ImageMeta data={lightboxImage?.data} />
-          </View>
+
+          {currentLightboxImage?.data && (
+            <View style={styles.lightboxInfo}>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.lbDetailsScroll}>
+                {renderLightboxField("Design Name", currentLightboxImage.data.designName)}
+                {renderLightboxField("Size", formatSize(currentLightboxImage.data))}
+                {renderLightboxField("Price", formatPrice(currentLightboxImage.data))}
+                {renderLightboxField("Decor", currentLightboxImage.data.decorType)}
+                {renderLightboxField("Event", currentLightboxImage.data.eventType)}
+                {renderLightboxField("Flower", currentLightboxImage.data.flowerType)}
+                {renderLightboxField("Customer", currentLightboxImage.data.venueCustomer)}
+                {renderLightboxField("Venue", currentLightboxImage.data.venueName)}
+              </ScrollView>
+            </View>
+          )}
         </View>
       </Modal>
     </View>
@@ -472,7 +564,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   navbar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12, paddingTop: Platform.OS === "ios" ? 50 : 12,
+    paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
   },
   backBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
@@ -541,11 +633,20 @@ const styles = StyleSheet.create({
   moveItemName: { fontSize: 15, color: "#1a1a1a", fontWeight: "500", flex: 1 },
   moveItemCheck: { fontSize: 18, color: "#22c55e", fontWeight: "700" },
   lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  lightboxClose: { position: "absolute", top: Platform.OS === "ios" ? 50 : 20, right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  lightboxClose: { position: "absolute", right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
   lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   lightboxImg: { width: "90%", height: "60%" },
-  lightboxInfo: { position: "absolute", bottom: 40, left: 20, right: 20, backgroundColor: "rgba(0,0,0,0.7)", padding: 16, borderRadius: 12 },
-  lightboxTitle: { fontSize: 18, fontWeight: "600", color: "#fff" },
+  lbArrow: { position: "absolute", top: "50%", zIndex: 20, width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center", marginTop: -24 },
+  lbArrowLeft: { left: 12 },
+  lbArrowRight: { right: 12 },
+  lbArrowText: { color: "#fff", fontSize: 32, fontWeight: "300", lineHeight: 36 },
+  lbCounter: { position: "absolute", left: 20, zIndex: 20, backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  lbCounterText: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "500" },
+  lightboxInfo: { position: "absolute", bottom: 30, left: 16, right: 16, backgroundColor: "rgba(0,0,0,0.75)", padding: 14, borderRadius: 12, maxHeight: 240 },
+  lbDetailsScroll: { maxHeight: 200 },
+  lbFieldRow: { flexDirection: "row", marginVertical: 3 },
+  lbFieldLabel: { fontSize: 12, fontWeight: "700", color: "#ff6b8a", width: 80 },
+  lbFieldValue: { fontSize: 12, color: "#e5e7eb", flex: 1 },
 });
 
 export default FavouritesScreen;
