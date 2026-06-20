@@ -1,25 +1,9 @@
 import RNFS from "react-native-fs";
-import { Platform, PermissionsAndroid } from "react-native";
+import { Platform } from "react-native";
 
-const DEFAULT_DOWNLOAD_DIR = Platform.select({
-  android: RNFS.DownloadDirectoryPath,
-  ios: RNFS.DocumentDirectoryPath,
-});
+const DEFAULT_DOWNLOAD_DIR = `${RNFS.DocumentDirectoryPath}/Downloads`;
 
 class DownloadService {
-  async requestStoragePermission() {
-    if (Platform.OS !== "android") return true;
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        { title: "Storage Permission", message: "App needs storage access to download images." }
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch {
-      return false;
-    }
-  }
-
   getDownloadPath(destination, imageId, fileName) {
     const dest = destination || DEFAULT_DOWNLOAD_DIR;
     return `${dest}/${fileName || `${imageId}.jpg`}`;
@@ -34,12 +18,16 @@ class DownloadService {
   }
 
   async downloadSingleImage(imageId, remoteUrl, destination, fileName, onProgress) {
+    const dest = destination || DEFAULT_DOWNLOAD_DIR;
     const filePath = this.getDownloadPath(destination, imageId, fileName);
     const exists = await this.fileExists(filePath);
     if (exists) {
       return { status: "exists", filePath };
     }
-    await RNFS.mkdir(destination || DEFAULT_DOWNLOAD_DIR);
+    const dirExists = await RNFS.exists(dest);
+    if (!dirExists) {
+      await RNFS.mkdir(dest);
+    }
     const result = await RNFS.downloadFile({
       fromUrl: remoteUrl,
       toFile: filePath,

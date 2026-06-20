@@ -249,11 +249,6 @@ function FavouritesScreen({ navigation }) {
       Alert.alert("No Selection", "Please select images to download.");
       return;
     }
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) {
-      Alert.alert("Permission Denied", "Storage permission is required to download images.");
-      return;
-    }
     const displayImages = activeFilters ? filteredImages : favouriteImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
     setDownloading(true);
@@ -281,11 +276,6 @@ function FavouritesScreen({ navigation }) {
   };
 
   const handleDownloadSingle = async (img) => {
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) {
-      Alert.alert("Permission Denied", "Storage permission is required.");
-      return;
-    }
     setDownloading(true);
     try {
       const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);

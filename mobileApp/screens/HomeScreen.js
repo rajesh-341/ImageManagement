@@ -357,8 +357,6 @@ function HomeScreen({ navigation }) {
 
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) { Alert.alert("Permission Denied", "Storage permission is required."); return; }
     const displayImages = activeFilters ? filteredImages : allImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
     setDownloading(true);
@@ -386,8 +384,6 @@ function HomeScreen({ navigation }) {
   };
 
   const handleDownloadSingle = async (img) => {
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) { Alert.alert("Permission Denied", "Storage permission is required."); return; }
     setDownloading(true);
     try {
       const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
