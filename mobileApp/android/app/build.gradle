@@ -117,7 +117,15 @@ android {
             enable true
             reset()
             include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-            universalApk false
+            universalApk true
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            if (output.getFilter(com.android.build.OutputFile.ABI) == null) {
+                output.outputFileName = "app-release.apk"
+            }
         }
     }
 }
