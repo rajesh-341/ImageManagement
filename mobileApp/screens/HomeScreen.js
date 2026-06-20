@@ -426,7 +426,7 @@ function HomeScreen({ navigation }) {
       >
         <View style={[styles.imageCard, { width: cardWidth }, selected && styles.imageCardSelected]}>
           {imgUrl ? (
-            <OptimizedImage source={{ uri: imgUrl }} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
+            <OptimizedImage uri={imgUrl} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
             <View style={[styles.imageCardImg, styles.imagePlaceholder, { height: cardWidth * 0.75 }]}>
               <Text style={styles.placeholderText}>No Image</Text>
@@ -761,11 +761,7 @@ function HomeScreen({ navigation }) {
 
           {currentLightboxImage?.url ? (
             <>
-              <OptimizedImage
-                source={{ uri: currentLightboxImage.url }}
-                style={styles.lightboxImg}
-                resizeMode="contain"
-              />
+              <OptimizedImage uri={currentLightboxImage.url} style={styles.lightboxImg} resizeMode="contain" />
 
               {/* Navigation arrows */}
               {lightboxIndex > 0 && (
