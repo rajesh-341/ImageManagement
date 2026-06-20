@@ -1,35 +1,17 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Image, View, StyleSheet, Animated, Platform } from "react-native";
+import React, { useState, useCallback } from "react";
+import { Image, View, StyleSheet } from "react-native";
 
-const OptimizedImage = ({ source, style, resizeMode = "cover", lazy = true, ...props }) => {
+const OptimizedImage = ({ source, style, resizeMode = "cover", ...props }) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const [visible, setVisible] = useState(!lazy);
-  const viewRef = useRef(null);
-
-  useEffect(() => {
-    if (!lazy || Platform.OS === "web") {
-      setVisible(true);
-    }
-  }, [lazy]);
 
   const onLoad = useCallback(() => {
     setLoaded(true);
-    Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-  }, [opacity]);
+  }, []);
 
   const onError = useCallback(() => {
     setErrored(true);
   }, []);
-
-  if (!visible) {
-    return (
-      <View ref={viewRef} style={[style, styles.placeholder]}>
-        <View style={styles.skeleton} />
-      </View>
-    );
-  }
 
   if (errored || !source?.uri) {
     return (
@@ -43,7 +25,7 @@ const OptimizedImage = ({ source, style, resizeMode = "cover", lazy = true, ...p
   }
 
   return (
-    <Animated.View style={[style, { opacity }]}>
+    <View style={style}>
       <Image
         source={source}
         style={[StyleSheet.absoluteFill, { resizeMode }]}
@@ -52,7 +34,7 @@ const OptimizedImage = ({ source, style, resizeMode = "cover", lazy = true, ...p
         {...props}
       />
       {!loaded && <View style={[StyleSheet.absoluteFill, styles.skeleton]} />}
-    </Animated.View>
+    </View>
   );
 };
 

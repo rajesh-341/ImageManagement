@@ -9,6 +9,7 @@ import OptimizedImage from "../components/OptimizedImage";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
+import downloadService from "../services/downloadService";
 import FilterSidebar from "../components/FilterSidebar";
 
 const CARD_GAP = 12;
@@ -36,6 +37,13 @@ function FavouritesScreen({ navigation }) {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [selectedImageForMove, setSelectedImageForMove] = useState(null);
   const [selectedTargetFolder, setSelectedTargetFolder] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [downloadDestination, setDownloadDestination] = useState("");
 
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -163,7 +171,138 @@ function FavouritesScreen({ navigation }) {
   const handleBackToFolders = () => {
     setCurrentFolder(null);
     setActiveTab("folders");
+    setSelectMode(false);
+    setSelectedIds(new Set());
     loadFavourites();
+  };
+
+  const toggleSelectMode = () => {
+    if (selectMode) {
+      setSelectedIds(new Set());
+    }
+    setSelectMode(prev => !prev);
+  };
+
+  const toggleSelectImage = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchMoveToFolder = () => {
+    if (selectedIds.size === 0) {
+      Alert.alert("No Selection", "Please select images to move.");
+      return;
+    }
+    setSelectedImageForMove(null);
+    setShowMoveModal(true);
+  };
+
+  const handleBatchMoveConfirm = async () => {
+    if (!selectedTargetFolder || selectedIds.size === 0) return;
+    setLoading(true);
+    try {
+      const imageIds = Array.from(selectedIds);
+      await ApiService.addImagesToFavouriteFolder(selectedTargetFolder.id, imageIds);
+      Alert.alert("Success", `${imageIds.length} image(s) moved to "${selectedTargetFolder.name}".`);
+      setShowMoveModal(false);
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      if (currentFolder) {
+        loadFolderImages(currentFolder.name);
+      } else {
+        loadFavourites();
+      }
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateFolderFromMove = async () => {
+    if (!newFolderName.trim()) { Alert.alert("Error", "Enter a folder name"); return; }
+    setLoading(true);
+    try {
+      const result = await ApiService.createFavoriteFolder(newFolderName.trim());
+      const newFolder = result.folder || result;
+      setSelectedTargetFolder(newFolder);
+      setNewFolderName("");
+      setShowNewFolderInput(false);
+      await loadFavouriteFolders();
+      Alert.alert("Success", `Folder "${newFolder.name}" created. Tap Move to proceed.`);
+    } catch (err) {
+      Alert.alert("Error", "Failed to create folder: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadSelected = async () => {
+    if (selectedIds.size === 0) {
+      Alert.alert("No Selection", "Please select images to download.");
+      return;
+    }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) {
+      Alert.alert("Permission Denied", "Storage permission is required to download images.");
+      return;
+    }
+    const displayImages = activeFilters ? filteredImages : favouriteImages;
+    const toDownload = displayImages.filter(img => selectedIds.has(img.id));
+    setDownloading(true);
+    setDownloadProgress({ total: toDownload.length, completed: 0 });
+    try {
+      const results = await downloadService.downloadMultipleImages(
+        toDownload,
+        (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
+        downloadDestination || null,
+        (progress, completed) => setDownloadProgress({ total: toDownload.length, completed }),
+      );
+      const msg = [];
+      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
+      if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
+      if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
+      Alert.alert("Download Complete", msg.join("\n"));
+      setSelectMode(false);
+      setSelectedIds(new Set());
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDownloadSingle = async (img) => {
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) {
+      Alert.alert("Permission Denied", "Storage permission is required.");
+      return;
+    }
+    setDownloading(true);
+    try {
+      const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
+      const fileName = `${img.image_data?.designName || img.id}.jpg`;
+      const result = await downloadService.downloadSingleImage(
+        img.id, remoteUrl, downloadDestination || null, fileName
+      );
+      if (result.status === "exists") {
+        Alert.alert("Already Exists", "This image already exists in the download location.");
+      } else {
+        Alert.alert("Downloaded", `Image saved to ${result.filePath}`);
+      }
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleApplyFilters = async (filterData) => {
@@ -257,14 +396,34 @@ function FavouritesScreen({ navigation }) {
     return null;
   };
 
+  const isSelected = (id) => selectedIds.has(id);
+
   const renderImageCard = ({ item, index }) => {
     const imgUrl = offlineMode ? getEffectiveImgUrl(item) : getImgUrl(item);
     const isFav = favouriteImages.some(img => img.id === item.id);
+    const selected = isSelected(item.id);
     const currentDisplayImages = activeFilters ? filteredImages : favouriteImages;
 
     return (
-      <View style={[styles.imageCard, { width: cardWidth }]}>
-        <TouchableOpacity onPress={() => { imagesRef.current = currentDisplayImages; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => {
+          if (selectMode) {
+            toggleSelectImage(item.id);
+          } else {
+            imagesRef.current = currentDisplayImages;
+            setLightboxIndex(index);
+            setLightboxVisible(true);
+          }
+        }}
+        onLongPress={() => {
+          if (!selectMode) {
+            setSelectMode(true);
+            setSelectedIds(new Set([item.id]));
+          }
+        }}
+      >
+        <View style={[styles.imageCard, { width: cardWidth }, selected && styles.imageCardSelected]}>
           {imgUrl ? (
             <OptimizedImage source={{ uri: imgUrl }} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
@@ -272,28 +431,43 @@ function FavouritesScreen({ navigation }) {
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.favToggle} onPress={() => handleToggleFavourite(item.id)}>
-          <Text style={[styles.favIcon, isFav && styles.favIconActive]}>
-            {isFav ? "♥" : "♡"}
-          </Text>
-        </TouchableOpacity>
+          {selectMode && (
+            <View style={[styles.selectCheckbox, selected && styles.selectCheckboxActive]}>
+              <Text style={styles.selectCheckboxText}>{selected ? "✓" : ""}</Text>
+            </View>
+          )}
 
-        <View style={styles.imageCardContent}>
-          <Text style={styles.imageCardTitle} numberOfLines={1}>
-            {item.image_data?.designName || "Untitled"}
-          </Text>
-          {currentFolder && (
-            <TouchableOpacity style={styles.moveBtn} onPress={() => {
-              setSelectedImageForMove(item.id);
-              setShowMoveModal(true);
-            }}>
-              <Text style={styles.moveBtnText}>Move to Folder</Text>
+          {!selectMode && (
+            <TouchableOpacity style={styles.favToggle} onPress={() => handleToggleFavourite(item.id)}>
+              <Text style={[styles.favIcon, isFav && styles.favIconActive]}>
+                {isFav ? "♥" : "♡"}
+              </Text>
             </TouchableOpacity>
           )}
+
+          <View style={styles.imageCardContent}>
+            <Text style={styles.imageCardTitle} numberOfLines={1}>
+              {item.image_data?.designName || "Untitled"}
+            </Text>
+            <View style={styles.cardActions}>
+              {!selectMode && currentFolder && (
+                <TouchableOpacity style={styles.moveBtn} onPress={() => {
+                  setSelectedImageForMove(item.id);
+                  setShowMoveModal(true);
+                }}>
+                  <Text style={styles.moveBtnText}>Move</Text>
+                </TouchableOpacity>
+              )}
+              {!selectMode && (
+                <TouchableOpacity style={styles.dlBtn} onPress={() => handleDownloadSingle(item)}>
+                  <Text style={styles.dlBtnText}>Download</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -395,11 +569,21 @@ function FavouritesScreen({ navigation }) {
               <Text style={styles.addBtnText}>+ Add Folder</Text>
             </TouchableOpacity>
           )}
+          {activeTab === "all" && !currentFolder && (
+            <TouchableOpacity
+              style={[styles.navBtn, selectMode && styles.navBtnActive]}
+              onPress={toggleSelectMode}
+            >
+              <Text style={[styles.navBtnText, selectMode && styles.navBtnTextActive]}>
+                {selectMode ? "Cancel" : "Select"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* Tabs */}
-      {!currentFolder && (
+      {!currentFolder && !selectMode && (
         <View style={styles.tabs}>
           <TouchableOpacity
             style={[styles.tab, activeTab === "all" && styles.tabActive]}
@@ -417,6 +601,24 @@ function FavouritesScreen({ navigation }) {
               Folders
             </Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Selection Action Bar */}
+      {selectMode && (
+        <View style={styles.selectionBar}>
+          <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
+          <View style={styles.selectionActions}>
+            <TouchableOpacity style={styles.selActionBtn} onPress={handleBatchMoveToFolder}>
+              <Text style={styles.selActionText}>Move</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.selActionBtn} onPress={handleDownloadSelected}>
+              <Text style={styles.selActionText}>Download</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.selActionBtn} onPress={() => { setSelectedIds(new Set()); }}>
+              <Text style={styles.selActionText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -474,14 +676,16 @@ function FavouritesScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Move to Folder</Text>
+              <Text style={styles.modalTitle}>
+                {selectMode ? `Move ${selectedIds.size} Image(s)` : "Move to Folder"}
+              </Text>
               <TouchableOpacity onPress={() => setShowMoveModal(false)}>
                 <Text style={styles.modalClose}>×</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
               {favouriteFolders.length === 0 ? (
-                <Text style={styles.emptyText}>No folders available. Create one first.</Text>
+                <Text style={styles.emptyText}>No folders available.</Text>
               ) : (
                 favouriteFolders.map(f => (
                   <TouchableOpacity
@@ -497,6 +701,26 @@ function FavouritesScreen({ navigation }) {
                   </TouchableOpacity>
                 ))
               )}
+              {!showNewFolderInput ? (
+                <TouchableOpacity
+                  style={styles.createFolderOption}
+                  onPress={() => setShowNewFolderInput(true)}
+                >
+                  <Text style={styles.createFolderOptionText}>+ Create New Folder</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.newFolderRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={newFolderName}
+                    onChangeText={setNewFolderName}
+                    placeholder="New folder name"
+                  />
+                  <TouchableOpacity style={styles.primaryBtnSmall} onPress={handleCreateFolderFromMove} disabled={loading}>
+                    <Text style={styles.primaryBtnTextSmall}>Create</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowMoveModal(false)}>
@@ -504,12 +728,26 @@ function FavouritesScreen({ navigation }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.primaryBtn, !selectedTargetFolder && styles.btnDisabled]}
-                onPress={handleMoveToFolder}
+                onPress={selectMode ? handleBatchMoveConfirm : handleMoveToFolder}
                 disabled={!selectedTargetFolder || loading}
               >
-                <Text style={styles.primaryBtnText}>Move</Text>
+                <Text style={styles.primaryBtnText}>{loading ? "Moving..." : "Move"}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Download Progress Modal */}
+      <Modal visible={downloading} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, { alignItems: "center", padding: 24 }]}>
+            <ActivityIndicator size="large" color="#ff6b8a" />
+            <Text style={styles.dlProgressText}>
+              {downloadProgress
+                ? `Downloading ${downloadProgress.completed + 1} of ${downloadProgress.total}...`
+                : "Preparing download..."}
+            </Text>
           </View>
         </View>
       </Modal>
@@ -523,7 +761,7 @@ function FavouritesScreen({ navigation }) {
 
           {currentLightboxImage?.url ? (
             <>
-              <OptimizedImage source={{ uri: currentLightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" lazy={false} />
+              <OptimizedImage source={{ uri: currentLightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
               {lightboxIndex > 0 && (
                 <TouchableOpacity style={[styles.lbArrow, styles.lbArrowLeft]} onPress={goToPrevious}>
                   <Text style={styles.lbArrowText}>‹</Text>
@@ -647,6 +885,36 @@ const styles = StyleSheet.create({
   lbFieldRow: { flexDirection: "row", marginVertical: 3 },
   lbFieldLabel: { fontSize: 12, fontWeight: "700", color: "#ff6b8a", width: 80 },
   lbFieldValue: { fontSize: 12, color: "#e5e7eb", flex: 1 },
+  imageCardSelected: { borderWidth: 2, borderColor: "#ff6b8a", borderRadius: 10 },
+  selectCheckbox: {
+    position: "absolute", top: 8, left: 8, width: 28, height: 28,
+    borderRadius: 14, borderWidth: 2, borderColor: "#fff",
+    backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "center", alignItems: "center", zIndex: 10,
+  },
+  selectCheckboxActive: { backgroundColor: "#ff6b8a", borderColor: "#ff6b8a" },
+  selectCheckboxText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  cardActions: { flexDirection: "row", gap: 6, marginTop: 4 },
+  moveBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#fef3c7" },
+  moveBtnText: { fontSize: 11, fontWeight: "600", color: "#d97706" },
+  dlBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#dbeafe" },
+  dlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
+  navBtnActive: { backgroundColor: "#ff6b8a" },
+  navBtnTextActive: { color: "#fff" },
+  selectionBar: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
+  },
+  selectionCount: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  selectionActions: { flexDirection: "row", gap: 8 },
+  selActionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#ff6b8a" },
+  selActionText: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  createFolderOption: { paddingVertical: 14, paddingHorizontal: 8, marginTop: 4 },
+  createFolderOptionText: { fontSize: 15, fontWeight: "600", color: "#ff6b8a" },
+  newFolderRow: { flexDirection: "row", gap: 8, marginTop: 8, alignItems: "center" },
+  primaryBtnSmall: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: "#ff6b8a", alignItems: "center" },
+  primaryBtnTextSmall: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  dlProgressText: { fontSize: 15, color: "#374151", marginTop: 16, textAlign: "center" },
 });
 
 export default FavouritesScreen;

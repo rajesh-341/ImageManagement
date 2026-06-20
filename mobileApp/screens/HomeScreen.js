@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
 import OptimizedImage from "../components/OptimizedImage";
+import downloadService from "../services/downloadService";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
@@ -51,6 +52,10 @@ function HomeScreen({ navigation }) {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateProgress, setUpdateProgress] = useState(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
 
   useEffect(() => {
     const init = async () => {
@@ -337,13 +342,93 @@ function HomeScreen({ navigation }) {
     return null;
   };
 
+  const toggleSelectMode = () => {
+    if (selectMode) setSelectedIds(new Set());
+    setSelectMode(prev => !prev);
+  };
+
+  const toggleSelectImage = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDownloadSelected = async () => {
+    if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) { Alert.alert("Permission Denied", "Storage permission is required."); return; }
+    const displayImages = activeFilters ? filteredImages : allImages;
+    const toDownload = displayImages.filter(img => selectedIds.has(img.id));
+    setDownloading(true);
+    setDownloadProgress({ total: toDownload.length, completed: 0 });
+    try {
+      const results = await downloadService.downloadMultipleImages(
+        toDownload,
+        (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
+        null,
+        (progress, completed) => setDownloadProgress({ total: toDownload.length, completed }),
+      );
+      const msg = [];
+      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
+      if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
+      if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
+      Alert.alert("Download Complete", msg.join("\n"));
+      setSelectMode(false);
+      setSelectedIds(new Set());
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDownloadSingle = async (img) => {
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) { Alert.alert("Permission Denied", "Storage permission is required."); return; }
+    setDownloading(true);
+    try {
+      const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
+      const fileName = `${img.image_data?.designName || img.id}.jpg`;
+      const result = await downloadService.downloadSingleImage(img.id, remoteUrl, null, fileName);
+      if (result.status === "exists") {
+        Alert.alert("Already Exists", "This image already exists in the download location.");
+      } else {
+        Alert.alert("Downloaded", `Image saved to ${result.filePath}`);
+      }
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const isSelected = (id) => selectedIds.has(id);
+
   const renderImageCard = ({ item, index, isFilteredView = false }) => {
     const imgUrl = offlineMode ? getEffectiveImgUrl(item) : getImgUrl(item);
     const isFav = favouriteIds.has(item.id);
+    const selected = isSelected(item.id);
 
     return (
-      <View style={[styles.imageCard, { width: cardWidth }]}>
-        <TouchableOpacity onPress={() => { imagesRef.current = activeFilters ? filteredImages : allImages; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => {
+          if (selectMode) {
+            toggleSelectImage(item.id);
+          } else {
+            imagesRef.current = activeFilters ? filteredImages : allImages;
+            setLightboxIndex(index);
+            setLightboxVisible(true);
+          }
+        }}
+        onLongPress={() => {
+          if (!selectMode) { setSelectMode(true); setSelectedIds(new Set([item.id])); }
+        }}
+      >
+        <View style={[styles.imageCard, { width: cardWidth }, selected && styles.imageCardSelected]}>
           {imgUrl ? (
             <OptimizedImage source={{ uri: imgUrl }} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
@@ -351,22 +436,35 @@ function HomeScreen({ navigation }) {
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.favToggleOnCard} onPress={() => handleToggleFavourite(item.id)}>
-          <Text style={[styles.favToggleText, isFav && styles.favToggleTextActive]}>
-            {isFav ? "♥" : "♡"}
-          </Text>
-        </TouchableOpacity>
+          {selectMode && (
+            <View style={[styles.selectCheckbox, selected && styles.selectCheckboxActive]}>
+              <Text style={styles.selectCheckboxText}>{selected ? "✓" : ""}</Text>
+            </View>
+          )}
 
-        <View style={styles.imageCardContent}>
-          <Text style={styles.imageCardTitle} numberOfLines={1}>
-            {item.image_data?.designName || "Untitled"}
-          </Text>
+          {!selectMode && (
+            <TouchableOpacity style={styles.favToggleOnCard} onPress={() => handleToggleFavourite(item.id)}>
+              <Text style={[styles.favToggleText, isFav && styles.favToggleTextActive]}>
+                {isFav ? "♥" : "♡"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.imageCardContent}>
+            <Text style={styles.imageCardTitle} numberOfLines={1}>
+              {item.image_data?.designName || "Untitled"}
+            </Text>
+            {!selectMode && (
+              <TouchableOpacity style={styles.dlBtn} onPress={() => handleDownloadSingle(item)}>
+                <Text style={styles.dlBtnText}>Download</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
-      };
+  };
 
   const renderMainContent = () => {
     const displayImages = activeFilters ? filteredImages : allImages;
@@ -432,6 +530,14 @@ function HomeScreen({ navigation }) {
           <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate("Favourites")}>
             <Text style={styles.navBtnText}>♥ Favourites</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.navBtn, selectMode && styles.navBtnActive]}
+            onPress={toggleSelectMode}
+          >
+            <Text style={[styles.navBtnText, selectMode && styles.navBtnTextActive]}>
+              {selectMode ? "Cancel" : "Select"}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={async () => { await ApiService.logout(); navigation.replace("Login"); }}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
@@ -439,6 +545,21 @@ function HomeScreen({ navigation }) {
       </View>
 
       {renderMainContent()}
+
+      {/* Selection Action Bar */}
+      {selectMode && (
+        <View style={styles.selectionBar}>
+          <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
+          <View style={styles.selectionActions}>
+            <TouchableOpacity style={styles.selActionBtn} onPress={handleDownloadSelected}>
+              <Text style={styles.selActionText}>Download</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.selActionBtn} onPress={() => { setSelectedIds(new Set()); }}>
+              <Text style={styles.selActionText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Filter Sidebar */}
       <FilterSidebar
@@ -621,6 +742,20 @@ function HomeScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Download Progress Modal */}
+      <Modal visible={downloading} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: "center", padding: 24 }]}>
+            <ActivityIndicator size="large" color="#ff6b8a" />
+            <Text style={styles.dlProgressText}>
+              {downloadProgress
+                ? `Downloading ${downloadProgress.completed + 1} of ${downloadProgress.total}...`
+                : "Preparing download..."}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Lightbox */}
       <Modal visible={lightboxVisible} transparent animationType="fade" onRequestClose={() => setLightboxVisible(false)}>
         <View style={styles.lightboxOverlay} {...lightboxPanResponder.panHandlers}>
@@ -634,7 +769,6 @@ function HomeScreen({ navigation }) {
                 source={{ uri: currentLightboxImage.url }}
                 style={styles.lightboxImg}
                 resizeMode="contain"
-                lazy={false}
               />
 
               {/* Navigation arrows */}
@@ -855,6 +989,29 @@ const styles = StyleSheet.create({
   updateProgressBar: { height: 8, backgroundColor: "#e5e7eb", borderRadius: 4, overflow: "hidden", marginBottom: 16 },
   updateProgressFill: { height: "100%", backgroundColor: "#ff6b8a", borderRadius: 4 },
   updateReleaseNotes: { fontSize: 14, color: "#6b7280", lineHeight: 20, marginBottom: 16 },
+  imageCardSelected: { borderWidth: 2, borderColor: "#ff6b8a", borderRadius: 10 },
+  selectCheckbox: {
+    position: "absolute", top: 8, left: 8, width: 28, height: 28,
+    borderRadius: 14, borderWidth: 2, borderColor: "#fff",
+    backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "center", alignItems: "center", zIndex: 10,
+  },
+  selectCheckboxActive: { backgroundColor: "#ff6b8a", borderColor: "#ff6b8a" },
+  selectCheckboxText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  navBtnActive: { backgroundColor: "#ff6b8a" },
+  navBtnTextActive: { color: "#fff" },
+  selectionBar: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
+  },
+  selectionCount: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  selectionActions: { flexDirection: "row", gap: 8 },
+  selActionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#ff6b8a" },
+  selActionText: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  dlBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#dbeafe", marginTop: 4, alignSelf: "flex-start" },
+  dlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
+  modalContent: { backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 400 },
+  dlProgressText: { fontSize: 15, color: "#374151", marginTop: 16, textAlign: "center" },
 });
 
 export default HomeScreen;

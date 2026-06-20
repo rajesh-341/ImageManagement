@@ -46,14 +46,37 @@ class OfflineManager {
 
   async downloadAllImages(images, getImgUrlFn, onProgress) {
     await this.ensureCacheDir();
+    const cachePaths = await offlineStorage.getImageCachePaths();
+    const cachedVersions = await offlineStorage.getImageVersions();
     const total = images.length;
     let completed = 0;
-    const cachePaths = {};
-    const versions = {};
     const errors = [];
 
-    const queue = [...images];
-    const workers = Array(Math.min(CONCURRENCY_LIMIT, total))
+    const needsDownload = [];
+    const skipped = [];
+
+    for (const img of images) {
+      const remoteUrl = getImgUrlFn(img);
+      if (!remoteUrl) {
+        completed++;
+        onProgress?.(completed / total, completed, total);
+        skipped.push(img.id);
+        continue;
+      }
+      const localPath = cachePaths[img.id];
+      const serverVersion = img.updated_at || "";
+      const cachedVersion = cachedVersions[img.id] || "";
+      if (localPath && serverVersion && serverVersion === cachedVersion) {
+        completed++;
+        onProgress?.(completed / total, completed, total);
+        skipped.push(img.id);
+      } else {
+        needsDownload.push(img);
+      }
+    }
+
+    const queue = [...needsDownload];
+    const workers = Array(Math.min(CONCURRENCY_LIMIT, queue.length || 1))
       .fill()
       .map(async () => {
         while (queue.length > 0) {
@@ -72,7 +95,7 @@ class OfflineManager {
             }).promise;
             if (result.statusCode === 200) {
               cachePaths[img.id] = localPath;
-              versions[img.id] = img.updated_at || new Date().toISOString();
+              cachedVersions[img.id] = img.updated_at || new Date().toISOString();
             } else {
               errors.push(img.id);
             }
@@ -87,7 +110,7 @@ class OfflineManager {
     await Promise.all(workers);
 
     await offlineStorage.storeImageCachePaths(cachePaths);
-    await offlineStorage.storeImageVersions(versions);
+    await offlineStorage.storeImageVersions(cachedVersions);
 
     return { success: total - errors.length, errors: errors.length };
   }
