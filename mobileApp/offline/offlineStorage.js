@@ -8,10 +8,12 @@ const KEYS = {
   OFFLINE_MODE: "offline_mode",
   DOWNLOAD_PATH: "download_path",
   FAVOURITES: "favourites",
+  FAVOURITE_FOLDERS: "favourite_folders",
   IMAGE_CACHE_PATHS: "image_cache_paths",
   IMAGE_VERSIONS: "image_versions",
   LAST_SYNC: "last_sync",
   SYNC_IN_PROGRESS: "sync_in_progress",
+  SYNC_QUEUE: "sync_queue",
 };
 
 export const storeUser = async (user) => {
@@ -146,6 +148,52 @@ export const getFavourites = async () => {
   }
 };
 
+export const storeFavouriteFolders = async (folders) => {
+  try {
+    await AsyncStorage.setItem(KEYS.FAVOURITE_FOLDERS, JSON.stringify(folders));
+  } catch (error) {
+    console.error("Error storing favourite folders:", error);
+  }
+};
+
+export const getFavouriteFolders = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.FAVOURITE_FOLDERS);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error("Error getting favourite folders:", error);
+    return [];
+  }
+};
+
+export const addToSyncQueue = async (action) => {
+  try {
+    const queue = await getSyncQueue();
+    queue.push({ ...action, timestamp: Date.now() });
+    await AsyncStorage.setItem(KEYS.SYNC_QUEUE, JSON.stringify(queue));
+  } catch (error) {
+    console.error("Error adding to sync queue:", error);
+  }
+};
+
+export const getSyncQueue = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SYNC_QUEUE);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error("Error getting sync queue:", error);
+    return [];
+  }
+};
+
+export const clearSyncQueue = async () => {
+  try {
+    await AsyncStorage.removeItem(KEYS.SYNC_QUEUE);
+  } catch (error) {
+    console.error("Error clearing sync queue:", error);
+  }
+};
+
 export const storeImageCachePaths = async (cacheMap) => {
   try {
     await AsyncStorage.setItem(KEYS.IMAGE_CACHE_PATHS, JSON.stringify(cacheMap));
@@ -225,6 +273,7 @@ export const clearOfflineData = async () => {
       KEYS.FOLDERS,
       KEYS.OFFLINE_MODE,
       KEYS.FAVOURITES,
+      KEYS.FAVOURITE_FOLDERS,
       KEYS.IMAGE_CACHE_PATHS,
       KEYS.IMAGE_VERSIONS,
       KEYS.LAST_SYNC,
@@ -251,6 +300,11 @@ export default {
   getDownloadPath,
   storeFavourites,
   getFavourites,
+  storeFavouriteFolders,
+  getFavouriteFolders,
+  addToSyncQueue,
+  getSyncQueue,
+  clearSyncQueue,
   storeImageCachePaths,
   getImageCachePaths,
   storeImageVersions,

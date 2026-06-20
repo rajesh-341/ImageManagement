@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
-  ActivityIndicator, Alert, Image, Modal, Dimensions,
+  ActivityIndicator, Alert, Image, Modal, useWindowDimensions,
   PanResponder, ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,13 +11,13 @@ import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
 import { UPLOAD_ROLES } from "../utils/constants";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 12;
-const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
-const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
 function FolderScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
+  const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
   const { folder, imageBaseUrl } = route.params;
   const [user, setUser] = useState(null);
   const [images, setImages] = useState([]);
@@ -208,12 +208,12 @@ function FolderScreen({ route, navigation }) {
     const isFav = favouriteIds.has(item.id);
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, { width: cardWidth }]}>
         <TouchableOpacity onPress={() => { imagesRef.current = images; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
           {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={styles.cardImg} resizeMode="cover" />
+            <Image source={{ uri: imgUrl }} style={[styles.cardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
-            <View style={[styles.cardImg, styles.cardPlaceholder]}>
+            <View style={[styles.cardImg, styles.cardPlaceholder, { height: cardWidth * 0.75 }]}>
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
@@ -353,13 +353,13 @@ function FolderScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   header: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
   },
-  backBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  backBtnText: { fontSize: 18, color: "#374151", fontWeight: "600" },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 },
+  backBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  backBtnText: { fontSize: 16, color: "#374151", fontWeight: "600" },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: "#1a1a1a", flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 15, color: "#9ca3af", textAlign: "center", padding: 24 },
   grid: { paddingHorizontal: CARD_GAP, paddingBottom: 24 },
@@ -374,15 +374,14 @@ const styles = StyleSheet.create({
   uploadBoxText: { fontSize: 14, fontWeight: "500", color: "#9ca3af" },
   // Card
   card: {
-    width: cardWidth, backgroundColor: "#fff", borderRadius: 12, overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
+    backgroundColor: "#fff", borderRadius: 10, overflow: "hidden",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.05)", elevation: 2, position: "relative",
   },
-  cardImg: { width: "100%", height: cardWidth * 0.75 },
+  cardImg: { width: "100%" },
   cardPlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
-  placeholderText: { color: "#9ca3af", fontSize: 14 },
-  cardContent: { padding: 10 },
-  cardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
+  placeholderText: { color: "#9ca3af", fontSize: 13 },
+  cardContent: { padding: 8 },
+  cardTitle: { fontSize: 13, fontWeight: "600", color: "#1a1a1a" },
   deleteBtn: { marginTop: 8, paddingVertical: 6, borderRadius: 6, backgroundColor: "#fef2f2", alignItems: "center" },
   deleteBtnText: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
   favToggleOnCard: {

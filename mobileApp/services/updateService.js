@@ -12,6 +12,7 @@ const APK_DOWNLOAD_PATH = `${RNFS.CachesDirectoryPath}/${APK_FILENAME}`;
 
 class UpdateService {
   async checkForUpdate() {
+    if (Platform.OS === "web") return { available: false };
     try {
       const response = await fetch(UPDATE_CONFIG.updateUrl, {
         headers: { Accept: "application/json" },

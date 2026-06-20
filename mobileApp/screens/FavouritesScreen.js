@@ -2,24 +2,26 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
-  Image, Dimensions, Platform, PanResponder,
+  useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import OptimizedImage from "../components/OptimizedImage";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
 import FilterSidebar from "../components/FilterSidebar";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 12;
-const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
-const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
 const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function FavouritesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
+  const folderColumns = SCREEN_WIDTH >= 768 ? 3 : 2;
+  const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
   const [favouriteImages, setFavouriteImages] = useState([]);
@@ -261,12 +263,12 @@ function FavouritesScreen({ navigation }) {
     const currentDisplayImages = activeFilters ? filteredImages : favouriteImages;
 
     return (
-      <View style={styles.imageCard}>
+      <View style={[styles.imageCard, { width: cardWidth }]}>
         <TouchableOpacity onPress={() => { imagesRef.current = currentDisplayImages; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
           {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={styles.imageCardImg} resizeMode="cover" />
+            <OptimizedImage source={{ uri: imgUrl }} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
-            <View style={[styles.imageCardImg, styles.imagePlaceholder]}>
+            <View style={[styles.imageCardImg, styles.imagePlaceholder, { height: cardWidth * 0.75 }]}>
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
@@ -357,8 +359,8 @@ function FavouritesScreen({ navigation }) {
         data={favouriteFolders}
         renderItem={renderFolderItem}
         keyExtractor={item => item.id?.toString()}
-        numColumns={SCREEN_WIDTH >= 768 ? 3 : 2}
-        key={`fav-folders-${SCREEN_WIDTH >= 768 ? 3 : 2}`}
+        numColumns={folderColumns}
+        key={`fav-folders-${folderColumns}`}
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.gridRow}
         showsVerticalScrollIndicator={false}
@@ -521,7 +523,7 @@ function FavouritesScreen({ navigation }) {
 
           {currentLightboxImage?.url ? (
             <>
-              <Image source={{ uri: currentLightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" />
+              <OptimizedImage source={{ uri: currentLightboxImage.url }} style={styles.lightboxImg} resizeMode="contain" lazy={false} />
               {lightboxIndex > 0 && (
                 <TouchableOpacity style={[styles.lbArrow, styles.lbArrowLeft]} onPress={goToPrevious}>
                   <Text style={styles.lbArrowText}>‹</Text>
@@ -563,24 +565,24 @@ function FavouritesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   navbar: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
   },
-  backBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  backBtnText: { fontSize: 18, color: "#374151", fontWeight: "600" },
-  navbarTitle: { fontSize: 18, fontWeight: "700", color: "#ff6b8a", flex: 1, marginLeft: 12 },
-  navbarRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  navBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#f3f4f6" },
-  navBtnText: { fontSize: 13, fontWeight: "600", color: "#374151" },
-  addBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#ff6b8a" },
-  addBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  backBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  backBtnText: { fontSize: 16, color: "#374151", fontWeight: "600" },
+  navbarTitle: { fontSize: 16, fontWeight: "700", color: "#ff6b8a", flex: 1, marginLeft: 8 },
+  navbarRight: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  navBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "#f3f4f6" },
+  navBtnText: { fontSize: 12, fontWeight: "600", color: "#374151" },
+  addBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: "#ff6b8a" },
+  addBtnText: { fontSize: 13, fontWeight: "600", color: "#fff" },
   tabs: {
     flexDirection: "row", marginHorizontal: 16, marginVertical: 12,
     borderRadius: 12, backgroundColor: "#e5e7eb", padding: 3,
   },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-  tabActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  tabActive: { backgroundColor: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", elevation: 2 },
   tabText: { fontSize: 14, fontWeight: "500", color: "#6b7280" },
   tabTextActive: { color: "#ff6b8a", fontWeight: "600" },
   grid: { paddingHorizontal: CARD_GAP, paddingBottom: 24 },
@@ -588,15 +590,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 15, color: "#9ca3af", textAlign: "center", padding: 24 },
   imageCard: {
-    width: cardWidth, backgroundColor: "#fff", borderRadius: 12, overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
+    backgroundColor: "#fff", borderRadius: 10, overflow: "hidden",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.05)", elevation: 2, position: "relative",
   },
-  imageCardImg: { width: "100%", height: cardWidth * 0.75 },
+  imageCardImg: { width: "100%" },
   imagePlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
-  placeholderText: { color: "#9ca3af", fontSize: 14 },
-  imageCardContent: { padding: 10 },
-  imageCardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
+  placeholderText: { color: "#9ca3af", fontSize: 13 },
+  imageCardContent: { padding: 8 },
+  imageCardTitle: { fontSize: 13, fontWeight: "600", color: "#1a1a1a" },
   favToggle: {
     position: "absolute", top: 8, right: 8, width: 32, height: 32,
     borderRadius: 16, backgroundColor: "rgba(255,255,255,0.9)",
@@ -606,8 +607,7 @@ const styles = StyleSheet.create({
   favIconActive: { color: "#ef4444" },
   folderCard: {
     flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 16,
-    alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", elevation: 3,
   },
   folderIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fef3c7", justifyContent: "center", alignItems: "center", marginBottom: 8 },
   folderIconText: { fontSize: 28 },

@@ -9,10 +9,14 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import ApiService from "../services/apiService";
 
 function LoginScreen({ navigation }) {
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const isSmall = SCREEN_WIDTH < 380;
+  const isShort = SCREEN_HEIGHT < 700;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -47,7 +51,7 @@ function LoginScreen({ navigation }) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Illustration Section */}
-        <View style={styles.illustrationPanel}>
+        <View style={[styles.illustrationPanel, { height: isShort ? 200 : 280 }]}>}
           {/* Curved Background */}
           <View style={styles.curvedBg} />
 
@@ -240,7 +244,8 @@ const styles = StyleSheet.create({
     right: -20,
     height: 340,
     backgroundColor: "#ff7b96",
-    borderRadius: "0 0 40% 40%",
+    borderBottomLeftRadius: 120,
+    borderBottomRightRadius: 120,
   },
 
   // Brand
@@ -516,10 +521,7 @@ const styles = StyleSheet.create({
     padding: 14,
     alignItems: "center",
     marginBottom: 24,
-    shadowColor: "#ff6b8a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: "0 4px 8px rgba(255,107,138,0.3)",
     elevation: 4,
   },
   loginButtonDisabled: {
@@ -563,10 +565,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    boxShadow: "0 2px 4px rgba(0,0,0,0.06)",
     elevation: 2,
   },
   socialIcon: {

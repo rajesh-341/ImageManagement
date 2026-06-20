@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
-  Image, Dimensions, Platform, PanResponder,
+  Image, useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
+import OptimizedImage from "../components/OptimizedImage";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
@@ -13,16 +14,16 @@ import FilterSidebar from "../components/FilterSidebar";
 import UpdateService from "../services/updateService";
 import { UPLOAD_ROLES, SIZE_UNIT_OPTIONS } from "../utils/constants";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_GAP = 12;
-const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
-const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
 
 const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const numColumns = SCREEN_WIDTH >= 1024 ? 4 : SCREEN_WIDTH >= 768 ? 3 : 2;
+  const cardWidth = (SCREEN_WIDTH - CARD_GAP * (numColumns + 1)) / numColumns;
   const [user, setUser] = useState(null);
   const [allImages, setAllImages] = useState([]);
   const [filteredImages, setFilteredImages] = useState([]);
@@ -84,6 +85,10 @@ function HomeScreen({ navigation }) {
 
   const handleUpdateNow = async () => {
     if (!updateInfo?.apkUrl) return;
+    if (Platform.OS === "web") {
+      Alert.alert("Not Available", "Updates are only available on the Android app.");
+      return;
+    }
     setUpdateDownloading(true);
     setUpdateProgress(0);
     try {
@@ -254,6 +259,8 @@ function HomeScreen({ navigation }) {
         await offlineStorage.storeFavourites(favs || []);
         const folders = await ApiService.getFolders();
         await offlineStorage.storeFolders(folders || []);
+        const favFolders = await ApiService.getFavoriteFolders();
+        await offlineStorage.storeFavouriteFolders(favFolders || []);
       } catch (err) {
         Alert.alert("Download Failed", err.message);
       } finally {
@@ -335,12 +342,12 @@ function HomeScreen({ navigation }) {
     const isFav = favouriteIds.has(item.id);
 
     return (
-      <View style={styles.imageCard}>
+      <View style={[styles.imageCard, { width: cardWidth }]}>
         <TouchableOpacity onPress={() => { imagesRef.current = activeFilters ? filteredImages : allImages; setLightboxIndex(index); setLightboxVisible(true); }} activeOpacity={0.9}>
           {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={styles.imageCardImg} resizeMode="cover" />
+            <OptimizedImage source={{ uri: imgUrl }} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
           ) : (
-            <View style={[styles.imageCardImg, styles.imagePlaceholder]}>
+            <View style={[styles.imageCardImg, styles.imagePlaceholder, { height: cardWidth * 0.75 }]}>
               <Text style={styles.placeholderText}>No Image</Text>
             </View>
           )}
@@ -623,10 +630,11 @@ function HomeScreen({ navigation }) {
 
           {currentLightboxImage?.url ? (
             <>
-              <Image
+              <OptimizedImage
                 source={{ uri: currentLightboxImage.url }}
                 style={styles.lightboxImg}
                 resizeMode="contain"
+                lazy={false}
               />
 
               {/* Navigation arrows */}
@@ -732,42 +740,41 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   // Navbar
   navbar: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
   },
   navbarTitle: { fontSize: 18, fontWeight: "700", color: "#ff6b8a" },
-  navbarRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  navBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#f3f4f6" },
-  navBtnText: { fontSize: 13, fontWeight: "600", color: "#374151" },
-  userText: { fontSize: 13, color: "#6b7280", maxWidth: 100 },
+  navbarRight: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  navBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "#f3f4f6" },
+  navBtnText: { fontSize: 12, fontWeight: "600", color: "#374151" },
+  userText: { fontSize: 12, color: "#6b7280", maxWidth: 80 },
   logoutText: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
   // Page
   page: { flex: 1 },
   actionBar: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 12, paddingVertical: 10, gap: 8,
   },
-  actionBarBtns: { flexDirection: "row", gap: 8 },
-  pageTitle: { fontSize: 22, fontWeight: "700", color: "#1a1a1a" },
-  filterToggleBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#f3f4f6" },
-  filterToggleText: { fontSize: 14, fontWeight: "600", color: "#374151" },
-  addBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#ff6b8a" },
-  addBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  actionBarBtns: { flexDirection: "row", gap: 6 },
+  pageTitle: { fontSize: 20, fontWeight: "700", color: "#1a1a1a" },
+  filterToggleBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: "#f3f4f6" },
+  filterToggleText: { fontSize: 13, fontWeight: "600", color: "#374151" },
+  addBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: "#ff6b8a" },
+  addBtnText: { fontSize: 13, fontWeight: "600", color: "#fff" },
   // Grid
   grid: { paddingHorizontal: CARD_GAP, paddingBottom: 24 },
   gridRow: { gap: CARD_GAP, marginBottom: CARD_GAP },
   // Image Card
   imageCard: {
-    width: cardWidth, backgroundColor: "#fff", borderRadius: 12, overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, position: "relative",
+    backgroundColor: "#fff", borderRadius: 10, overflow: "hidden",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.05)", elevation: 2, position: "relative",
   },
-  imageCardImg: { width: "100%", height: cardWidth * 0.75 },
+  imageCardImg: { width: "100%" },
   imagePlaceholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
-  placeholderText: { color: "#9ca3af", fontSize: 14 },
-  imageCardContent: { padding: 10 },
-  imageCardTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a1a" },
+  placeholderText: { color: "#9ca3af", fontSize: 13 },
+  imageCardContent: { padding: 8 },
+  imageCardTitle: { fontSize: 13, fontWeight: "600", color: "#1a1a1a" },
   favToggleOnCard: {
     position: "absolute", top: 8, right: 8, width: 32, height: 32,
     borderRadius: 16, backgroundColor: "rgba(255,255,255,0.9)",
@@ -807,7 +814,7 @@ const styles = StyleSheet.create({
   uploadModal: { flex: 1, backgroundColor: "#f5f5f5" },
   uploadTabs: { flexDirection: "row", margin: 16, borderRadius: 12, backgroundColor: "#e5e7eb", padding: 3 },
   uploadTab: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center" },
-  uploadTabActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  uploadTabActive: { backgroundColor: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.1)", elevation: 2 },
   uploadTabText: { fontSize: 14, fontWeight: "500", color: "#6b7280" },
   uploadTabTextActive: { color: "#ff6b8a", fontWeight: "600" },
   uploadForm: { flex: 1, paddingHorizontal: 16 },

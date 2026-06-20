@@ -17,6 +17,7 @@ class ApiService {
 
     const config = {
       ...options,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...(token && { Authorization: `Bearer ${token}` }),
@@ -296,17 +297,50 @@ class ApiService {
   }
 
   async getFavoriteFolders() {
-    return this.request("/favorites/folders");
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      const cached = await offlineStorage.getFavouriteFolders();
+      if (cached && cached.length > 0) return cached;
+    }
+    const data = await this.request("/favorites/folders");
+    const folders = Array.isArray(data) ? data : data.folders || data || [];
+    await offlineStorage.storeFavouriteFolders(folders);
+    return folders;
   }
 
   async createFavoriteFolder(folderName, description = "") {
-    return this.request("/favorites/folders", {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      const tempId = `offline_${Date.now()}`;
+      const newFolder = { id: tempId, name: folderName, description, _offline: true };
+      const folders = await offlineStorage.getFavouriteFolders();
+      folders.push(newFolder);
+      await offlineStorage.storeFavouriteFolders(folders);
+      await offlineStorage.addToSyncQueue({
+        type: "create_favorite_folder",
+        payload: { folderName, description },
+      });
+      return newFolder;
+    }
+    const result = await this.request("/favorites/folders", {
       method: "POST",
       body: JSON.stringify({ folderName, description }),
     });
+    const folders = await offlineStorage.getFavouriteFolders();
+    folders.push(result.folder || result);
+    await offlineStorage.storeFavouriteFolders(folders);
+    return result;
   }
 
   async addImagesToFavouriteFolder(folderId, imageIds) {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "add_to_favourite_folder",
+        payload: { folderId, imageIds },
+      });
+      return { success: true };
+    }
     return this.request("/favorites/folder-images/batch", {
       method: "POST",
       body: JSON.stringify({ folderId, imageIds }),
@@ -314,10 +348,55 @@ class ApiService {
   }
 
   async removeImageFromFavouriteFolder(folderId, imageId) {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "remove_from_favourite_folder",
+        payload: { folderId, imageId },
+      });
+      return { success: true };
+    }
     return this.request("/favorites/folder-images", {
       method: "DELETE",
       body: JSON.stringify({ folderId, imageId }),
     });
+  }
+
+  async processSyncQueue() {
+    const queue = await offlineStorage.getSyncQueue();
+    if (queue.length === 0) return;
+
+    const results = { success: 0, failed: 0, errors: [] };
+    for (const item of queue) {
+      try {
+        switch (item.type) {
+          case "create_favorite_folder":
+            await this.request("/favorites/folders", {
+              method: "POST",
+              body: JSON.stringify(item.payload),
+            });
+            break;
+          case "add_to_favourite_folder":
+            await this.request("/favorites/folder-images/batch", {
+              method: "POST",
+              body: JSON.stringify(item.payload),
+            });
+            break;
+          case "remove_from_favourite_folder":
+            await this.request("/favorites/folder-images", {
+              method: "DELETE",
+              body: JSON.stringify(item.payload),
+            });
+            break;
+        }
+        results.success++;
+      } catch (e) {
+        results.failed++;
+        results.errors.push({ action: item.type, error: e.message });
+      }
+    }
+    await offlineStorage.clearSyncQueue();
+    return results;
   }
 }
 

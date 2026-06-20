@@ -81,6 +81,7 @@ const login = async (req, res) => {
 
       return res.json({
         success: true,
+        token,
         user: {
           displayName: empDetails.employee_name,
           role: empDetails.role,

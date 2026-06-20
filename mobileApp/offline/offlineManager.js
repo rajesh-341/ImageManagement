@@ -194,6 +194,21 @@ class OfflineManager {
       console.warn("Failed to sync folders:", e);
     }
 
+    // Fetch and store favourite folders
+    try {
+      const favFolders = await apiService.getFavoriteFolders();
+      await offlineStorage.storeFavouriteFolders(favFolders || []);
+    } catch (e) {
+      console.warn("Failed to sync favourite folders:", e);
+    }
+
+    // Process any pending sync queue
+    try {
+      await apiService.processSyncQueue();
+    } catch (e) {
+      console.warn("Failed to process sync queue:", e);
+    }
+
     await offlineStorage.setLastSync(new Date().toISOString());
   }
 

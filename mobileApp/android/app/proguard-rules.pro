@@ -1,10 +1,24 @@
-# Add project specific ProGuard rules here.
-# By default, the flags in this file are appended to flags specified
-# in /usr/local/Cellar/android-sdk/24.3.3/tools/proguard/proguard-android.txt
-# You can edit the include path and order by changing the proguardFiles
-# directive in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# React Native
+-keep class com.facebook.react.** { *; }
+-keep class com.facebook.hermes.** { *; }
+-keep class com.facebook.jni.** { *; }
 
-# Add any project specific keep options here:
+# Keep native modules
+-keep public class com.mobileapp.** { *; }
+
+# Keep annotations
+-keepattributes *Annotation*
+-keepattributes SourceFile,LineNumberTable
+
+# Keep JS interface methods
+-keepclassmembers class * {
+    @com.facebook.react.bridge.ReactMethod *;
+    @com.facebook.react.bridge.ModuleMethod *;
+}
+
+# Hermes
+-keep class com.facebook.hermes.unicode.** { *; }
+
+# Keep okhttp/okio (used by fetch)
+-dontwarn okhttp3.**
+-dontwarn okio.**

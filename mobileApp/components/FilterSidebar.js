@@ -1,14 +1,13 @@
 import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, TextInput,
-  StyleSheet, Modal, Dimensions, Platform,
+  StyleSheet, Modal, useWindowDimensions, Platform,
 } from "react-native";
 import { COLORS, DECOR_TYPES, VENUES, EVENT_TYPES, FLOWER_TYPES } from "../utils/constants";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const isTablet = SCREEN_WIDTH >= 768;
-
 function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterChange }) {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const isTablet = SCREEN_WIDTH >= 768;
   const [selectedColors, setSelectedColors] = useState(filters?.colors || []);
   const [selectedVenues, setSelectedVenues] = useState(filters?.venues || []);
   const [selectedDecorTypes, setSelectedDecorTypes] = useState(filters?.decorTypes || []);
@@ -240,10 +239,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
   },
-  title: { fontSize: 20, fontWeight: "700", color: "#1a1a1a" },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
-  closeBtnText: { fontSize: 20, color: "#6b7280", fontWeight: "600" },
-  content: { flex: 1, padding: 20 },
+  title: { fontSize: 18, fontWeight: "700", color: "#1a1a1a" },
+  closeBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  closeBtnText: { fontSize: 18, color: "#6b7280", fontWeight: "600" },
+  content: { flex: 1, padding: 16 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 14, fontWeight: "600", color: "#374151", marginBottom: 8 },
   input: {

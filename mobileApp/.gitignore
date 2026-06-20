@@ -66,6 +66,13 @@ yarn-error.log
 # testing
 /coverage
 
+# Web build output
+web/dist/
+webpack.log
+
+# IDE settings
+android/.settings/
+
 # Yarn
 .yarn/*
 !.yarn/patches
