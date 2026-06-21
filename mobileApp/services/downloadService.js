@@ -86,6 +86,27 @@ class DownloadService {
     throw new Error(`Download failed with status ${result.statusCode}`);
   }
 
+  async downloadMultipleFoldersAsZip(folderIds, destination) {
+    const token = await offlineStorage.getToken();
+    const dest = destination || DEFAULT_DOWNLOAD_DIR;
+    const dirExists = await RNFS.exists(dest);
+    if (!dirExists) await RNFS.mkdir(dest);
+    const filePath = `${dest}/Favourite_zip_${Date.now()}.zip`;
+    const url = `${API_BASE_URL}/download-favorite-folders`;
+    const result = await RNFS.downloadFile({
+      fromUrl: url,
+      toFile: filePath,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ folderIds }),
+      background: true,
+    }).promise;
+    if (result.statusCode === 200) return { status: "downloaded", filePath };
+    throw new Error(`Download failed with status ${result.statusCode}`);
+  }
+
   async downloadMultipleImages(
     images,
     getImgUrlFn,

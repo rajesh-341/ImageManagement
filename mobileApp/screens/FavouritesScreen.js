@@ -400,21 +400,11 @@ function FavouritesScreen({ navigation }) {
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     setDownloading(true);
-    setDownloadProgress({ total: selectedFolders.length, completed: 0, phase: "Downloading folders as ZIP..." });
+    setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folders as ZIP..." });
     try {
-      const results = { downloaded: [], failed: [] };
-      for (const folder of selectedFolders) {
-        try {
-          const result = await downloadService.downloadFolderAsZip(folder.id, dest);
-          results.downloaded.push(folder.name);
-        } catch (e) {
-          results.failed.push(folder.name);
-        }
-      }
-      const msg = [];
-      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} folder(s) downloaded as ZIP`);
-      if (results.failed.length > 0) msg.push(`${results.failed.length} folder(s) failed`);
-      Alert.alert("Download Complete", msg.join("\n"));
+      const folderIds = selectedFolders.map(f => f.id);
+      const result = await downloadService.downloadMultipleFoldersAsZip(folderIds, dest);
+      Alert.alert("Download Complete", `Folders saved as ZIP:\n${result.filePath}`);
       setSelectMode(false);
       setSelectedIds(new Set());
     } catch (err) {
@@ -547,6 +537,7 @@ function FavouritesScreen({ navigation }) {
 
     return (
       <ImageCard
+        key={`ic-${item.id}-${selected}`}
         item={item}
         imgUrl={imgUrl}
         cardWidth={cardWidth}

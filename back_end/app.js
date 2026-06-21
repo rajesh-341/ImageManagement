@@ -299,6 +299,9 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
     const folderId = parseInt(req.params.folderId, 10);
     if (isNaN(folderId)) return res.status(400).json({ message: "Invalid folder ID" });
 
+    const folderResult = await pool.query("SELECT name FROM folders WHERE id = $1", [folderId]);
+    const folderName = folderResult.rows.length > 0 ? folderResult.rows[0].name : `folder_${folderId}`;
+
     const mappingResult = await pool.query(
       `SELECT im.id, im.image_data FROM image_management im
        INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id
@@ -309,6 +312,7 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
     if (mappingResult.rows.length === 0) return res.status(404).json({ message: "No images found in this folder" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
+    const safeFolderName = sanitize(folderName);
     const archive = new ZipArchive({ zlib: { level: 0 } });
     archive.on("error", (err) => {
       console.error("[Download-Favorite-Folder] Archive error:", err.message);
@@ -350,7 +354,97 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
       const batchResults = await Promise.allSettled(batch.map(fetchWithRetry));
       for (const r of batchResults) {
         if (r.status === "fulfilled" && r.value) {
-          archive.append(r.value.buffer, { name: r.value.filename });
+          archive.append(r.value.buffer, { name: `${safeFolderName}/${r.value.filename}` });
+        }
+      }
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    if (!res.headersSent) {
+      res.status(500).json({ message: error.message || "Download failed" });
+    }
+  }
+});
+
+app.post("/api/download-favorite-folders", verifyToken, async (req, res) => {
+  try {
+    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
+    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
+    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
+    if (!allowed) return res.status(403).json({ message: "Access denied" });
+
+    const { folderIds } = req.body;
+    if (!folderIds || !Array.isArray(folderIds) || folderIds.length === 0) {
+      return res.status(400).json({ message: "folderIds array is required" });
+    }
+
+    const archive = new ZipArchive({ zlib: { level: 0 } });
+    archive.on("error", (err) => console.error("[Download-Favorite-Folders] Archive error:", err.message));
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="Favourite_zip_${Date.now()}.zip"`);
+    archive.pipe(res);
+
+    const fetchWithRetry = async (row, folderPrefix) => {
+      const imgData = typeof row.image_data === "string" ? JSON.parse(row.image_data) : row.image_data;
+      if (!imgData || !imgData.imageUrl) return null;
+
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try {
+          const imageResponse = await fetch(imgData.imageUrl, { signal: AbortSignal.timeout(15000) });
+          if (!imageResponse.ok) continue;
+
+          const buffer = Buffer.from(await imageResponse.arrayBuffer());
+          if (buffer.length < 100) continue;
+
+          const urlParts = imgData.imageUrl.split("/");
+          let filename = urlParts[urlParts.length - 1].split("?")[0];
+          if (!filename || !filename.includes(".")) filename = `image_${row.id}.jpg`;
+          return { buffer, filename, folderPrefix };
+        } catch (err) {
+          if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+      }
+      console.warn(`[Download-Favorite-Folders] Skipping image ${row.id} after 3 attempts`);
+      return null;
+    };
+
+    const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
+    const CONCURRENCY = 20;
+    const allTasks = [];
+
+    for (const fId of folderIds) {
+      const fIdNum = parseInt(fId, 10);
+      if (isNaN(fIdNum)) continue;
+
+      const folderResult = await pool.query("SELECT name FROM folders WHERE id = $1", [fIdNum]);
+      const folderName = folderResult.rows.length > 0 ? folderResult.rows[0].name : `folder_${fIdNum}`;
+      const safeName = sanitize(folderName);
+
+      const mappingResult = await pool.query(
+        `SELECT im.id, im.image_data FROM image_management im
+         INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id
+         WHERE ffm.folder_id = $1 AND ffm.employee_id = $2
+         ORDER BY im.id`,
+        [fIdNum, req.user.userId]
+      );
+
+      for (const row of mappingResult.rows) {
+        allTasks.push(fetchWithRetry(row, safeName));
+      }
+    }
+
+    if (allTasks.length === 0) {
+      return res.status(404).json({ message: "No images found in the selected folders" });
+    }
+
+    for (let i = 0; i < allTasks.length; i += CONCURRENCY) {
+      const batch = allTasks.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.allSettled(batch);
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value) {
+          archive.append(r.value.buffer, { name: `Favourite_zip/${r.value.folderPrefix}/${r.value.filename}` });
         }
       }
     }
