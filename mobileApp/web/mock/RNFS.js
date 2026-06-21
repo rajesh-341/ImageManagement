@@ -1,5 +1,7 @@
 const RNFS = {
   DocumentDirectoryPath: '/documents',
+  DownloadDirectoryPath: '/downloads',
+  ExternalStorageDirectoryPath: '/storage/emulated/0',
   CachesDirectoryPath: '/caches',
   readDir: async () => [],
   readFile: async () => '',

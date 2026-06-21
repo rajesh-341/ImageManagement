@@ -21,7 +21,6 @@ module.exports = {
     alias: {
       'react-native$': 'react-native-web',
       'react-native-screens': path.resolve(__dirname, 'web/mock/Screens.js'),
-      'react-native-document-picker': path.resolve(__dirname, 'web/mock/DocumentPicker.js'),
       'react-native-fs': path.resolve(__dirname, 'web/mock/RNFS.js'),
       'react-native-safe-area-context': path.resolve(__dirname, 'web/mock/SafeAreaContext.js'),
       'react-native-image-picker': path.resolve(__dirname, 'web/mock/ImagePicker.js'),
@@ -60,10 +59,6 @@ module.exports = {
     ],
   },
   plugins: [
-    new webpack.NormalModuleReplacementPlugin(
-      /react-native-document-picker/,
-      path.resolve(__dirname, 'web/mock/DocumentPicker.js'),
-    ),
     new HtmlWebpackPlugin({
       template: './web/index.html',
     }),

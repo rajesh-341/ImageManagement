@@ -1,6 +1,7 @@
-import { Platform, Alert } from "react-native";
-import DocumentPicker from "react-native-document-picker";
+import { Platform, Alert, NativeModules } from "react-native";
 import RNFS from "react-native-fs";
+
+const { DirectoryPicker } = NativeModules;
 
 export const DEFAULT_DOWNLOAD_PATH = Platform.select({
   android: RNFS.DownloadDirectoryPath,
@@ -12,9 +13,16 @@ export async function pickDownloadDirectory() {
     return { path: null, cancelled: false };
   }
 
+  if (!DirectoryPicker) {
+    Alert.alert("Error", "DirectoryPicker native module is not available.");
+    return { path: null, cancelled: false };
+  }
+
   try {
-    const result = await DocumentPicker.pickDirectory();
-    const safUri = result.uri;
+    const safUri = await DirectoryPicker.pickDirectory();
+    if (!safUri) {
+      return { path: null, cancelled: true };
+    }
 
     const path = safUriToPath(safUri);
     if (!path) {
@@ -32,9 +40,6 @@ export async function pickDownloadDirectory() {
 
     return { path, cancelled: false };
   } catch (err) {
-    if (DocumentPicker.isCancel(err)) {
-      return { path: null, cancelled: true };
-    }
     Alert.alert("Selection Error", err.message || "Failed to pick directory.");
     return { path: null, cancelled: false };
   }
