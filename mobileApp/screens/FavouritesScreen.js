@@ -5,7 +5,9 @@ import {
   useWindowDimensions, Platform, PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import RNFS from "react-native-fs";
 import OptimizedImage from "../components/OptimizedImage";
+import ImageCard from "../components/ImageCard";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
@@ -45,6 +47,8 @@ function FavouritesScreen({ navigation }) {
   const [newFolderName, setNewFolderName] = useState("");
   const [downloadDestination, setDownloadDestination] = useState("");
   const [showDestInput, setShowDestInput] = useState(false);
+  const [showPathModal, setShowPathModal] = useState(false);
+  const [pendingDownload, setPendingDownload] = useState(null);
 
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -252,18 +256,29 @@ function FavouritesScreen({ navigation }) {
     }
   };
 
-  const doDownload = async (images) => {
-    if (images.length === 0) {
-      Alert.alert("No Images", "No images to download.");
-      return;
-    }
+  const askDownloadPath = () => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        "Download Location",
+        "Choose where to save the downloaded images.",
+        [
+          { text: "Default (Downloads)", onPress: () => resolve(null) },
+          { text: "Custom Path", onPress: () => resolve("custom") },
+          { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+        ]
+      );
+    });
+  };
+
+  const executeDownload = async (images, destOverride) => {
+    const dest = destOverride || null;
     setDownloading(true);
     setDownloadProgress({ total: images.length, completed: 0 });
     try {
       const results = await downloadService.downloadMultipleImages(
         images,
         (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        downloadDestination || null,
+        dest,
         (progress, completed) => setDownloadProgress({ total: images.length, completed }),
       );
       const msg = [];
@@ -279,6 +294,39 @@ function FavouritesScreen({ navigation }) {
       setDownloading(false);
       setDownloadProgress(null);
     }
+  };
+
+  const confirmDownloadPath = async () => {
+    setShowPathModal(false);
+    if (!pendingDownload) return;
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) { setPendingDownload(null); return; }
+    const dest = downloadDestination || null;
+    if (pendingDownload.type === "folders") {
+      await executeFolderDownload(pendingDownload.folders, dest);
+    } else if (pendingDownload.type === "singleFolder") {
+      await executeSingleFolderDownload(pendingDownload.folder, dest);
+    } else {
+      await executeDownload(pendingDownload, dest);
+    }
+    setPendingDownload(null);
+  };
+
+  const doDownload = async (images) => {
+    if (images.length === 0) {
+      Alert.alert("No Images", "No images to download.");
+      return;
+    }
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return;
+    if (choice === "custom") {
+      setPendingDownload(images);
+      setShowPathModal(true);
+      return;
+    }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    await executeDownload(images);
   };
 
   const handleDownloadSelectedImages = async () => {
@@ -297,11 +345,24 @@ function FavouritesScreen({ navigation }) {
       return;
     }
     const selectedFolders = favouriteFolders.filter(f => selectedIds.has(f.id));
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return;
+    if (choice === "custom") {
+      setPendingDownload({ type: "folders", folders: selectedFolders });
+      setShowPathModal(true);
+      return;
+    }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    await executeFolderDownload(selectedFolders, downloadDestination || null);
+  };
+
+  const executeFolderDownload = async (folders, dest) => {
     setDownloading(true);
-    setDownloadProgress({ total: selectedFolders.length, completed: 0, phase: "Fetching folder images..." });
+    setDownloadProgress({ total: folders.length, completed: 0, phase: "Fetching folder images..." });
     try {
       const allImages = [];
-      for (const folder of selectedFolders) {
+      for (const folder of folders) {
         const images = await ApiService.getFavorites(folder);
         allImages.push(...(images || []));
       }
@@ -309,7 +370,7 @@ function FavouritesScreen({ navigation }) {
       const results = await downloadService.downloadMultipleImages(
         allImages,
         (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        downloadDestination || null,
+        dest,
         (progress, completed) => setDownloadProgress({ total: allImages.length, completed, phase: `Downloading ${completed} of ${allImages.length}...` }),
       );
       const msg = [];
@@ -331,7 +392,7 @@ function FavouritesScreen({ navigation }) {
     await doDownload([img]);
   };
 
-  const handleDownloadFolderImages = async (folder) => {
+  const executeSingleFolderDownload = async (folder, dest) => {
     setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Fetching folder images..." });
     try {
@@ -344,7 +405,7 @@ function FavouritesScreen({ navigation }) {
       const results = await downloadService.downloadMultipleImages(
         images,
         (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        downloadDestination || null,
+        dest,
         (progress, completed) => setDownloadProgress({ total: images.length, completed, phase: `Downloading ${completed} of ${images.length}...` }),
       );
       const msg = [];
@@ -358,6 +419,19 @@ function FavouritesScreen({ navigation }) {
       setDownloading(false);
       setDownloadProgress(null);
     }
+  };
+
+  const handleDownloadFolderImages = async (folder) => {
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return;
+    if (choice === "custom") {
+      setPendingDownload({ type: "singleFolder", folder });
+      setShowPathModal(true);
+      return;
+    }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    await executeSingleFolderDownload(folder, downloadDestination || null);
   };
 
   const handleApplyFilters = async (filterData) => {
@@ -451,17 +525,22 @@ function FavouritesScreen({ navigation }) {
     return null;
   };
 
-  const isSelected = (id) => selectedIds.has(id);
-
-  const renderImageCard = ({ item, index }) => {
+  const renderImageCard = useCallback(({ item, index }) => {
     const imgUrl = offlineMode ? getEffectiveImgUrl(item) : getImgUrl(item);
     const isFav = favouriteImages.some(img => img.id === item.id);
-    const selected = isSelected(item.id);
+    const selected = selectedIds.has(item.id);
+    const showMove = !!currentFolder && !selectMode;
     const currentDisplayImages = activeFilters ? filteredImages : favouriteImages;
 
     return (
-      <TouchableOpacity
-        activeOpacity={0.95}
+      <ImageCard
+        item={item}
+        imgUrl={imgUrl}
+        cardWidth={cardWidth}
+        selected={selected}
+        selectMode={selectMode}
+        isFav={isFav}
+        showMove={showMove}
         onPress={() => {
           if (selectMode) {
             toggleSelect(item.id);
@@ -477,57 +556,19 @@ function FavouritesScreen({ navigation }) {
             setSelectedIds(new Set([item.id]));
           }
         }}
-      >
-        <View style={[styles.imageCard, { width: cardWidth }, selected && styles.imageCardSelected]}>
-          {imgUrl ? (
-            <OptimizedImage uri={imgUrl} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
-          ) : (
-            <View style={[styles.imageCardImg, styles.imagePlaceholder, { height: cardWidth * 0.75 }]}>
-              <Text style={styles.placeholderText}>No Image</Text>
-            </View>
-          )}
-
-          {selectMode && (
-            <View style={[styles.selectCheckbox, selected && styles.selectCheckboxActive]}>
-              <Text style={styles.selectCheckboxText}>{selected ? "\u2713" : ""}</Text>
-            </View>
-          )}
-
-          {!selectMode && (
-            <TouchableOpacity style={styles.favToggle} onPress={() => handleToggleFavourite(item.id)}>
-              <Text style={[styles.favIcon, isFav && styles.favIconActive]}>
-                {isFav ? "\u2665" : "\u2661"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.imageCardContent}>
-            <Text style={styles.imageCardTitle} numberOfLines={1}>
-              {item.image_data?.designName || "Untitled"}
-            </Text>
-            <View style={styles.cardActions}>
-              {!selectMode && currentFolder && (
-                <TouchableOpacity style={styles.moveBtn} onPress={() => {
-                  setSelectedImageForMove(item.id);
-                  setShowMoveModal(true);
-                }}>
-                  <Text style={styles.moveBtnText}>Move</Text>
-                </TouchableOpacity>
-              )}
-              {!selectMode && (
-                <TouchableOpacity style={styles.dlBtn} onPress={() => handleDownloadSingleImage(item)}>
-                  <Text style={styles.dlBtnText}>Download</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
+        onToggleFav={() => handleToggleFavourite(item.id)}
+        onDownload={() => handleDownloadSingleImage(item)}
+        onMove={() => {
+          setSelectedImageForMove(item.id);
+          setShowMoveModal(true);
+        }}
+      />
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offlineMode, favouriteImages, selectedIds, selectMode, cardWidth, currentFolder, activeFilters, filteredImages]);
 
   const renderFolderItem = ({ item }) => {
-    const selected = isSelected(item.id);
+    const selected = selectedIds.has(item.id);
 
     return (
       <TouchableOpacity
@@ -837,6 +878,41 @@ function FavouritesScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Path Picker Modal */}
+      <Modal visible={showPathModal} transparent animationType="fade" onRequestClose={() => { setShowPathModal(false); setPendingDownload(null); }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Download Path</Text>
+              <TouchableOpacity onPress={() => { setShowPathModal(false); setPendingDownload(null); }}>
+                <Text style={styles.modalClose}>{"\u00D7"}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>Custom download path (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={downloadDestination}
+                onChangeText={setDownloadDestination}
+                placeholder={RNFS.DownloadDirectoryPath}
+                placeholderTextColor="#9ca3af"
+              />
+              <Text style={styles.pathHint}>
+                Leave empty to use the default Downloads folder.
+              </Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowPathModal(false); setPendingDownload(null); }}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryBtn} onPress={confirmDownloadPath}>
+                <Text style={styles.primaryBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Download Progress Modal */}
       <Modal visible={downloading} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -1032,6 +1108,7 @@ const styles = StyleSheet.create({
   primaryBtnSmall: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: "#ff6b8a", alignItems: "center" },
   primaryBtnTextSmall: { fontSize: 14, fontWeight: "600", color: "#fff" },
   dlProgressText: { fontSize: 15, color: "#374151", marginTop: 16, textAlign: "center" },
+  pathHint: { fontSize: 12, color: "#9ca3af", marginTop: 6 },
   destRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   destInput: { flex: 1, borderWidth: 1, borderColor: "#d1d5db", borderRadius: 6, padding: 4, fontSize: 12, color: "#1a1a1a", backgroundColor: "#f9fafb", height: 28 },
   destDone: { fontSize: 12, fontWeight: "600", color: "#ff6b8a", paddingHorizontal: 6 },

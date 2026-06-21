@@ -6,7 +6,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
+import RNFS from "react-native-fs";
 import OptimizedImage from "../components/OptimizedImage";
+import ImageCard from "../components/ImageCard";
 import downloadService from "../services/downloadService";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
@@ -58,6 +60,9 @@ function HomeScreen({ navigation }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [downloadDestination, setDownloadDestination] = useState("");
+  const [showPathInput, setShowPathInput] = useState(false);
+  const [pendingDownload, setPendingDownload] = useState(null);
 
   useEffect(() => {
     const init = async () => {
@@ -364,28 +369,81 @@ function HomeScreen({ navigation }) {
     });
   };
 
+  const askDownloadPath = () => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        "Download Location",
+        "Choose where to save the downloaded images.",
+        [
+          { text: "Default (Downloads)", onPress: () => resolve(null) },
+          { text: "Custom Path", onPress: () => resolve("custom") },
+          { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+        ]
+      );
+    });
+  };
+
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return;
+    if (choice === "custom") {
+      setPendingDownload("selected");
+      setShowPathInput(true);
+      return;
+    }
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     const displayImages = activeFilters ? filteredImages : allImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
+    await executeDownload(toDownload);
+  };
+
+  const handleDownloadSingle = async (img) => {
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return;
+    if (choice === "custom") {
+      setPendingDownload(img);
+      setShowPathInput(true);
+      return;
+    }
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    await executeDownload([img]);
+  };
+
+  const executeDownload = async (images) => {
+    const dest = downloadDestination || null;
     setDownloading(true);
-    setDownloadProgress({ total: toDownload.length, completed: 0 });
+    if (images.length > 1) {
+      setDownloadProgress({ total: images.length, completed: 0 });
+    }
     try {
-      const results = await downloadService.downloadMultipleImages(
-        toDownload,
-        (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        null,
-        (progress, completed) => setDownloadProgress({ total: toDownload.length, completed }),
-      );
-      const msg = [];
-      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
-      if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
-      if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
-      Alert.alert("Download Complete", msg.join("\n"));
-      setSelectMode(false);
-      setSelectedIds(new Set());
+      if (images.length === 1) {
+        const img = images[0];
+        const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
+        const fileName = `${img.image_data?.designName || img.id}.jpg`;
+        const result = await downloadService.downloadSingleImage(img.id, remoteUrl, dest, fileName);
+        if (result.status === "exists") {
+          Alert.alert("Already Exists", "This image already exists in the download location.");
+        } else {
+          Alert.alert("Downloaded", `Image saved to ${result.filePath}`);
+        }
+      } else {
+        const results = await downloadService.downloadMultipleImages(
+          images,
+          (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
+          dest,
+          (progress, completed) => setDownloadProgress({ total: images.length, completed }),
+        );
+        const msg = [];
+        if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
+        if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
+        if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
+        Alert.alert("Download Complete", msg.join("\n"));
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
     } catch (err) {
       Alert.alert("Download Failed", err.message);
     } finally {
@@ -394,41 +452,40 @@ function HomeScreen({ navigation }) {
     }
   };
 
-  const handleDownloadSingle = async (img) => {
+  const confirmDownloadPath = async () => {
+    setShowPathInput(false);
+    if (!pendingDownload) return;
     const granted = await downloadService.requestStoragePermission();
-    if (!granted) return;
-    setDownloading(true);
-    try {
-      const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
-      const fileName = `${img.image_data?.designName || img.id}.jpg`;
-      const result = await downloadService.downloadSingleImage(img.id, remoteUrl, null, fileName);
-      if (result.status === "exists") {
-        Alert.alert("Already Exists", "This image already exists in the download location.");
-      } else {
-        Alert.alert("Downloaded", `Image saved to ${result.filePath}`);
-      }
-    } catch (err) {
-      Alert.alert("Download Failed", err.message);
-    } finally {
-      setDownloading(false);
+    if (!granted) { setPendingDownload(null); return; }
+    if (pendingDownload === "selected") {
+      const displayImages = activeFilters ? filteredImages : allImages;
+      const toDownload = displayImages.filter(img => selectedIds.has(img.id));
+      await executeDownload(toDownload);
+    } else {
+      await executeDownload([pendingDownload]);
     }
+    setPendingDownload(null);
   };
 
-  const isSelected = (id) => selectedIds.has(id);
-
-  const renderImageCard = ({ item, index, isFilteredView = false }) => {
+  const renderItem = useCallback(({ item, index }) => {
     const imgUrl = offlineMode ? getEffectiveImgUrl(item) : getImgUrl(item);
     const isFav = favouriteIds.has(item.id);
-    const selected = isSelected(item.id);
+    const selected = selectedIds.has(item.id);
+    const currentDisplayImages = activeFilters ? filteredImages : allImages;
 
     return (
-      <TouchableOpacity
-        activeOpacity={0.95}
+      <ImageCard
+        item={item}
+        imgUrl={imgUrl}
+        cardWidth={cardWidth}
+        selected={selected}
+        selectMode={selectMode}
+        isFav={isFav}
         onPress={() => {
           if (selectMode) {
             toggleSelectImage(item.id);
           } else {
-            imagesRef.current = activeFilters ? filteredImages : allImages;
+            imagesRef.current = currentDisplayImages;
             setLightboxIndex(index);
             setLightboxVisible(true);
           }
@@ -436,44 +493,12 @@ function HomeScreen({ navigation }) {
         onLongPress={() => {
           if (!selectMode) { setSelectMode(true); setSelectedIds(new Set([item.id])); }
         }}
-      >
-        <View style={[styles.imageCard, { width: cardWidth }, selected && styles.imageCardSelected]}>
-          {imgUrl ? (
-            <OptimizedImage uri={imgUrl} style={[styles.imageCardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
-          ) : (
-            <View style={[styles.imageCardImg, styles.imagePlaceholder, { height: cardWidth * 0.75 }]}>
-              <Text style={styles.placeholderText}>No Image</Text>
-            </View>
-          )}
-
-          {selectMode && (
-            <View style={[styles.selectCheckbox, selected && styles.selectCheckboxActive]}>
-              <Text style={styles.selectCheckboxText}>{selected ? "✓" : ""}</Text>
-            </View>
-          )}
-
-          {!selectMode && (
-            <TouchableOpacity style={styles.favToggleOnCard} onPress={() => handleToggleFavourite(item.id)}>
-              <Text style={[styles.favToggleText, isFav && styles.favToggleTextActive]}>
-                {isFav ? "♥" : "♡"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.imageCardContent}>
-            <Text style={styles.imageCardTitle} numberOfLines={1}>
-              {item.image_data?.designName || "Untitled"}
-            </Text>
-            {!selectMode && (
-              <TouchableOpacity style={styles.dlBtn} onPress={() => handleDownloadSingle(item)}>
-                <Text style={styles.dlBtnText}>Download</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+        onToggleFav={() => handleToggleFavourite(item.id)}
+        onDownload={() => handleDownloadSingle(item)}
+      />
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offlineMode, favouriteIds, selectedIds, selectMode, cardWidth, activeFilters, filteredImages, allImages]);
 
   const renderMainContent = () => {
     const displayImages = activeFilters ? filteredImages : allImages;
@@ -505,7 +530,7 @@ function HomeScreen({ navigation }) {
         ) : (
           <FlatList
             data={displayImages}
-            renderItem={(props) => renderImageCard({ ...props, isFilteredView: true })}
+            renderItem={renderItem}
             keyExtractor={item => item.id?.toString()}
             numColumns={numColumns}
             key={`img-${numColumns}`}
@@ -566,8 +591,8 @@ function HomeScreen({ navigation }) {
             <TouchableOpacity style={styles.selActionBtn} onPress={handleDownloadSelected}>
               <Text style={styles.selActionText}>Download</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.selActionBtn} onPress={() => { setSelectedIds(new Set()); }}>
-              <Text style={styles.selActionText}>Clear</Text>
+            <TouchableOpacity style={styles.selActionBtnClear} onPress={() => { setSelectedIds(new Set()); }}>
+              <Text style={styles.selActionClearText}>Clear</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -751,6 +776,41 @@ function HomeScreen({ navigation }) {
               </View>
             )}
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Path Picker Modal */}
+      <Modal visible={showPathInput && !downloading} transparent animationType="fade" onRequestClose={() => setShowPathInput(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Download Path</Text>
+              <TouchableOpacity onPress={() => { setShowPathInput(false); setPendingDownload(null); }}>
+                <Text style={styles.modalClose}>{"\u00D7"}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>Custom download path (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={downloadDestination}
+                onChangeText={setDownloadDestination}
+                placeholder={"Default: " + RNFS.DownloadDirectoryPath}
+                placeholderTextColor="#9ca3af"
+              />
+              <Text style={styles.pathHint}>
+                Leave empty to use the default Downloads folder.
+              </Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowPathInput(false); setPendingDownload(null); }}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryBtn} onPress={confirmDownloadPath}>
+                <Text style={styles.primaryBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -1033,10 +1093,13 @@ const styles = StyleSheet.create({
   selectionActions: { flexDirection: "row", gap: 8 },
   selActionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#ff6b8a" },
   selActionText: { fontSize: 13, fontWeight: "600", color: "#fff" },
+  selActionBtnClear: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: "#fee2e2" },
+  selActionClearText: { fontSize: 13, fontWeight: "600", color: "#dc2626" },
   dlBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: "#dbeafe", marginTop: 4, alignSelf: "flex-start" },
   dlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
   modalContent: { backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 400 },
   dlProgressText: { fontSize: 15, color: "#374151", marginTop: 16, textAlign: "center" },
+  pathHint: { fontSize: 12, color: "#9ca3af", marginTop: 6 },
 });
 
 export default HomeScreen;
