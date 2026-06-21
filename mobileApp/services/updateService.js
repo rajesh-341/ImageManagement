@@ -13,22 +13,78 @@ const APK_DOWNLOAD_PATH = `${RNFS.CachesDirectoryPath}/${APK_FILENAME}`;
 class UpdateService {
   async checkForUpdate() {
     if (Platform.OS === "web") return { available: false };
+
+    const skipVersion = await AsyncStorage.getItem(SKIP_VERSION_KEY);
+
+    const result = await this._checkFromLatestJson(skipVersion);
+    if (result) return result;
+
+    return this._checkFromGitHubApi(skipVersion);
+  }
+
+  async _checkFromLatestJson(skipVersion) {
+    const url = UPDATE_CONFIG.latestJsonUrl;
+    if (!url) return null;
+
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      const remoteVersionCode = data.versionCode;
+      if (!remoteVersionCode || !data.versionName || !data.apkUrl) return null;
+
+      if (
+        remoteVersionCode > CURRENT_APP_VERSION.versionCode &&
+        skipVersion !== String(remoteVersionCode)
+      ) {
+        return {
+          available: true,
+          versionCode: remoteVersionCode,
+          versionName: data.versionName,
+          apkUrl: data.apkUrl,
+          releaseNotes: "",
+          releaseUrl: data.releaseUrl || "",
+        };
+      }
+
+      return { available: false, message: "You're on the latest version." };
+    } catch {
+      return null;
+    }
+  }
+
+  async _checkFromGitHubApi(skipVersion) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(UPDATE_CONFIG.updateUrl, {
         headers: { Accept: "application/json" },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
-        if (response.status === 404) return { available: false };
+        if (response.status === 404) {
+          return { available: false, message: "No releases found on GitHub." };
+        }
+        if (response.status === 403) {
+          return { available: false, message: "GitHub API rate limit reached. Try again later." };
+        }
         throw new Error(`HTTP ${response.status}`);
       }
 
       const release = await response.json();
       const tagVersion = (release.tag_name || "").replace(/^v/, "");
-      if (!tagVersion) return { available: false };
+      if (!tagVersion) return { available: false, message: "Invalid release tag." };
 
       const remoteVersionCode = this.parseVersionCode(tagVersion);
-      const skipVersion = await AsyncStorage.getItem(SKIP_VERSION_KEY);
 
       if (
         remoteVersionCode > CURRENT_APP_VERSION.versionCode &&
@@ -48,16 +104,25 @@ class UpdateService {
         };
       }
 
-      return { available: false };
+      return { available: false, message: "You're on the latest version." };
     } catch (error) {
-      console.error("Update check failed:", error);
-      return { available: false, error };
+      console.error("GitHub API update check failed:", error);
+      const message = error.name === "AbortError"
+        ? "Update check timed out. Check your internet connection."
+        : `Update check failed: ${error.message}`;
+      return { available: false, error, message };
     }
   }
 
   parseVersionCode(versionName) {
-    const parts = versionName.split(".").map(Number);
-    return parts[0] * 10000 + (parts[1] || 0) * 100 + (parts[2] || 0);
+    const parts = versionName.split(".");
+    const major = parseInt(parts[0] || "0", 10);
+    const minor = parseInt(parts[1] || "0", 10);
+    const patch = parseInt(parts[2] || "0", 10);
+    if (patch >= 100000) {
+      return patch;
+    }
+    return major * 10000 + minor * 100 + patch;
   }
 
   async downloadUpdate(apkUrl, onProgress) {

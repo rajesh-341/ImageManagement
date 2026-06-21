@@ -11,6 +11,11 @@ const UPDATE_CONFIG = {
     return `https://api.github.com/repos/${this.GITHUB_OWNER}/${this.GITHUB_REPO}/releases/latest`;
   },
 
+  get latestJsonUrl() {
+    if (this.CUSTOM_UPDATE_URL) return null;
+    return `https://github.com/${this.GITHUB_OWNER}/${this.GITHUB_REPO}/releases/latest/download/latest.json`;
+  },
+
   get apkBaseUrl() {
     return `https://github.com/${this.GITHUB_OWNER}/${this.GITHUB_REPO}/releases/download`;
   },

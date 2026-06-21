@@ -52,6 +52,8 @@ function HomeScreen({ navigation }) {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateProgress, setUpdateProgress] = useState(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateError, setUpdateError] = useState(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
@@ -82,10 +84,17 @@ function HomeScreen({ navigation }) {
   }, [user]);
 
   const checkForUpdates = async () => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    setUpdateError(null);
+    setUpdateInfo(null);
     const result = await UpdateService.checkForUpdate();
     if (result.available) {
       setUpdateInfo(result);
+    } else if (result.message) {
+      setUpdateError(result.message);
     }
+    setUpdateChecking(false);
   };
 
   const handleUpdateNow = async () => {
@@ -534,6 +543,9 @@ function HomeScreen({ navigation }) {
               {selectMode ? "Cancel" : "Select"}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.navBtn} onPress={checkForUpdates} disabled={updateChecking}>
+            <Text style={styles.navBtnText}>{updateChecking ? "..." : "Updates"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={async () => { await ApiService.logout(); navigation.replace("Login"); }}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
@@ -858,6 +870,16 @@ function HomeScreen({ navigation }) {
         </Modal>
       )}
 
+      {/* Update Status Bar */}
+      {updateError && !updateInfo && (
+        <View style={styles.updateStatusBar}>
+          <Text style={styles.updateStatusText}>{updateError}</Text>
+          <TouchableOpacity onPress={checkForUpdates} disabled={updateChecking}>
+            <Text style={styles.updateRetryText}>{updateChecking ? "Checking..." : "Retry"}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
     </View>
   );
 }
@@ -876,6 +898,13 @@ const styles = StyleSheet.create({
   navBtnText: { fontSize: 12, fontWeight: "600", color: "#374151" },
   userText: { fontSize: 12, color: "#6b7280", maxWidth: 80 },
   logoutText: { fontSize: 13, fontWeight: "600", color: "#ef4444" },
+  updateStatusBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: "#fff3cd", borderBottomWidth: 1, borderBottomColor: "#e5e7eb",
+  },
+  updateStatusText: { fontSize: 12, color: "#856404", flex: 1 },
+  updateRetryText: { fontSize: 12, fontWeight: "700", color: "#ff6b8a", marginLeft: 8 },
   // Page
   page: { flex: 1 },
   actionBar: {
