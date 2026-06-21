@@ -36,7 +36,7 @@ const OptimizedImage = memo(({ uri, style, resizeMode = "cover", ...props }) => 
       {!loaded && <View style={[StyleSheet.absoluteFill, styles.skeleton]} />}
     </View>
   );
-});
+}, (prev, next) => prev.uri === next.uri && prev.resizeMode === next.resizeMode);
 
 const styles = StyleSheet.create({
   placeholder: {

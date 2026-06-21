@@ -1,9 +1,37 @@
 import RNFS from "react-native-fs";
-import { Platform } from "react-native";
+import { Platform, PermissionsAndroid, Alert } from "react-native";
 
-const DEFAULT_DOWNLOAD_DIR = `${RNFS.DocumentDirectoryPath}/Downloads`;
+const DEFAULT_DOWNLOAD_DIR = Platform.select({
+  android: RNFS.DownloadDirectoryPath,
+  ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
+});
 
 class DownloadService {
+  async requestStoragePermission() {
+    if (Platform.OS !== "android") return true;
+    try {
+      const apiLevel = Platform.Version;
+      if (apiLevel >= 33) return true;
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        {
+          title: "Storage Permission",
+          message: "This app needs storage access to save images to your device.",
+          buttonPositive: "Grant",
+          buttonNegative: "Deny",
+        }
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) return true;
+      Alert.alert(
+        "Permission Denied",
+        "Storage permission is required to save images. You can enable it later in Settings > Apps > ImageManagement > Permissions."
+      );
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   getDownloadPath(destination, imageId, fileName) {
     const dest = destination || DEFAULT_DOWNLOAD_DIR;
     return `${dest}/${fileName || `${imageId}.jpg`}`;
