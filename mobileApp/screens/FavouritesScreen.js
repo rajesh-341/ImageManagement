@@ -46,6 +46,10 @@ function FavouritesScreen({ navigation }) {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const imagesRef = useRef([]);
@@ -246,6 +250,69 @@ function FavouritesScreen({ navigation }) {
     }
   };
 
+  const handleFolderOptions = (folder) => {
+    Alert.alert(folder.name, "Choose an action", [
+      {
+        text: "Rename",
+        onPress: () => {
+          setRenameTarget(folder);
+          setRenameFolderName(folder.name);
+          setShowRenameModal(true);
+        },
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          Alert.alert(
+            "Delete Folder",
+            `Are you sure you want to delete "${folder.name}"? Images in this folder will not be removed from your favourites.`,
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                  setLoading(true);
+                  try {
+                    await ApiService.deleteFavoriteFolder(folder.id);
+                    await loadFavouriteFolders();
+                    if (currentFolder?.id === folder.id) setCurrentFolder(null);
+                  } catch (err) {
+                    Alert.alert("Error", err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                },
+              },
+            ]
+          );
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const handleRenameFolder = async () => {
+    if (!renameFolderName.trim()) { Alert.alert("Error", "Please enter a folder name"); return; }
+    if (!renameTarget) return;
+    setLoading(true);
+    try {
+      await ApiService.updateFavoriteFolder(renameTarget.id, renameFolderName.trim());
+      setShowRenameModal(false);
+      setRenameTarget(null);
+      setRenameFolderName("");
+      if (currentFolder?.id === renameTarget.id) {
+        setCurrentFolder(prev => ({ ...prev, name: renameFolderName.trim() }));
+      }
+      await loadFavouriteFolders();
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const askDownloadPath = () => {
     return new Promise((resolve) => {
       Alert.alert(
@@ -333,24 +400,20 @@ function FavouritesScreen({ navigation }) {
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     setDownloading(true);
-    setDownloadProgress({ total: selectedFolders.length, completed: 0, phase: "Fetching folder images..." });
+    setDownloadProgress({ total: selectedFolders.length, completed: 0, phase: "Downloading folders as ZIP..." });
     try {
-      const allImages = [];
+      const results = { downloaded: [], failed: [] };
       for (const folder of selectedFolders) {
-        const images = await ApiService.getFavorites(folder);
-        allImages.push(...(images || []));
+        try {
+          const result = await downloadService.downloadFolderAsZip(folder.id, dest);
+          results.downloaded.push(folder.name);
+        } catch (e) {
+          results.failed.push(folder.name);
+        }
       }
-      setDownloadProgress({ total: allImages.length, completed: 0, phase: `Downloading ${allImages.length} image(s)...` });
-      const results = await downloadService.downloadMultipleImages(
-        allImages,
-        (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        dest,
-        (progress, completed) => setDownloadProgress({ total: allImages.length, completed, phase: `Downloading ${completed} of ${allImages.length}...` }),
-      );
       const msg = [];
-      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
-      if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
-      if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
+      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} folder(s) downloaded as ZIP`);
+      if (results.failed.length > 0) msg.push(`${results.failed.length} folder(s) failed`);
       Alert.alert("Download Complete", msg.join("\n"));
       setSelectMode(false);
       setSelectedIds(new Set());
@@ -364,25 +427,10 @@ function FavouritesScreen({ navigation }) {
 
   const executeSingleFolderDownload = async (folder, dest) => {
     setDownloading(true);
-    setDownloadProgress({ total: 1, completed: 0, phase: "Fetching folder images..." });
+    setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folder as ZIP..." });
     try {
-      const images = await ApiService.getFavorites(folder);
-      if (!images || images.length === 0) {
-        Alert.alert("Empty Folder", "This folder contains no images.");
-        return;
-      }
-      setDownloadProgress({ total: images.length, completed: 0, phase: `Downloading ${images.length} image(s)...` });
-      const results = await downloadService.downloadMultipleImages(
-        images,
-        (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        dest,
-        (progress, completed) => setDownloadProgress({ total: images.length, completed, phase: `Downloading ${completed} of ${images.length}...` }),
-      );
-      const msg = [];
-      if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
-      if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
-      if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
-      Alert.alert("Download Complete", msg.join("\n"));
+      const result = await downloadService.downloadFolderAsZip(folder.id, dest);
+      Alert.alert("Download Complete", `Folder saved as ZIP:\n${result.filePath}`);
     } catch (err) {
       Alert.alert("Download Failed", err.message);
     } finally {
@@ -557,9 +605,14 @@ function FavouritesScreen({ navigation }) {
         </View>
         <Text style={styles.folderName} numberOfLines={1}>{item.name}</Text>
         {!selectMode && (
-          <TouchableOpacity style={styles.folderDlBtn} onPress={() => handleDownloadFolderImages(item)}>
-            <Text style={styles.folderDlBtnText}>Download</Text>
-          </TouchableOpacity>
+          <View style={styles.folderActions}>
+            <TouchableOpacity style={styles.folderDlBtn} onPress={() => handleDownloadFolderImages(item)}>
+              <Text style={styles.folderDlBtnText}>Download</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.folderOptionsBtn} onPress={() => handleFolderOptions(item)}>
+              <Text style={styles.folderOptionsBtnText}>...</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </TouchableOpacity>
     );
@@ -589,6 +642,7 @@ function FavouritesScreen({ navigation }) {
         keyExtractor={item => item.id?.toString()}
         numColumns={numColumns}
         key={`fav-img-${numColumns}`}
+        extraData={selectedIds}
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.gridRow}
         showsVerticalScrollIndicator={false}
@@ -616,6 +670,7 @@ function FavouritesScreen({ navigation }) {
         keyExtractor={item => item.id?.toString()}
         numColumns={folderColumns}
         key={`fav-folders-${folderColumns}`}
+        extraData={selectedIds}
         contentContainerStyle={styles.grid}
         columnWrapperStyle={styles.gridRow}
         showsVerticalScrollIndicator={false}
@@ -742,6 +797,33 @@ function FavouritesScreen({ navigation }) {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.primaryBtn} onPress={handleAddFolder} disabled={loading}>
                   <Text style={styles.primaryBtnText}>{loading ? "Creating..." : "Create Folder"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rename Folder Modal */}
+      <Modal visible={showRenameModal} transparent animationType="fade" onRequestClose={() => setShowRenameModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Rename Folder</Text>
+              <TouchableOpacity onPress={() => setShowRenameModal(false)}>
+                <Text style={styles.modalClose}>{"\u00D7"}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>New Folder Name</Text>
+              <TextInput style={styles.input} value={renameFolderName}
+                onChangeText={setRenameFolderName} placeholder="Enter new name" />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowRenameModal(false)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.primaryBtn} onPress={handleRenameFolder} disabled={loading}>
+                  <Text style={styles.primaryBtnText}>{loading ? "Saving..." : "Rename"}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -943,8 +1025,11 @@ const styles = StyleSheet.create({
   folderIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#fef3c7", justifyContent: "center", alignItems: "center", marginBottom: 8 },
   folderIconText: { fontSize: 28 },
   folderName: { fontSize: 14, fontWeight: "600", color: "#1a1a1a", textAlign: "center", marginBottom: 8 },
+  folderActions: { flexDirection: "row", gap: 6, alignItems: "center" },
   folderDlBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: "#dbeafe" },
   folderDlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
+  folderOptionsBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#f3f4f6", justifyContent: "center", alignItems: "center" },
+  folderOptionsBtnText: { fontSize: 14, fontWeight: "700", color: "#6b7280", lineHeight: 16 },
   folderSelectCheckbox: {
     position: "absolute", top: 8, left: 8, width: 28, height: 28,
     borderRadius: 14, borderWidth: 2, borderColor: "#fff",

@@ -7,6 +7,8 @@ const {
   removeFavorite,
   getFavoriteFolders,
   createFavoriteFolder,
+  updateFavoriteFolder,
+  deleteFavoriteFolder,
   addImageToFavouriteFolder,
   removeImageFromFavouriteFolder,
   addImagesToFavouriteFolder,
@@ -19,6 +21,8 @@ router.post("/", addFavorite);
 router.delete("/:imageId", removeFavorite);
 router.get("/folders", getFavoriteFolders);
 router.post("/folders", createFavoriteFolder);
+router.put("/folders/:id", updateFavoriteFolder);
+router.delete("/folders/:id", deleteFavoriteFolder);
 router.post("/folder-images", addImageToFavouriteFolder);
 router.delete("/folder-images", removeImageFromFavouriteFolder);
 router.post("/folder-images/batch", addImagesToFavouriteFolder);

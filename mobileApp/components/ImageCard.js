@@ -48,7 +48,7 @@ const ImageCard = memo(({ item, imgUrl, cardWidth, selected, selectMode, isFav, 
       </View>
     </TouchableOpacity>
   );
-}, (prev, next) => prev.item.id === next.item.id && prev.imgUrl === next.imgUrl && prev.selected === next.selected && prev.selectMode === next.selectMode && prev.isFav === next.isFav && prev.showMove === next.showMove);
+});
 
 const styles = StyleSheet.create({
   card: {

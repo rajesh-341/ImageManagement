@@ -332,6 +332,50 @@ class ApiService {
     return result;
   }
 
+  async updateFavoriteFolder(folderId, folderName) {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "update_favorite_folder",
+        payload: { folderId, folderName },
+      });
+      const folders = await offlineStorage.getFavouriteFolders();
+      const idx = folders.findIndex(f => f.id === folderId);
+      if (idx >= 0) { folders[idx].name = folderName; await offlineStorage.storeFavouriteFolders(folders); }
+      return { success: true };
+    }
+    const result = await this.request(`/favorites/folders/${folderId}`, {
+      method: "PUT",
+      body: JSON.stringify({ folderName }),
+    });
+    const folders = await offlineStorage.getFavouriteFolders();
+    const idx = folders.findIndex(f => f.id === folderId);
+    if (idx >= 0) {
+      folders[idx].name = folderName;
+      await offlineStorage.storeFavouriteFolders(folders);
+    }
+    return result;
+  }
+
+  async deleteFavoriteFolder(folderId) {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "delete_favorite_folder",
+        payload: { folderId },
+      });
+      const folders = await offlineStorage.getFavouriteFolders();
+      await offlineStorage.storeFavouriteFolders(folders.filter(f => f.id !== folderId));
+      return { success: true };
+    }
+    const result = await this.request(`/favorites/folders/${folderId}`, {
+      method: "DELETE",
+    });
+    const folders = await offlineStorage.getFavouriteFolders();
+    await offlineStorage.storeFavouriteFolders(folders.filter(f => f.id !== folderId));
+    return result;
+  }
+
   async addImagesToFavouriteFolder(folderId, imageIds) {
     const offline = await offlineStorage.isOfflineMode();
     if (offline) {
@@ -386,6 +430,17 @@ class ApiService {
             await this.request("/favorites/folder-images", {
               method: "DELETE",
               body: JSON.stringify(item.payload),
+            });
+            break;
+          case "update_favorite_folder":
+            await this.request(`/favorites/folders/${item.payload.folderId}`, {
+              method: "PUT",
+              body: JSON.stringify({ folderName: item.payload.folderName }),
+            });
+            break;
+          case "delete_favorite_folder":
+            await this.request(`/favorites/folders/${item.payload.folderId}`, {
+              method: "DELETE",
             });
             break;
         }

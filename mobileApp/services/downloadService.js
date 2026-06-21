@@ -1,6 +1,8 @@
 import RNFS from "react-native-fs";
 import { Platform, PermissionsAndroid, Alert } from "react-native";
+import offlineStorage from "../offline/offlineStorage";
 
+const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
 const DEFAULT_DOWNLOAD_DIR = Platform.select({
   android: RNFS.DownloadDirectoryPath,
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
@@ -64,6 +66,23 @@ class DownloadService {
     if (result.statusCode === 200) {
       return { status: "downloaded", filePath };
     }
+    throw new Error(`Download failed with status ${result.statusCode}`);
+  }
+
+  async downloadFolderAsZip(folderId, destination) {
+    const token = await offlineStorage.getToken();
+    const dest = destination || DEFAULT_DOWNLOAD_DIR;
+    const dirExists = await RNFS.exists(dest);
+    if (!dirExists) await RNFS.mkdir(dest);
+    const filePath = `${dest}/favorite_folder_${folderId}_${Date.now()}.zip`;
+    const url = `${API_BASE_URL}/download-favorite-folder/${folderId}`;
+    const result = await RNFS.downloadFile({
+      fromUrl: url,
+      toFile: filePath,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      background: true,
+    }).promise;
+    if (result.statusCode === 200) return { status: "downloaded", filePath };
     throw new Error(`Download failed with status ${result.statusCode}`);
   }
 

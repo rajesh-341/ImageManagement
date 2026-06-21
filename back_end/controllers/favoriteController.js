@@ -229,12 +229,65 @@ const createFavoriteFolder = async (req, res) => {
   }
 };
 
+const updateFavoriteFolder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { folderName } = req.body;
+    if (!folderName || !folderName.trim()) return res.status(400).json({ message: "Folder name required" });
+
+    const folderResult = await pool.query(
+      "SELECT * FROM folders WHERE id = $1 AND scope = 'favourite'",
+      [id]
+    );
+    if (folderResult.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
+
+    const newName = folderName.trim();
+    const existing = await pool.query(
+      "SELECT id FROM folders WHERE name = $1 AND scope = 'favourite' AND id != $2",
+      [newName, id]
+    );
+    if (existing.rows.length > 0) return res.status(400).json({ message: "A folder with this name already exists" });
+
+    const oldName = folderResult.rows[0].name;
+    await pool.query(
+      "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [newName, id]
+    );
+
+    const result = await pool.query("SELECT * FROM folders WHERE id = $1", [id]);
+    res.json({ message: "Folder renamed successfully", folder: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteFavoriteFolder = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const folderResult = await pool.query(
+      "SELECT * FROM folders WHERE id = $1 AND scope = 'favourite'",
+      [id]
+    );
+    if (folderResult.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
+
+    await pool.query("DELETE FROM favourite_folder_mapping WHERE folder_id = $1", [id]);
+    await pool.query("DELETE FROM folders WHERE id = $1", [id]);
+
+    res.json({ message: "Folder deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getFavorites,
   addFavorite,
   removeFavorite,
   getFavoriteFolders,
   createFavoriteFolder,
+  updateFavoriteFolder,
+  deleteFavoriteFolder,
   addImageToFavouriteFolder,
   removeImageFromFavouriteFolder,
   addImagesToFavouriteFolder,
