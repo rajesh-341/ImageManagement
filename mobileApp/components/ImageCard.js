@@ -1,22 +1,47 @@
-import React, { memo } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import OptimizedImage from "./OptimizedImage";
 
+const ImageDisplay = memo(({ imgUrl, cardWidth }) => {
+  return imgUrl ? (
+    <OptimizedImage uri={imgUrl} style={[styles.cardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
+  ) : (
+    <View style={[styles.cardImg, styles.placeholder, { height: cardWidth * 0.75 }]}>
+      <Text style={styles.placeholderText}>No Image</Text>
+    </View>
+  );
+}, (prev, next) => prev.imgUrl === next.imgUrl && prev.cardWidth === next.cardWidth);
+
 const ImageCard = memo(({ item, imgUrl, cardWidth, selected, selectMode, isFav, onPress, onLongPress, onToggleFav, onDownload, showMove, onMove }) => {
+  const [isSelected, setIsSelected] = useState(selectMode && selected);
+  const prevSelectModeRef = useRef(selectMode);
+
+  useEffect(() => {
+    if (selectMode && !prevSelectModeRef.current) {
+      setIsSelected(selected);
+    } else if (!selectMode) {
+      setIsSelected(false);
+    }
+    prevSelectModeRef.current = selectMode;
+  }, [selectMode, selected]);
+
+  const displaySelected = selectMode ? isSelected : false;
+
+  const handlePress = useCallback(() => {
+    if (selectMode) {
+      setIsSelected(prev => !prev);
+    }
+    onPress?.();
+  }, [selectMode, onPress]);
+
   return (
-    <TouchableOpacity activeOpacity={0.95} onPress={onPress} onLongPress={onLongPress}>
-      <View style={[styles.card, { width: cardWidth }, selected && styles.cardSelected]}>
-        {imgUrl ? (
-          <OptimizedImage uri={imgUrl} style={[styles.cardImg, { height: cardWidth * 0.75 }]} resizeMode="cover" />
-        ) : (
-          <View style={[styles.cardImg, styles.placeholder, { height: cardWidth * 0.75 }]}>
-            <Text style={styles.placeholderText}>No Image</Text>
-          </View>
-        )}
+    <TouchableOpacity activeOpacity={0.95} onPress={handlePress} onLongPress={onLongPress}>
+      <View style={[styles.card, { width: cardWidth }, displaySelected && styles.cardSelected]}>
+        <ImageDisplay imgUrl={imgUrl} cardWidth={cardWidth} />
 
         {selectMode && (
-          <View style={[styles.checkbox, selected && styles.checkboxActive]}>
-            <Text style={styles.checkboxText}>{selected ? "\u2713" : ""}</Text>
+          <View style={[styles.checkbox, displaySelected && styles.checkboxActive]}>
+            <Text style={styles.checkboxText}>{displaySelected ? "\u2713" : ""}</Text>
           </View>
         )}
 

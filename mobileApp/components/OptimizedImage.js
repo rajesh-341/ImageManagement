@@ -1,28 +1,14 @@
-import React, { useState, useCallback, useRef, useEffect, memo } from "react";
+import React, { useState, useCallback, memo } from "react";
 import { Image, View, StyleSheet } from "react-native";
 
 const OptimizedImage = memo(({ uri, style, resizeMode = "cover", ...props }) => {
   const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
-  const prevUriRef = useRef(uri);
-
-  useEffect(() => {
-    if (uri !== prevUriRef.current) {
-      prevUriRef.current = uri;
-      setLoaded(false);
-      setErrored(false);
-    }
-  }, [uri]);
 
   const onLoad = useCallback(() => {
     setLoaded(true);
   }, []);
 
-  const onError = useCallback(() => {
-    setErrored(true);
-  }, []);
-
-  if (errored || !uri) {
+  if (!uri) {
     return (
       <View style={[style, styles.placeholder]}>
         <View style={styles.errorIcon}>
@@ -39,7 +25,6 @@ const OptimizedImage = memo(({ uri, style, resizeMode = "cover", ...props }) => 
         source={{ uri }}
         style={[StyleSheet.absoluteFill, { resizeMode }]}
         onLoad={onLoad}
-        onError={onError}
         {...props}
       />
       {!loaded && <View style={[StyleSheet.absoluteFill, styles.skeleton]} />}

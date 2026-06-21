@@ -53,8 +53,11 @@ class DownloadService {
   }
 
   async ensureDir(dirPath) {
+    const normalized = normalizePath(dirPath);
+    if (!normalized || !normalized.startsWith("/")) {
+      throw new Error(`Invalid download path: "${dirPath}". Path must be absolute.`);
+    }
     try {
-      const normalized = normalizePath(dirPath);
       const exists = await RNFS.exists(normalized);
       if (!exists) {
         await RNFS.mkdir(normalized);

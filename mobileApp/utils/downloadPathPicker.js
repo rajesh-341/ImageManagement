@@ -25,17 +25,25 @@ export async function pickDownloadDirectory() {
     }
 
     const path = safUriToPath(safUri);
-    if (!path) {
+    if (!path || !path.startsWith("/")) {
       Alert.alert(
         "Selection Error",
-        "Could not determine the selected folder path. Please try again or choose a different folder."
+        "Could not determine the selected folder path. The download will use the default folder instead."
       );
       return { path: null, cancelled: false };
     }
 
     const exists = await RNFS.exists(path);
     if (!exists) {
-      await RNFS.mkdir(path);
+      try {
+        await RNFS.mkdir(path);
+      } catch {
+        Alert.alert(
+          "Folder Error",
+          "Cannot create the selected folder. The download will use the default folder instead."
+        );
+        return { path: null, cancelled: false };
+      }
     }
 
     return { path, cancelled: false };
