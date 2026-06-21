@@ -537,7 +537,6 @@ function FavouritesScreen({ navigation }) {
 
     return (
       <ImageCard
-        key={`ic-${item.id}-${selected}`}
         item={item}
         imgUrl={imgUrl}
         cardWidth={cardWidth}

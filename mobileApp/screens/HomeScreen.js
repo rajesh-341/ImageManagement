@@ -516,6 +516,7 @@ function HomeScreen({ navigation }) {
             keyExtractor={item => item.id?.toString()}
             numColumns={numColumns}
             key={`img-${numColumns}`}
+            extraData={selectedIds}
             contentContainerStyle={styles.grid}
             columnWrapperStyle={styles.gridRow}
             showsVerticalScrollIndicator={false}

@@ -8,6 +8,11 @@ const DEFAULT_DOWNLOAD_DIR = Platform.select({
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
 });
 
+function normalizePath(dirPath) {
+  if (!dirPath) return dirPath;
+  return dirPath.replace(/\/+$/, "");
+}
+
 class DownloadService {
   async requestStoragePermission() {
     if (Platform.OS !== "android") return true;
@@ -35,7 +40,7 @@ class DownloadService {
   }
 
   getDownloadPath(destination, imageId, fileName) {
-    const dest = destination || DEFAULT_DOWNLOAD_DIR;
+    const dest = normalizePath(destination || DEFAULT_DOWNLOAD_DIR);
     return `${dest}/${fileName || `${imageId}.jpg`}`;
   }
 
@@ -47,16 +52,25 @@ class DownloadService {
     }
   }
 
+  async ensureDir(dirPath) {
+    try {
+      const normalized = normalizePath(dirPath);
+      const exists = await RNFS.exists(normalized);
+      if (!exists) {
+        await RNFS.mkdir(normalized);
+      }
+      return normalized;
+    } catch (err) {
+      throw new Error(`Cannot create or access directory: ${dirPath}. ${err.message}`);
+    }
+  }
+
   async downloadSingleImage(imageId, remoteUrl, destination, fileName, onProgress) {
-    const dest = destination || DEFAULT_DOWNLOAD_DIR;
-    const filePath = this.getDownloadPath(destination, imageId, fileName);
+    const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
+    const filePath = this.getDownloadPath(dest, imageId, fileName);
     const exists = await this.fileExists(filePath);
     if (exists) {
       return { status: "exists", filePath };
-    }
-    const dirExists = await RNFS.exists(dest);
-    if (!dirExists) {
-      await RNFS.mkdir(dest);
     }
     const result = await RNFS.downloadFile({
       fromUrl: remoteUrl,
@@ -71,9 +85,7 @@ class DownloadService {
 
   async downloadFolderAsZip(folderId, destination) {
     const token = await offlineStorage.getToken();
-    const dest = destination || DEFAULT_DOWNLOAD_DIR;
-    const dirExists = await RNFS.exists(dest);
-    if (!dirExists) await RNFS.mkdir(dest);
+    const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
     const filePath = `${dest}/favorite_folder_${folderId}_${Date.now()}.zip`;
     const url = `${API_BASE_URL}/download-favorite-folder/${folderId}`;
     const result = await RNFS.downloadFile({
@@ -88,9 +100,7 @@ class DownloadService {
 
   async downloadMultipleFoldersAsZip(folderIds, destination) {
     const token = await offlineStorage.getToken();
-    const dest = destination || DEFAULT_DOWNLOAD_DIR;
-    const dirExists = await RNFS.exists(dest);
-    if (!dirExists) await RNFS.mkdir(dest);
+    const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
     const filePath = `${dest}/Favourite_zip_${Date.now()}.zip`;
     const url = `${API_BASE_URL}/download-favorite-folders`;
     const result = await RNFS.downloadFile({
@@ -117,6 +127,13 @@ class DownloadService {
     const results = { downloaded: [], exists: [], failed: [] };
     const total = images.length;
     let completed = 0;
+    let dest = null;
+
+    try {
+      dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
+    } catch (err) {
+      return { downloaded: [], exists: [], failed: images.map(img => ({ id: img.id, error: err.message })) };
+    }
 
     for (const img of images) {
       try {
@@ -129,7 +146,7 @@ class DownloadService {
         }
         const fileName = `${img.image_data?.designName || img.id}.jpg`;
         const result = await this.downloadSingleImage(
-          img.id, remoteUrl, destination, fileName,
+          img.id, remoteUrl, dest, fileName,
           (p) => onImageProgress?.(img.id, p)
         );
         if (result.status === "downloaded") {

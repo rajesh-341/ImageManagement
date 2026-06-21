@@ -48,14 +48,48 @@ export async function pickDownloadDirectory() {
 export function safUriToPath(safUri) {
   if (!safUri) return null;
 
-  const match = safUri.match(/tree\/([^%]+)%3A(.+)$/);
-  if (!match) return null;
+  // Extract the tree path portion from the full SAF URI:
+  // content://com.android.externalstorage.documents/tree/primary%3ADownload%2Ftest
+  // or: tree/primary%3ADownload%2Ftest
+  const treeMatch = safUri.match(/tree\/(.+)$/i);
+  if (!treeMatch) {
+    // If there's no /tree/ pattern, the URI might already be a direct path
+    if (safUri.startsWith("/")) return safUri;
+    return null;
+  }
 
-  const storageType = decodeURIComponent(match[1]);
-  const relativePath = decodeURIComponent(match[2]);
+  const treePart = treeMatch[1];
 
-  if (storageType === "primary") {
-    return `${RNFS.ExternalStorageDirectoryPath}/${relativePath}`;
+  // Try to match both encoded (%3A) and decoded (:) separator patterns
+  let storageType, relativePath;
+
+  // Pattern 1: primary%3ADownload%2Ftest (encoded colon and slashes)
+  const encodedMatch = treePart.match(/^([^%]+)%3A(.+)$/);
+  if (encodedMatch) {
+    storageType = decodeURIComponent(encodedMatch[1]);
+    relativePath = decodeURIComponent(encodedMatch[2]);
+  } else {
+    // Pattern 2: primary:Download/test (already decoded)
+    const decodedMatch = treePart.match(/^([^:]+):(.+)$/);
+    if (decodedMatch) {
+      storageType = decodedMatch[1];
+      relativePath = decodedMatch[2];
+    } else {
+      // Pattern 3: just a path, no storage type prefix
+      relativePath = treePart;
+      storageType = "primary";
+    }
+  }
+
+  if (storageType === "primary" || !storageType) {
+    const basePath = RNFS.ExternalStorageDirectoryPath || RNFS.DocumentDirectoryPath;
+    return `${basePath}/${relativePath}`;
+  }
+
+  // For non-primary storage (SD card), try to construct the path
+  if (storageType) {
+    const basePath = RNFS.ExternalStorageDirectoryPath || RNFS.DocumentDirectoryPath;
+    return `${basePath}/storage/${storageType}/${relativePath}`;
   }
 
   return null;
