@@ -20,8 +20,9 @@ jobs:
         id: version
         run: |
           DATE_TAG=$(date +'%Y%m%d')
-          VERSION_NAME="1.0.$DATE_TAG"
-          VERSION_CODE="$DATE_TAG"
+          BUILD_NUMBER=${{ github.run_number }}
+          VERSION_NAME="1.0.$DATE_TAG.$BUILD_NUMBER"
+          VERSION_CODE=$((DATE_TAG * 100 + BUILD_NUMBER))
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           echo "tag=$VERSION_NAME" >> $GITHUB_OUTPUT

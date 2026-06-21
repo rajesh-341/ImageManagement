@@ -118,11 +118,18 @@ class UpdateService {
     const parts = versionName.split(".");
     const major = parseInt(parts[0] || "0", 10);
     const minor = parseInt(parts[1] || "0", 10);
-    const patch = parseInt(parts[2] || "0", 10);
-    if (patch >= 100000) {
-      return patch;
+    const datePart = parseInt(parts[2] || "0", 10);
+    const build = parseInt(parts[3] || "0", 10);
+
+    if (build > 0) {
+      return datePart * 100 + build;
     }
-    return major * 10000 + minor * 100 + patch;
+
+    if (datePart >= 100000) {
+      return datePart;
+    }
+
+    return major * 10000 + minor * 100 + datePart;
   }
 
   async downloadUpdate(apkUrl, onProgress) {
