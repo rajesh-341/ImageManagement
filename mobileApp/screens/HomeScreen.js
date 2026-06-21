@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNFS from "react-native-fs";
+import { pickDownloadDirectory, DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
 import OptimizedImage from "../components/OptimizedImage";
 import ImageCard from "../components/ImageCard";
 import downloadService from "../services/downloadService";
@@ -60,9 +60,6 @@ function HomeScreen({ navigation }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
-  const [downloadDestination, setDownloadDestination] = useState("");
-  const [showPathInput, setShowPathInput] = useState(false);
-  const [pendingDownload, setPendingDownload] = useState(null);
 
   useEffect(() => {
     const init = async () => {
@@ -369,7 +366,7 @@ function HomeScreen({ navigation }) {
     });
   };
 
-  const askDownloadPath = () => {
+  const askDownloadPath = async () => {
     return new Promise((resolve) => {
       Alert.alert(
         "Download Location",
@@ -383,37 +380,37 @@ function HomeScreen({ navigation }) {
     });
   };
 
+  const resolveDestination = async () => {
+    const choice = await askDownloadPath();
+    if (choice === "cancel") return "cancel";
+    if (choice === "custom") {
+      const result = await pickDownloadDirectory();
+      if (result.cancelled) return "cancel";
+      return result.path || DEFAULT_DOWNLOAD_PATH;
+    }
+    return null;
+  };
+
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
-    const choice = await askDownloadPath();
-    if (choice === "cancel") return;
-    if (choice === "custom") {
-      setPendingDownload("selected");
-      setShowPathInput(true);
-      return;
-    }
+    const dest = await resolveDestination();
+    if (dest === "cancel") return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     const displayImages = activeFilters ? filteredImages : allImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
-    await executeDownload(toDownload);
+    await executeDownload(toDownload, dest);
   };
 
   const handleDownloadSingle = async (img) => {
-    const choice = await askDownloadPath();
-    if (choice === "cancel") return;
-    if (choice === "custom") {
-      setPendingDownload(img);
-      setShowPathInput(true);
-      return;
-    }
+    const dest = await resolveDestination();
+    if (dest === "cancel") return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
-    await executeDownload([img]);
+    await executeDownload([img], dest);
   };
 
-  const executeDownload = async (images) => {
-    const dest = downloadDestination || null;
+  const executeDownload = async (images, dest) => {
     setDownloading(true);
     if (images.length > 1) {
       setDownloadProgress({ total: images.length, completed: 0 });
@@ -450,21 +447,6 @@ function HomeScreen({ navigation }) {
       setDownloading(false);
       setDownloadProgress(null);
     }
-  };
-
-  const confirmDownloadPath = async () => {
-    setShowPathInput(false);
-    if (!pendingDownload) return;
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) { setPendingDownload(null); return; }
-    if (pendingDownload === "selected") {
-      const displayImages = activeFilters ? filteredImages : allImages;
-      const toDownload = displayImages.filter(img => selectedIds.has(img.id));
-      await executeDownload(toDownload);
-    } else {
-      await executeDownload([pendingDownload]);
-    }
-    setPendingDownload(null);
   };
 
   const renderItem = useCallback(({ item, index }) => {
@@ -779,41 +761,6 @@ function HomeScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Path Picker Modal */}
-      <Modal visible={showPathInput && !downloading} transparent animationType="fade" onRequestClose={() => setShowPathInput(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Download Path</Text>
-              <TouchableOpacity onPress={() => { setShowPathInput(false); setPendingDownload(null); }}>
-                <Text style={styles.modalClose}>{"\u00D7"}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={styles.label}>Custom download path (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={downloadDestination}
-                onChangeText={setDownloadDestination}
-                placeholder={"Default: " + RNFS.DownloadDirectoryPath}
-                placeholderTextColor="#9ca3af"
-              />
-              <Text style={styles.pathHint}>
-                Leave empty to use the default Downloads folder.
-              </Text>
-            </View>
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowPathInput(false); setPendingDownload(null); }}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={confirmDownloadPath}>
-                <Text style={styles.primaryBtnText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Download Progress Modal */}
       <Modal visible={downloading} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -1099,7 +1046,6 @@ const styles = StyleSheet.create({
   dlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
   modalContent: { backgroundColor: "#fff", borderRadius: 16, width: "100%", maxWidth: 400 },
   dlProgressText: { fontSize: 15, color: "#374151", marginTop: 16, textAlign: "center" },
-  pathHint: { fontSize: 12, color: "#9ca3af", marginTop: 6 },
 });
 
 export default HomeScreen;
