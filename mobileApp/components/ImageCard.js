@@ -79,8 +79,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff", borderRadius: 10, overflow: "hidden",
     boxShadow: "0 1px 4px rgba(0,0,0,0.05)", elevation: 2, position: "relative",
+    borderWidth: 2, borderColor: "transparent",
   },
-  cardSelected: { borderWidth: 2, borderColor: "#ff6b8a", borderRadius: 10 },
+  cardSelected: { borderColor: "#ff6b8a" },
   cardImg: { width: "100%" },
   placeholder: { backgroundColor: "#e5e7eb", justifyContent: "center", alignItems: "center" },
   placeholderText: { color: "#9ca3af", fontSize: 13 },
