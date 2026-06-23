@@ -2,8 +2,7 @@ const pool = require("../config/db");
 const path = require("path");
 const fs = require("fs").promises;
 const { deleteImage: deleteStorageImage, isLocal } = require("../config/storage");
-
-const UPLOAD_ROLES = ["CEO", "Marketing Head", "Owner"];
+const { UPLOAD_ROLES } = require("../config/constants");
 
 const createFolder = async (req, res) => {
   try {

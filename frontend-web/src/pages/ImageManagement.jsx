@@ -74,6 +74,12 @@ function ImageManagement() {
   const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("venue");
+  const [searchSizeWidth, setSearchSizeWidth] = useState("");
+  const [searchSizeLength, setSearchSizeLength] = useState("");
+  const [searchSizeHeight, setSearchSizeHeight] = useState("");
+  const [searchPriceMin, setSearchPriceMin] = useState("");
+  const [searchPriceMax, setSearchPriceMax] = useState("");
+  const [searchColors, setSearchColors] = useState([]);
   const commonSearchPrevView = useRef(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingImage, setEditingImage] = useState(null);
@@ -166,6 +172,12 @@ function ImageManagement() {
   const navigate = useNavigate();
   const imageFileRef = useRef(null);
   const searchTimerRef = useRef(null);
+  const searchSizeWidthRef = useRef("");
+  const searchSizeLengthRef = useRef("");
+  const searchSizeHeightRef = useRef("");
+  const searchPriceMinRef = useRef("");
+  const searchPriceMaxRef = useRef("");
+  const searchColorsRef = useRef([]);
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -839,34 +851,73 @@ function ImageManagement() {
     setFilters(newFilters);
   };
 
-  const handleCommonSearch = async (searchValue) => {
+  const clearCommonSearchResult = useCallback(() => {
+    setFilteredImages([]);
+    if (commonSearchPrevView.current) {
+      setView(commonSearchPrevView.current);
+      commonSearchPrevView.current = null;
+    }
+  }, []);
+
+  const handleCommonSearch = useCallback(async (searchValue) => {
     const term = searchValue !== undefined ? searchValue : commonSearch;
     setLoading(true);
     try {
-      if (!term.trim()) {
-        setFilteredImages([]);
-        if (commonSearchPrevView.current) {
-          setView(commonSearchPrevView.current);
-          commonSearchPrevView.current = null;
+      const searchFilters = {};
+      if (commonSearchType === "size") {
+        const sw = searchSizeWidthRef.current;
+        const sl = searchSizeLengthRef.current;
+        const sh = searchSizeHeightRef.current;
+        if (sw) searchFilters.sizeWidth = sw;
+        if (sl) searchFilters.sizeLength = sl;
+        if (sh) searchFilters.sizeHeight = sh;
+        if (Object.keys(searchFilters).length === 0) {
+          clearCommonSearchResult();
+          setLoading(false);
+          return;
         }
-        setLoading(false);
-        return;
+      } else if (commonSearchType === "priceRange") {
+        const min = searchPriceMinRef.current ? parseFloat(searchPriceMinRef.current) : null;
+        const max = searchPriceMaxRef.current ? parseFloat(searchPriceMaxRef.current) : null;
+        if (min !== null && max !== null && min > max) {
+          showNotif("Minimum price cannot be greater than maximum price", "warning");
+          setLoading(false);
+          return;
+        }
+        if (min !== null) searchFilters.priceMin = min;
+        if (max !== null) searchFilters.priceMax = max;
+        if (Object.keys(searchFilters).length === 0) {
+          clearCommonSearchResult();
+          setLoading(false);
+          return;
+        }
+      } else if (commonSearchType === "colour") {
+        const colors = searchColorsRef.current;
+        if (colors.length > 0) {
+          searchFilters.colors = colors.join(",");
+        } else {
+          clearCommonSearchResult();
+          setLoading(false);
+          return;
+        }
+      } else {
+        if (!term.trim()) {
+          clearCommonSearchResult();
+          setLoading(false);
+          return;
+        }
+        if (commonSearchType === "venue") searchFilters.placeOfEvent = term;
+        else if (commonSearchType === "eventType") searchFilters.eventType = term;
+        else if (commonSearchType === "decorType") searchFilters.decorType = term;
+        else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
+        else if (commonSearchType === "designName") searchFilters.designName = term;
+        else if (commonSearchType === "folderName") searchFilters.folderName = term;
+        else if (commonSearchType === "collectedBy") searchFilters.collectedBy = term;
+        else searchFilters.searchText = term;
       }
       if (view !== "filtered") {
         commonSearchPrevView.current = view;
       }
-      const searchFilters = {};
-      if (commonSearchType === "venue") searchFilters.placeOfEvent = term;
-      else if (commonSearchType === "eventType") searchFilters.eventType = term;
-      else if (commonSearchType === "decorType") searchFilters.decorType = term;
-      else if (commonSearchType === "priceRange") searchFilters.searchText = term;
-      else if (commonSearchType === "size") searchFilters.searchText = term;
-      else if (commonSearchType === "colour") searchFilters.colors = term;
-      else if (commonSearchType === "flowerType") searchFilters.flowerType = term;
-      else if (commonSearchType === "designName") searchFilters.designName = term;
-      else if (commonSearchType === "folderName") searchFilters.folderName = term;
-      else if (commonSearchType === "collectedBy") searchFilters.collectedBy = term;
-      else searchFilters.searchText = term;
       const data = await ApiService.searchImages(searchFilters);
       setFilteredImages(data);
       setView("filtered");
@@ -875,7 +926,12 @@ function ImageManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [commonSearch, commonSearchType, view, clearCommonSearchResult]);
+
+  const debouncedCommonSearch = useCallback(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => handleCommonSearch(), 300);
+  }, [handleCommonSearch]);
 
   const suggTimerRef = useRef(null);
 
@@ -1215,7 +1271,25 @@ function ImageManagement() {
               <select
                 className="common-search-select"
                 value={commonSearchType}
-                onChange={(e) => setCommonSearchType(e.target.value)}
+                onChange={(e) => {
+                  setCommonSearchType(e.target.value);
+                  setCommonSearch("");
+                  setSearchSizeWidth("");
+                  setSearchSizeHeight("");
+                  setSearchSizeLength("");
+                  setSearchPriceMin("");
+                  setSearchPriceMax("");
+                  setSearchColors([]);
+                  searchSizeWidthRef.current = "";
+                  searchSizeLengthRef.current = "";
+                  searchSizeHeightRef.current = "";
+                  searchPriceMinRef.current = "";
+                  searchPriceMaxRef.current = "";
+                  searchColorsRef.current = [];
+                  setSearchSuggestions([]);
+                  setShowSuggestions(false);
+                  clearCommonSearchResult();
+                }}
               >
                 <option value="venue">Venue</option>
                 <option value="eventType">Event Type</option>
@@ -1230,29 +1304,98 @@ function ImageManagement() {
                 <option value="all">All Fields</option>
               </select>
               <div className="common-search-input-wrap">
-                <input
-                  type="text"
-                  className="common-search-input"
-                  placeholder={`Search ${COMMON_SEARCH_LABELS[commonSearchType] || commonSearchType}...`}
-                  value={commonSearch}
-                  onChange={(e) => {
-                    setCommonSearch(e.target.value);
-                    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-                    searchTimerRef.current = setTimeout(() => handleCommonSearch(e.target.value), 300);
-                    fetchSuggestions(e.target.value);
-                  }}
-                  onFocus={() => { if (searchSuggestions.length > 0) setShowSuggestions(true); }}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                />
-                {showSuggestions && searchSuggestions.length > 0 && (
-                  <ul className="search-suggestions-list">
-                    {searchSuggestions.map((s, i) => (
-                      <li key={i} className="search-suggestion-item"
-                        onMouseDown={() => { setCommonSearch(s); handleCommonSearch(s); setShowSuggestions(false); }}>
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
+                {commonSearchType === "size" ? (
+                  <div className="common-size-inputs">
+                    <input type="number" className="common-search-input common-size-input" placeholder="W" min="0"
+                      value={searchSizeWidth}
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchSizeWidth(val);
+                        searchSizeWidthRef.current = val;
+                        debouncedCommonSearch();
+                      }} />
+                    <span className="size-sep">x</span>
+                    <input type="number" className="common-search-input common-size-input" placeholder="L" min="0"
+                      value={searchSizeLength}
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchSizeLength(val);
+                        searchSizeLengthRef.current = val;
+                        debouncedCommonSearch();
+                      }} />
+                    <span className="size-sep">x</span>
+                    <input type="number" className="common-search-input common-size-input" placeholder="H" min="0"
+                      value={searchSizeHeight}
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchSizeHeight(val);
+                        searchSizeHeightRef.current = val;
+                        debouncedCommonSearch();
+                      }} />
+                  </div>
+                ) : commonSearchType === "priceRange" ? (
+                  <div className="common-price-inputs">
+                    <input type="number" className="common-search-input common-price-input" placeholder="Min Price" min="0"
+                      value={searchPriceMin}
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchPriceMin(val);
+                        searchPriceMinRef.current = val;
+                        debouncedCommonSearch();
+                      }} />
+                    <span className="price-sep">-</span>
+                    <input type="number" className="common-search-input common-price-input" placeholder="Max Price" min="0"
+                      value={searchPriceMax}
+                      onWheel={(e) => e.target.blur()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchPriceMax(val);
+                        searchPriceMaxRef.current = val;
+                        debouncedCommonSearch();
+                      }} />
+                  </div>
+                ) : commonSearchType === "colour" ? (
+                  <div className="common-colour-search">
+                    <ColorPicker
+                      selectedColors={searchColors}
+                      onChange={(colors) => {
+                        setSearchColors(colors);
+                        searchColorsRef.current = colors;
+                        debouncedCommonSearch();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      className="common-search-input"
+                      placeholder={`Search ${COMMON_SEARCH_LABELS[commonSearchType] || commonSearchType}...`}
+                      value={commonSearch}
+                      onChange={(e) => {
+                        setCommonSearch(e.target.value);
+                        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+                        searchTimerRef.current = setTimeout(() => handleCommonSearch(e.target.value), 300);
+                        fetchSuggestions(e.target.value);
+                      }}
+                      onFocus={() => { if (searchSuggestions.length > 0) setShowSuggestions(true); }}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    />
+                    {showSuggestions && searchSuggestions.length > 0 && (
+                      <ul className="search-suggestions-list">
+                        {searchSuggestions.map((s, i) => (
+                          <li key={i} className="search-suggestion-item"
+                            onMouseDown={() => { setCommonSearch(s); handleCommonSearch(s); setShowSuggestions(false); }}>
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
               </div>
             </div>
