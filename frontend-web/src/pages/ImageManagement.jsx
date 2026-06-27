@@ -823,8 +823,8 @@ function ImageManagement() {
       if (filterData.folderName) searchFilters.folderName = filterData.folderName;
       if (filterData.collectedBy) searchFilters.collectedBy = filterData.collectedBy;
       if (filterData.priceRange) {
-        if (filterData.priceRange[0] > 0) searchFilters.priceMin = filterData.priceRange[0];
-        if (filterData.priceRange[1] < 10000) searchFilters.priceMax = filterData.priceRange[1];
+        if (filterData.priceRange[0] != null && filterData.priceRange[0] > 0) searchFilters.priceMin = filterData.priceRange[0];
+        if (filterData.priceRange[1] != null && filterData.priceRange[1] < 10000) searchFilters.priceMax = filterData.priceRange[1];
       }
       if (filterData.sizeFilters) {
         if (filterData.sizeFilters.width) searchFilters.sizeWidth = filterData.sizeFilters.width;
@@ -1060,7 +1060,7 @@ function ImageManagement() {
 
   const renderImageCardDetails = (data) => {
     if (!data) return null;
-    const sizeDisplay = data.sizeDisplay || buildSizeDisplay(data.sizeWidth, data.sizeLength, data.sizeHeight, data.sizeUnit);
+    const sizeDisplay = buildSizeDisplay(data.sizeWidth, data.sizeLength, data.sizeHeight, data.sizeUnit) || data.sizeDisplay;
     const priceDisplay = formatPrice(data.priceMin, data.priceMax);
     return (
       <div className="image-card-details-inline">
@@ -1183,7 +1183,7 @@ function ImageManagement() {
       if (h && h !== "0") parts.push(`${h} H`);
       return parts.join(" x ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
     };
-    const sizeDisplay = data.sizeDisplay || buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
+    const sizeDisplay = buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
     const priceDisplay = formatPrice(data.priceMin, data.priceMax);
     const colorsDisplay = data.colourCombination?.length > 0 ? data.colourCombination.join(", ") : "";
 

@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, TextInput,
   StyleSheet, Modal, useWindowDimensions, Platform,
 } from "react-native";
-import { COLORS, DECOR_TYPES, VENUES, EVENT_TYPES, FLOWER_TYPES } from "../utils/constants";
+import ApiService from "../services/apiService";
+import { COLORS, DECOR_TYPES, VENUES, EVENT_TYPES, FLOWER_TYPES, SIZE_UNITS } from "../utils/constants";
+
+const SUGGESTION_DELAY = 300;
 
 function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterChange }) {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
@@ -18,6 +21,71 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
   const [searchText, setSearchText] = useState(filters?.searchText || "");
   const [decorTypeSearch, setDecorTypeSearch] = useState("");
 
+  const [designName, setDesignName] = useState(filters?.designName || "");
+  const [designNameSuggestions, setDesignNameSuggestions] = useState([]);
+  const [showDesignNameSugs, setShowDesignNameSugs] = useState(false);
+  const designNameSugTimer = useRef(null);
+  const designNameRef = useRef(null);
+
+  const [venueName, setVenueName] = useState(filters?.venueName || "");
+  const [venueSuggestions, setVenueSuggestions] = useState([]);
+  const [showVenueSugs, setShowVenueSugs] = useState(false);
+  const venueSugTimer = useRef(null);
+  const venueRef = useRef(null);
+
+  const [folderName, setFolderName] = useState(filters?.folderName || "");
+  const [folderNameSuggestions, setFolderNameSuggestions] = useState([]);
+  const [showFolderNameSugs, setShowFolderNameSugs] = useState(false);
+  const folderNameSugTimer = useRef(null);
+  const folderNameRef = useRef(null);
+
+  const [collectedByFilter, setCollectedByFilter] = useState(filters?.collectedBy || "");
+  const [collectedBySuggestions, setCollectedBySuggestions] = useState([]);
+  const [showCollectedBySugs, setShowCollectedBySugs] = useState(false);
+  const collectedBySugTimer = useRef(null);
+  const collectedByRef = useRef(null);
+
+  const [sizeFilters, setSizeFilters] = useState(filters?.sizeFilters || { width: "", length: "", height: "", unit: "sq.ft" });
+
+  const fetchSugs = async (field, query, setter, showSetter, timerRef) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      const results = await ApiService.getSuggestions(field, query);
+      setter(results);
+      showSetter(true);
+    }, SUGGESTION_DELAY);
+  };
+
+  const handleDesignNameChange = (val) => {
+    setDesignName(val);
+    if (!val.trim()) { setDesignNameSuggestions([]); setShowDesignNameSugs(false); return; }
+    fetchSugs("designName", val, setDesignNameSuggestions, setShowDesignNameSugs, designNameSugTimer);
+  };
+
+  const handleVenueChange = (val) => {
+    setVenueName(val);
+    if (!val.trim()) { setVenueSuggestions([]); setShowVenueSugs(false); return; }
+    fetchSugs("venueName", val, setVenueSuggestions, setShowVenueSugs, venueSugTimer);
+  };
+
+  const handleFolderNameChange = (val) => {
+    setFolderName(val);
+    if (!val.trim()) { setFolderNameSuggestions([]); setShowFolderNameSugs(false); return; }
+    fetchSugs("folderName", val, setFolderNameSuggestions, setShowFolderNameSugs, folderNameSugTimer);
+  };
+
+  const handleCollectedByChange = (val) => {
+    setCollectedByFilter(val);
+    if (!val.trim()) { setCollectedBySuggestions([]); setShowCollectedBySugs(false); return; }
+    fetchSugs("collectedBy", val, setCollectedBySuggestions, setShowCollectedBySugs, collectedBySugTimer);
+  };
+
+  const loadInitialSuggestions = async (field, setter, showSetter) => {
+    const results = await ApiService.getSuggestions(field, "");
+    setter(results);
+    if (results.length > 0) showSetter(true);
+  };
+
   const toggleArray = (value, arr, setArr) => {
     setArr(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
   };
@@ -25,6 +93,10 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
   const handleApply = () => {
     onApply({
       searchText,
+      designName,
+      venueName,
+      folderName,
+      collectedBy: collectedByFilter,
       colors: selectedColors,
       venues: selectedVenues,
       venueFilter,
@@ -32,6 +104,7 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
       priceRange,
       eventTypes: selectedEventTypes,
       flowerTypes: selectedFlowerTypes,
+      sizeFilters,
     });
     onClose();
   };
@@ -45,6 +118,16 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
     setPriceRange([0, 100000]);
     setVenueFilter("");
     setSearchText("");
+    setDesignName("");
+    setDesignNameSuggestions([]);
+    setVenueName("");
+    setVenueSuggestions([]);
+    setFolderName("");
+    setFolderNameSuggestions([]);
+    setCollectedByFilter("");
+    setCollectedBySuggestions([]);
+    setSizeFilters({ width: "", length: "", height: "", unit: "sq.ft" });
+    setDecorTypeSearch("");
     onClear();
     onClose();
   };
@@ -62,6 +145,23 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
     arr.includes(val) && styles.chipTextActive,
   ];
 
+  const renderSuggestionList = (suggestions, show, onSelect, ref) => {
+    if (!show || suggestions.length === 0) return null;
+    return (
+      <View style={styles.suggestionContainer} ref={ref}>
+        {suggestions.map((s, i) => (
+          <TouchableOpacity
+            key={i}
+            style={styles.suggestionItem}
+            onPress={() => onSelect(s)}
+          >
+            <Text style={styles.suggestionText} numberOfLines={1}>{s}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent={isTablet} onRequestClose={onClose}>
       <View style={[styles.overlay, isTablet && styles.overlayTablet]}>
@@ -74,15 +174,101 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Search */}
+            {/* Design Name */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Search</Text>
+              <Text style={styles.sectionTitle}>Design Name</Text>
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search design name..."
+                  value={designName}
+                  onChangeText={handleDesignNameChange}
+                  onFocus={() => loadInitialSuggestions("designName", setDesignNameSuggestions, setShowDesignNameSugs)}
+                />
+                {renderSuggestionList(designNameSuggestions, showDesignNameSugs, (val) => {
+                  setDesignName(val);
+                  setShowDesignNameSugs(false);
+                  setDesignNameSuggestions([]);
+                }, designNameRef)}
+              </View>
+            </View>
+
+            {/* Venue */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Venue</Text>
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search venue..."
+                  value={venueName}
+                  onChangeText={handleVenueChange}
+                  onFocus={() => loadInitialSuggestions("venueName", setVenueSuggestions, setShowVenueSugs)}
+                />
+                {renderSuggestionList(venueSuggestions, showVenueSugs, (val) => {
+                  setVenueName(val);
+                  setShowVenueSugs(false);
+                  setVenueSuggestions([]);
+                }, venueRef)}
+              </View>
+            </View>
+
+            {/* Folder Name */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Folder Name</Text>
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search folder name..."
+                  value={folderName}
+                  onChangeText={handleFolderNameChange}
+                  onFocus={() => loadInitialSuggestions("folderName", setFolderNameSuggestions, setShowFolderNameSugs)}
+                />
+                {renderSuggestionList(folderNameSuggestions, showFolderNameSugs, (val) => {
+                  setFolderName(val);
+                  setShowFolderNameSugs(false);
+                  setFolderNameSuggestions([]);
+                }, folderNameRef)}
+              </View>
+            </View>
+
+            {/* Collected By */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Collected By</Text>
+              <View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Search collected by..."
+                  value={collectedByFilter}
+                  onChangeText={handleCollectedByChange}
+                  onFocus={() => loadInitialSuggestions("collectedBy", setCollectedBySuggestions, setShowCollectedBySugs)}
+                />
+                {renderSuggestionList(collectedBySuggestions, showCollectedBySugs, (val) => {
+                  setCollectedByFilter(val);
+                  setShowCollectedBySugs(false);
+                  setCollectedBySuggestions([]);
+                }, collectedByRef)}
+              </View>
+            </View>
+
+            {/* Venue / Customer (original) */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Venue / Customer (Legacy)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Search designs..."
-                value={searchText}
-                onChangeText={setSearchText}
+                placeholder="Customer_Venue_Date"
+                value={venueFilter}
+                onChangeText={setVenueFilter}
               />
+              <View style={styles.chipRow}>
+                {VENUES.map(v => (
+                  <TouchableOpacity
+                    key={v} style={chipStyle(selectedVenues, v)}
+                    onPress={() => toggleArray(v, selectedVenues, setSelectedVenues)}
+                  >
+                    <Text style={chipTextStyle(selectedVenues, v)}>{v}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Event Type */}
@@ -121,22 +307,42 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
               </View>
             </View>
 
-            {/* Venue */}
+            {/* Size */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Venue / Customer</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Customer_Venue_Date"
-                value={venueFilter}
-                onChangeText={setVenueFilter}
-              />
-              <View style={styles.chipRow}>
-                {VENUES.map(v => (
+              <Text style={styles.sectionTitle}>Size</Text>
+              <View style={styles.sizeRow}>
+                <TextInput
+                  style={[styles.input, styles.sizeInput]}
+                  placeholder="W"
+                  keyboardType="numeric"
+                  value={sizeFilters.width}
+                  onChangeText={t => setSizeFilters({ ...sizeFilters, width: t })}
+                />
+                <Text style={styles.sizeSep}>x</Text>
+                <TextInput
+                  style={[styles.input, styles.sizeInput]}
+                  placeholder="L"
+                  keyboardType="numeric"
+                  value={sizeFilters.length}
+                  onChangeText={t => setSizeFilters({ ...sizeFilters, length: t })}
+                />
+                <Text style={styles.sizeSep}>x</Text>
+                <TextInput
+                  style={[styles.input, styles.sizeInput]}
+                  placeholder="H"
+                  keyboardType="numeric"
+                  value={sizeFilters.height}
+                  onChangeText={t => setSizeFilters({ ...sizeFilters, height: t })}
+                />
+              </View>
+              <View style={styles.sizeUnitRow}>
+                {SIZE_UNITS.map(u => (
                   <TouchableOpacity
-                    key={v} style={chipStyle(selectedVenues, v)}
-                    onPress={() => toggleArray(v, selectedVenues, setSelectedVenues)}
+                    key={u}
+                    style={[styles.unitChip, sizeFilters.unit === u && styles.unitChipActive]}
+                    onPress={() => setSizeFilters({ ...sizeFilters, unit: u })}
                   >
-                    <Text style={chipTextStyle(selectedVenues, v)}>{v}</Text>
+                    <Text style={[styles.unitChipText, sizeFilters.unit === u && styles.unitChipTextActive]}>{u}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -172,7 +378,7 @@ function FilterSidebar({ visible, onClose, onApply, onClear, filters, onFilterCh
               </View>
             </View>
 
-            {/* Price Range */}
+            {/* Price Range (UNCHANGED) */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Price Range</Text>
               <View style={styles.priceRow}>
@@ -262,6 +468,34 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   priceInput: { flex: 1 },
   priceSep: { fontSize: 16, color: "#6b7280" },
+  suggestionContainer: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 8,
+    maxHeight: 180,
+    marginTop: 4,
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  suggestionText: { fontSize: 14, color: "#374151" },
+  sizeRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  sizeInput: { flex: 1, textAlign: "center" },
+  sizeSep: { fontSize: 16, color: "#6b7280", fontWeight: "600" },
+  sizeUnitRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  unitChip: {
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 12, backgroundColor: "#f3f4f6",
+    borderWidth: 1, borderColor: "#e5e7eb",
+  },
+  unitChipActive: { backgroundColor: "#ff6b8a", borderColor: "#ff6b8a" },
+  unitChipText: { fontSize: 11, color: "#6b7280" },
+  unitChipTextActive: { color: "#fff", fontWeight: "600" },
   footer: {
     flexDirection: "row", gap: 12,
     padding: 20, borderTopWidth: 1, borderTopColor: "#e5e7eb",

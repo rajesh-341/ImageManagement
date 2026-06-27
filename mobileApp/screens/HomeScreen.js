@@ -170,12 +170,21 @@ function HomeScreen({ navigation }) {
     try {
       const sf = {};
       if (filterData.searchText) sf.searchText = filterData.searchText;
+      if (filterData.designName) sf.designName = filterData.designName;
       if (filterData.eventTypes?.length > 0) sf.eventType = filterData.eventTypes.join(",");
       if (filterData.decorTypes?.length > 0) sf.decorType = filterData.decorTypes.join(",");
       if (filterData.colors?.length > 0) sf.colors = filterData.colors.join(",");
       if (filterData.flowerTypes?.length > 0) sf.flowerType = filterData.flowerTypes.join(",");
-      if (filterData.venueFilter) sf.placeOfEvent = filterData.venueFilter;
+      if (filterData.venueName) sf.placeOfEvent = filterData.venueName;
+      else if (filterData.venueFilter) sf.placeOfEvent = filterData.venueFilter;
+      if (filterData.folderName) sf.folderName = filterData.folderName;
+      if (filterData.collectedBy) sf.collectedBy = filterData.collectedBy;
       if (filterData.priceRange) { sf.priceMin = filterData.priceRange[0]; sf.priceMax = filterData.priceRange[1]; }
+      if (filterData.sizeFilters) {
+        if (filterData.sizeFilters.width) sf.sizeWidth = filterData.sizeFilters.width;
+        if (filterData.sizeFilters.length) sf.sizeLength = filterData.sizeFilters.length;
+        if (filterData.sizeFilters.height) sf.sizeHeight = filterData.sizeFilters.height;
+      }
       const data = await ApiService.searchImages(sf);
       setFilteredImages(Array.isArray(data) ? data : (data.images || []));
     } catch (err) {
@@ -337,9 +346,9 @@ function HomeScreen({ navigation }) {
     if (!d) return null;
     if (d.sizeDisplay) return d.sizeDisplay;
     const parts = [];
-    if (d.sizeWidth) parts.push(d.sizeWidth);
-    if (d.sizeLength) parts.push(d.sizeLength);
-    if (d.sizeHeight) parts.push(d.sizeHeight);
+    if (d.sizeWidth) parts.push(`${d.sizeWidth} W`);
+    if (d.sizeLength) parts.push(`${d.sizeLength} L`);
+    if (d.sizeHeight) parts.push(`${d.sizeHeight} H`);
     if (parts.length > 0) return `${parts.join(" x ")} ${d.sizeUnit || ""}`.trim();
     if (d.size) return `${d.size} ${d.sizeUnit || ""}`.trim();
     return null;

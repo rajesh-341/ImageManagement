@@ -39,7 +39,7 @@ function ImageCard({
     return parts.join(" x ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
   };
 
-  const sizeDisplay = data.sizeDisplay || buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
+  const sizeDisplay = buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
   const priceDisplay = formatPrice ? formatPrice(data.priceMin, data.priceMax) : "";
   const colorsDisplay = data.colourCombination?.length > 0 ? data.colourCombination.join(", ") : "";
 

@@ -187,9 +187,9 @@ function FolderScreen({ route, navigation }) {
     if (!d) return null;
     if (d.sizeDisplay) return d.sizeDisplay;
     const parts = [];
-    if (d.sizeWidth) parts.push(d.sizeWidth);
-    if (d.sizeLength) parts.push(d.sizeLength);
-    if (d.sizeHeight) parts.push(d.sizeHeight);
+    if (d.sizeWidth) parts.push(`${d.sizeWidth} W`);
+    if (d.sizeLength) parts.push(`${d.sizeLength} L`);
+    if (d.sizeHeight) parts.push(`${d.sizeHeight} H`);
     if (parts.length > 0) return `${parts.join(" x ")} ${d.sizeUnit || ""}`.trim();
     if (d.size) return `${d.size} ${d.sizeUnit || ""}`.trim();
     return null;

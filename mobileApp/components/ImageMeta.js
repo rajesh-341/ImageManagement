@@ -6,7 +6,15 @@ function ImageMeta({ data }) {
 
   const rows = [];
 
-  if (data.size) rows.push({ label: "Size", value: `${data.size} ${data.sizeUnit || ""}` });
+  if (data.sizeWidth || data.sizeLength || data.sizeHeight) {
+    const parts = [];
+    if (data.sizeWidth) parts.push(`${data.sizeWidth} W`);
+    if (data.sizeLength) parts.push(`${data.sizeLength} L`);
+    if (data.sizeHeight) parts.push(`${data.sizeHeight} H`);
+    rows.push({ label: "Size", value: `${parts.join(" x ")} ${data.sizeUnit || ""}`.trim() });
+  } else if (data.size) {
+    rows.push({ label: "Size", value: `${data.size} ${data.sizeUnit || ""}`.trim() });
+  }
   if (data.colourCombination?.length > 0) rows.push({ label: "Colours", value: data.colourCombination.join(", ") });
   if (data.placeOfEvent) rows.push({ label: "Place", value: data.placeOfEvent });
   if (data.decorType) rows.push({ label: "Decor", value: data.decorType });

@@ -172,6 +172,17 @@ class ApiService {
     });
   }
 
+  // Suggestions
+  async getSuggestions(field, query) {
+    try {
+      const params = new URLSearchParams({ field });
+      if (query) params.append("query", query);
+      return await this.request(`/images/suggestions?${params.toString()}`);
+    } catch (_) {
+      return [];
+    }
+  }
+
   // Search / Filters
   async searchImages(filters) {
     const offline = await offlineStorage.isOfflineMode();
@@ -185,7 +196,17 @@ class ApiService {
             (img) =>
               img.image_data?.designName?.toLowerCase().includes(q) ||
               img.image_data?.decorType?.toLowerCase().includes(q) ||
-              img.image_data?.eventType?.toLowerCase().includes(q)
+              img.image_data?.eventType?.toLowerCase().includes(q) ||
+              img.image_data?.venueName?.toLowerCase().includes(q) ||
+              img.image_data?.venueCustomer?.toLowerCase().includes(q) ||
+              img.folder_name?.toLowerCase().includes(q)
+          );
+        }
+        if (filters.designName) {
+          const q = filters.designName.toLowerCase();
+          results = results.filter(
+            (img) =>
+              img.image_data?.designName?.toLowerCase().includes(q)
           );
         }
         if (filters.eventType) {
@@ -201,23 +222,58 @@ class ApiService {
           );
         }
         if (filters.placeOfEvent) {
+          const q = filters.placeOfEvent.toLowerCase();
           results = results.filter(
             (img) =>
-              img.image_data?.venueName === filters.placeOfEvent
+              img.image_data?.venueName?.toLowerCase().includes(q)
+          );
+        }
+        if (filters.folderName) {
+          const q = filters.folderName.toLowerCase();
+          results = results.filter(
+            (img) =>
+              img.folder_name?.toLowerCase().includes(q)
+          );
+        }
+        if (filters.collectedBy) {
+          const q = filters.collectedBy.toLowerCase();
+          results = results.filter(
+            (img) =>
+              img.image_data?.collectedBy?.toLowerCase().includes(q)
+          );
+        }
+        if (filters.sizeWidth) {
+          results = results.filter(
+            (img) =>
+              String(img.image_data?.sizeWidth) === filters.sizeWidth
+          );
+        }
+        if (filters.sizeLength) {
+          results = results.filter(
+            (img) =>
+              String(img.image_data?.sizeLength) === filters.sizeLength
+          );
+        }
+        if (filters.sizeHeight) {
+          results = results.filter(
+            (img) =>
+              String(img.image_data?.sizeHeight) === filters.sizeHeight
           );
         }
         if (filters.priceMin) {
+          const minVal = parseFloat(filters.priceMin);
           results = results.filter(
             (img) =>
-              (img.image_data?.priceMin || 0) >=
-              parseFloat(filters.priceMin)
+              (img.image_data?.priceMax != null && img.image_data?.priceMax !== "" && parseFloat(img.image_data?.priceMax) >= minVal) ||
+              (img.image_data?.priceMin != null && img.image_data?.priceMin !== "" && parseFloat(img.image_data?.priceMin) >= minVal)
           );
         }
         if (filters.priceMax) {
+          const maxVal = parseFloat(filters.priceMax);
           results = results.filter(
             (img) =>
-              (img.image_data?.priceMax || 0) <=
-              parseFloat(filters.priceMax)
+              (img.image_data?.priceMin != null && img.image_data?.priceMin !== "" && parseFloat(img.image_data?.priceMin) <= maxVal) ||
+              (img.image_data?.priceMax != null && img.image_data?.priceMax !== "" && parseFloat(img.image_data?.priceMax) <= maxVal)
           );
         }
         return results;
