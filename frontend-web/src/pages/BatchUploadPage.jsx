@@ -156,11 +156,11 @@ function BatchUploadPage() {
 
   const buildSizeDisplay = (width, length, height, unit) => {
     const parts = [];
-    if (width && width !== "0") parts.push(width);
-    if (length && length !== "0") parts.push(length);
-    if (height && height !== "0") parts.push(height);
+    if (width && width !== "0") parts.push(`${width} W`);
+    if (length && length !== "0") parts.push(`${length} L`);
+    if (height && height !== "0") parts.push(`${height} H`);
     if (parts.length === 0) return "";
-    return parts.join("x") + (unit ? ` ${unit}` : "");
+    return parts.join(" x ") + (unit ? ` ${unit}` : "");
   };
 
   const preventNumberAction = (e) => {

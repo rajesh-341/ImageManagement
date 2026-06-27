@@ -33,10 +33,10 @@ function ImageCard({
 
   const buildSizeLabeled = (w, l, h) => {
     const parts = [];
-    if (w && w !== "0") parts.push(`W:${w}`);
-    if (l && l !== "0") parts.push(`L:${l}`);
-    if (h && h !== "0") parts.push(`H:${h}`);
-    return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
+    if (w && w !== "0") parts.push(`${w} W`);
+    if (l && l !== "0") parts.push(`${l} L`);
+    if (h && h !== "0") parts.push(`${h} H`);
+    return parts.join(" x ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
   };
 
   const sizeDisplay = data.sizeDisplay || buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);

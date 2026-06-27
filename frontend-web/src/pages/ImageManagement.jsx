@@ -507,11 +507,11 @@ function ImageManagement() {
 
   const buildSizeDisplay = (width, length, height, unit) => {
     const parts = [];
-    if (width && width !== "0") parts.push(width);
-    if (length && length !== "0") parts.push(length);
-    if (height && height !== "0") parts.push(height);
+    if (width && width !== "0") parts.push(`${width} W`);
+    if (length && length !== "0") parts.push(`${length} L`);
+    if (height && height !== "0") parts.push(`${height} H`);
     if (parts.length === 0) return "";
-    return parts.join("x") + (unit ? ` ${unit}` : "");
+    return parts.join(" x ") + (unit ? ` ${unit}` : "");
   };
 
   const handleUploadSingleImage = async (e) => {
@@ -1178,10 +1178,10 @@ function ImageManagement() {
     const data = image.image_data || {};
     const buildSizeLabeled = (w, l, h) => {
       const parts = [];
-      if (w && w !== "0") parts.push(`W:${w}`);
-      if (l && l !== "0") parts.push(`L:${l}`);
-      if (h && h !== "0") parts.push(`H:${h}`);
-      return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
+      if (w && w !== "0") parts.push(`${w} W`);
+      if (l && l !== "0") parts.push(`${l} L`);
+      if (h && h !== "0") parts.push(`${h} H`);
+      return parts.join(" x ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "");
     };
     const sizeDisplay = data.sizeDisplay || buildSizeLabeled(data.sizeWidth, data.sizeLength, data.sizeHeight);
     const priceDisplay = formatPrice(data.priceMin, data.priceMax);

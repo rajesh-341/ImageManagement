@@ -64,10 +64,10 @@ const formatPriceStr = (min, max) => {
 const buildSizeLabeled = (data) => {
   const w = data.sizeWidth, l = data.sizeLength, h = data.sizeHeight;
   const parts = [];
-  if (w && w !== "0") parts.push(`W:${w}`);
-  if (l && l !== "0") parts.push(`L:${l}`);
-  if (h && h !== "0") parts.push(`H:${h}`);
-  return parts.join(" ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "") || data.sizeDisplay || "";
+  if (w && w !== "0") parts.push(`${w} W`);
+  if (l && l !== "0") parts.push(`${l} L`);
+  if (h && h !== "0") parts.push(`${h} H`);
+  return parts.join(" x ") + (data.sizeUnit ? ` ${data.sizeUnit}` : "") || data.sizeDisplay || "";
 };
 
 const truncateText = (text, maxWidth, doc) => {

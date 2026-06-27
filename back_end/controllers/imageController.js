@@ -131,16 +131,36 @@ const getImages = async (req, res) => {
       colorList.forEach(color => params.push(`["${color}"]`));
     }
 
+    const priceConditions = [];
+
     if (priceMin !== undefined && priceMin !== '' && parseFloat(priceMin) > 0) {
-      conditions.push(`(image_data->>'priceMax' IS NOT NULL AND image_data->>'priceMax' != '' AND CAST(image_data->>'priceMax' AS NUMERIC) >= $${paramIndex})`);
-      params.push(parseFloat(priceMin));
+      const minVal = parseFloat(priceMin);
+      priceConditions.push(`(
+        (image_data->>'priceMax' IS NOT NULL AND image_data->>'priceMax' != '' AND CAST(image_data->>'priceMax' AS NUMERIC) >= $${paramIndex})
+        OR
+        (image_data->>'priceMin' IS NOT NULL AND image_data->>'priceMin' != '' AND CAST(image_data->>'priceMin' AS NUMERIC) >= $${paramIndex})
+      )`);
+      params.push(minVal);
       paramIndex++;
     }
 
     if (priceMax !== undefined && priceMax !== '' && parseFloat(priceMax) < 10000) {
-      conditions.push(`(image_data->>'priceMin' IS NOT NULL AND image_data->>'priceMin' != '' AND CAST(image_data->>'priceMin' AS NUMERIC) <= $${paramIndex})`);
-      params.push(parseFloat(priceMax));
+      const maxVal = parseFloat(priceMax);
+      priceConditions.push(`(
+        (image_data->>'priceMin' IS NOT NULL AND image_data->>'priceMin' != '' AND CAST(image_data->>'priceMin' AS NUMERIC) <= $${paramIndex})
+        OR
+        (image_data->>'priceMax' IS NOT NULL AND image_data->>'priceMax' != '' AND CAST(image_data->>'priceMax' AS NUMERIC) <= $${paramIndex})
+      )`);
+      params.push(maxVal);
       paramIndex++;
+    }
+
+    if (priceConditions.length > 0) {
+      priceConditions.push(`(
+        (image_data->>'priceMin' IS NOT NULL AND image_data->>'priceMin' != '')
+        OR (image_data->>'priceMax' IS NOT NULL AND image_data->>'priceMax' != '')
+      )`);
+      conditions.push(`(${priceConditions.join(" AND ")})`);
     }
 
     if (collectedBy) {

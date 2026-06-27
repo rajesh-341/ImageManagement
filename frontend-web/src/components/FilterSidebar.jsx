@@ -228,11 +228,11 @@ function FilterSidebar({ onApply, onClear, filters, onFilterChange, onClose, cus
 
   const buildSizeDisplay = () => {
     const parts = [];
-    if (sizeFilters.width) parts.push(sizeFilters.width);
-    if (sizeFilters.length) parts.push(sizeFilters.length);
-    if (sizeFilters.height) parts.push(sizeFilters.height);
+    if (sizeFilters.width) parts.push(`${sizeFilters.width} W`);
+    if (sizeFilters.length) parts.push(`${sizeFilters.length} L`);
+    if (sizeFilters.height) parts.push(`${sizeFilters.height} H`);
     if (parts.length === 0) return "";
-    return parts.join("x") + (sizeFilters.unit ? ` ${sizeFilters.unit}` : "");
+    return parts.join(" x ") + (sizeFilters.unit ? ` ${sizeFilters.unit}` : "");
   };
 
   const handleApply = () => {
