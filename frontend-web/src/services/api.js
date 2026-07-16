@@ -234,6 +234,19 @@ const ApiService = {
     });
   },
 
+  async updateFavoriteFolder(folderId, folderName) {
+    return request(`/favorites/folders/${folderId}`, {
+      method: "PUT",
+      body: JSON.stringify({ folderName }),
+    });
+  },
+
+  async deleteFavoriteFolder(folderId) {
+    return request(`/favorites/folders/${folderId}`, {
+      method: "DELETE",
+    });
+  },
+
   async getUsers() {
     const data = await request("/users");
     return data.users || [];

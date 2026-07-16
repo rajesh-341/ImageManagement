@@ -72,6 +72,12 @@ function ImageManagement() {
   const [editFolderVenue, setEditFolderVenue] = useState("");
   const [editFolderDate, setEditFolderDate] = useState("");
   const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
+  const [showEditFavFolderModal, setShowEditFavFolderModal] = useState(false);
+  const [editingFavFolder, setEditingFavFolder] = useState(null);
+  const [editFavFolderName, setEditFavFolderName] = useState("");
+  const [editFavFolderVenue, setEditFavFolderVenue] = useState("");
+  const [editFavFolderDate, setEditFavFolderDate] = useState("");
+  const [editFavFolderEventTypes, setEditFavFolderEventTypes] = useState([]);
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("venue");
   const [searchSizeWidth, setSearchSizeWidth] = useState("");
@@ -102,6 +108,7 @@ function ImageManagement() {
   const [customETInput, setCustomETInput] = useState("");
   const [customFavETInput, setCustomFavETInput] = useState("");
   const [customEditETInput, setCustomEditETInput] = useState("");
+  const [customEditFavETInput, setCustomEditFavETInput] = useState("");
   const [hiddenEventTypes, setHiddenEventTypes] = useState([]);
   const [hiddenDecorTypes, setHiddenDecorTypes] = useState([]);
   const [designNameSugs, setDesignNameSugs] = useState([]);
@@ -109,12 +116,16 @@ function ImageManagement() {
 
   const designNameSugTimer = useRef(null);
   const venueSugTimer = useRef(null);
+  const lightboxTouchStartX = useRef(0);
+  const lightboxTouchStartY = useRef(0);
   const [showEventTypeDropdown, setShowEventTypeDropdown] = useState(false);
   const [showFavEventTypeDropdown, setShowFavEventTypeDropdown] = useState(false);
   const [showEditEventTypeDropdown, setShowEditEventTypeDropdown] = useState(false);
+  const [showEditFavEventTypeDropdown, setShowEditFavEventTypeDropdown] = useState(false);
   const eventTypeRef = useRef(null);
   const favEventTypeRef = useRef(null);
   const editEventTypeRef = useRef(null);
+  const editFavEventTypeRef = useRef(null);
 
   const chunkedFiltered = useChunkedRender(filteredImages);
   const chunkedAllImages = useChunkedRender(allImages);
@@ -131,6 +142,9 @@ function ImageManagement() {
       }
       if (editEventTypeRef.current && !editEventTypeRef.current.contains(e.target)) {
         setShowEditEventTypeDropdown(false);
+      }
+      if (editFavEventTypeRef.current && !editFavEventTypeRef.current.contains(e.target)) {
+        setShowEditFavEventTypeDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -974,11 +988,53 @@ function ImageManagement() {
     e.stopPropagation();
     if (!window.confirm(`Delete folder "${name}" from Favorites?`)) return;
     try {
-      await ApiService.deleteFolder(id);
+      await ApiService.deleteFavoriteFolder(id);
       loadFavoriteFolders();
     } catch (err) {
       showNotif("Something went wrong");
     }
+  };
+
+  const handleOpenEditFavFolder = (folder, e) => {
+    e.stopPropagation();
+    const { customerName, venue, eventDate } = parseFolderName(folder.name);
+    setEditingFavFolder(folder);
+    setEditFavFolderName(customerName);
+    setEditFavFolderVenue(venue);
+    setEditFavFolderDate(eventDate);
+    setEditFavFolderEventTypes(folder.event_types || []);
+    setShowEditFavFolderModal(true);
+  };
+
+  const handleSaveEditFavFolder = async (e) => {
+    e.preventDefault();
+    if (!editingFavFolder) return;
+    const newName = `${editFavFolderName.trim()}_${editFavFolderVenue.trim()}_${editFavFolderDate}`;
+    if (!editFavFolderName.trim()) { showNotif("Customer name is required", "warning"); return; }
+    setLoading(true);
+    try {
+      await ApiService.updateFavoriteFolder(editingFavFolder.id, newName);
+      resetEditFavFolderForm();
+      setShowEditFavFolderModal(false);
+      loadFavoriteFolders();
+      if (selectedFavFolder && selectedFavFolder.id === editingFavFolder.id) {
+        setSelectedFavFolder(prev => ({ ...prev, name: newName }));
+      }
+    } catch (err) {
+      showNotif(err.message || "Failed to rename folder");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetEditFavFolderForm = () => {
+    setEditingFavFolder(null);
+    setEditFavFolderName("");
+    setEditFavFolderVenue("");
+    setEditFavFolderDate("");
+    setEditFavFolderEventTypes([]);
+    setCustomEditFavETInput("");
+    setShowEditFavEventTypeDropdown(false);
   };
 
   const handleCreateFavFolder = async (e) => {
@@ -1569,8 +1625,8 @@ function ImageManagement() {
             <FolderCard
               key={folder.id}
               folder={folder}
-              canDelete={canUpload}
-              onEdit={(f, evt) => handleOpenEditFolder(f, evt)}
+              canDelete={true}
+              onEdit={(f, evt) => handleOpenEditFavFolder(f, evt)}
               onMoveToFolder={handleMoveImagesToFolder}
               onClick={() => handleEnterFavoriteFolder(folder)}
               onDelete={(e) => handleDeleteFavoriteFolder(folder.id, folder.name, e)}
@@ -1783,27 +1839,27 @@ function ImageManagement() {
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleAddFolder(e); }}>
               <div className="form-group">
-                <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
+                <label className="label">Customer Name (max 25 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value.slice(0, 15))}
+                  onChange={(e) => setCustomerName(e.target.value.slice(0, 25))}
                   placeholder="Enter customer name"
-                  maxLength={15}
+                  maxLength={25}
                   required={isFieldRequired("folder_customerName")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
-                <label className="label">Venue (max 15 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
+                <label className="label">Venue (max 25 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={venueName}
-                  onChange={(e) => setVenueName(e.target.value.slice(0, 15))}
+                  onChange={(e) => setVenueName(e.target.value.slice(0, 25))}
                   placeholder="Enter venue name"
-                  maxLength={15}
+                  maxLength={25}
                   required={isFieldRequired("folder_venue")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
@@ -1842,7 +1898,7 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Event Types (multi-select)</label>
+                <label className="label">Event Types (multi-select, max 3)</label>
                 <div className="custom-multiselect" ref={eventTypeRef}>
                   <div className="custom-multiselect-trigger" onClick={() => setShowEventTypeDropdown(prev => !prev)}>
                     {folderEventTypes.length > 0 ? (
@@ -1860,34 +1916,31 @@ function ImageManagement() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && customETInput.trim()) {
                               e.preventDefault(); e.stopPropagation();
+                              if (folderEventTypes.length >= 3) { showNotif("Maximum 3 event types allowed", "warning"); return; }
                               const val = customETInput.trim();
                               if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
                               setFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
                               setCustomETInput("");
                             }
                           }} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={!customETInput.trim()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const val = customETInput.trim();
-                            if (!val) return;
-                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
-                            setFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
-                            setCustomETInput("");
-                          }}>Add</button>
                       </div>
+                      {folderEventTypes.length >= 3 && (
+                        <div className="multiselect-limit-msg" style={{ padding: "6px 12px", fontSize: 12, color: "#ef4444", background: "#fef2f2" }}>
+                          Maximum 3 event types allowed. Remove one to add another.
+                        </div>
+                      )}
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${folderEventTypes.includes(type) ? "selected" : ""}`}>
                           <input type="checkbox" checked={folderEventTypes.includes(type)}
                             onChange={() => {
                               setFolderEventTypes(prev =>
-                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                                prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                               );
                             }} />
                           <span onClick={(e) => {
                             e.stopPropagation();
                             setFolderEventTypes(prev =>
-                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                             );
                           }}>{type}</span>
                         </label>
@@ -1922,27 +1975,27 @@ function ImageManagement() {
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleCreateFavFolder(e); }}>
               <div className="form-group">
-                <label className="label">Customer Name (max 15 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
+                <label className="label">Customer Name (max 25 characters){isFieldRequired("folder_customerName") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={favCustName}
-                  onChange={(e) => setFavCustName(e.target.value.slice(0, 15))}
+                  onChange={(e) => setFavCustName(e.target.value.slice(0, 25))}
                   placeholder="Enter customer name"
-                  maxLength={15}
+                  maxLength={25}
                   required={isFieldRequired("folder_customerName")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">
-                <label className="label">Venue (max 15 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
+                <label className="label">Venue (max 25 characters){isFieldRequired("folder_venue") && <span className="required">*</span>}</label>
                 <input
                   type="text"
                   className="input"
                   value={favVenue}
-                  onChange={(e) => setFavVenue(e.target.value.slice(0, 15))}
+                  onChange={(e) => setFavVenue(e.target.value.slice(0, 25))}
                   placeholder="Enter venue name"
-                  maxLength={15}
+                  maxLength={25}
                   required={isFieldRequired("folder_venue")}
                   onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
@@ -1981,7 +2034,7 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Event Types (multi-select)</label>
+                <label className="label">Event Types (multi-select, max 3)</label>
                 <div className="custom-multiselect" ref={favEventTypeRef}>
                   <div className="custom-multiselect-trigger" onClick={() => setShowFavEventTypeDropdown(prev => !prev)}>
                     {favFolderEventTypes.length > 0 ? (
@@ -1999,34 +2052,31 @@ function ImageManagement() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && customFavETInput.trim()) {
                               e.preventDefault(); e.stopPropagation();
+                              if (favFolderEventTypes.length >= 3) { showNotif("Maximum 3 event types allowed", "warning"); return; }
                               const val = customFavETInput.trim();
                               if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
                               setFavFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
                               setCustomFavETInput("");
                             }
                           }} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={!customFavETInput.trim()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const val = customFavETInput.trim();
-                            if (!val) return;
-                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
-                            setFavFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
-                            setCustomFavETInput("");
-                          }}>Add</button>
                       </div>
+                      {favFolderEventTypes.length >= 3 && (
+                        <div className="multiselect-limit-msg" style={{ padding: "6px 12px", fontSize: 12, color: "#ef4444", background: "#fef2f2" }}>
+                          Maximum 3 event types allowed. Remove one to add another.
+                        </div>
+                      )}
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${favFolderEventTypes.includes(type) ? "selected" : ""}`}>
                           <input type="checkbox" checked={favFolderEventTypes.includes(type)}
                             onChange={() => {
                               setFavFolderEventTypes(prev =>
-                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                                prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                               );
                             }} />
                           <span onClick={(e) => {
                             e.stopPropagation();
                             setFavFolderEventTypes(prev =>
-                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                             );
                           }}>{type}</span>
                         </label>
@@ -2064,9 +2114,9 @@ function ImageManagement() {
                   type="text"
                   className="input"
                   value={editFolderName}
-                  onChange={(e) => setEditFolderName(e.target.value.slice(0, 15))}
+                  onChange={(e) => setEditFolderName(e.target.value.slice(0, 25))}
                   placeholder="Enter customer name"
-                  maxLength={15}
+                  maxLength={25}
                   required
                 />
               </div>
@@ -2076,9 +2126,9 @@ function ImageManagement() {
                   type="text"
                   className="input"
                   value={editFolderVenue}
-                  onChange={(e) => setEditFolderVenue(e.target.value.slice(0, 15))}
+                  onChange={(e) => setEditFolderVenue(e.target.value.slice(0, 25))}
                   placeholder="Enter venue name"
-                  maxLength={15}
+                  maxLength={25}
                 />
               </div>
               <div className="form-group">
@@ -2091,7 +2141,7 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="label">Event Types (multi-select)</label>
+                <label className="label">Event Types (multi-select, max 3)</label>
                 <div className="custom-multiselect" ref={editEventTypeRef}>
                   <div className="custom-multiselect-trigger" onClick={() => setShowEditEventTypeDropdown(prev => !prev)}>
                     {editFolderEventTypes.length > 0 ? (
@@ -2109,34 +2159,31 @@ function ImageManagement() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && customEditETInput.trim()) {
                               e.preventDefault(); e.stopPropagation();
+                              if (editFolderEventTypes.length >= 3) { showNotif("Maximum 3 event types allowed", "warning"); return; }
                               const val = customEditETInput.trim();
                               if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
                               setEditFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
                               setCustomEditETInput("");
                             }
                           }} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={!customEditETInput.trim()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const val = customEditETInput.trim();
-                            if (!val) return;
-                            if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
-                            setEditFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
-                            setCustomEditETInput("");
-                          }}>Add</button>
                       </div>
+                      {editFolderEventTypes.length >= 3 && (
+                        <div className="multiselect-limit-msg" style={{ padding: "6px 12px", fontSize: 12, color: "#ef4444", background: "#fef2f2" }}>
+                          Maximum 3 event types allowed. Remove one to add another.
+                        </div>
+                      )}
                       {allEventTypes.map(type => (
                         <label key={type} className={`custom-multiselect-option ${editFolderEventTypes.includes(type) ? "selected" : ""}`}>
                           <input type="checkbox" checked={editFolderEventTypes.includes(type)}
                             onChange={() => {
                               setEditFolderEventTypes(prev =>
-                                prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                                prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                               );
                             }} />
                           <span onClick={(e) => {
                             e.stopPropagation();
                             setEditFolderEventTypes(prev =>
-                              prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                              prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
                             );
                           }}>{type}</span>
                         </label>
@@ -2152,6 +2199,115 @@ function ImageManagement() {
               )}
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => { resetEditFolderForm(); setShowEditFolderModal(false); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Favourite Folder Modal */}
+      {showEditFavFolderModal && editingFavFolder && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Rename Favourite Folder</h2>
+              <button className="modal-close" onClick={() => { resetEditFavFolderForm(); setShowEditFavFolderModal(false); }}>×</button>
+            </div>
+            <form onSubmit={handleSaveEditFavFolder}>
+              <div className="form-group">
+                <label className="label">Customer Name <span className="required">*</span></label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFavFolderName}
+                  onChange={(e) => setEditFavFolderName(e.target.value.slice(0, 25))}
+                  placeholder="Enter customer name"
+                  maxLength={25}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Venue</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFavFolderVenue}
+                  onChange={(e) => setEditFavFolderVenue(e.target.value.slice(0, 25))}
+                  placeholder="Enter venue name"
+                  maxLength={25}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={editFavFolderDate}
+                  onChange={(e) => setEditFavFolderDate(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Event Types (multi-select, max 3)</label>
+                <div className="custom-multiselect" ref={editFavEventTypeRef}>
+                  <div className="custom-multiselect-trigger" onClick={() => setShowEditFavEventTypeDropdown(prev => !prev)}>
+                    {editFavFolderEventTypes.length > 0 ? (
+                      <span className="custom-multiselect-summary">{editFavFolderEventTypes.length} selected</span>
+                    ) : (
+                      <span className="custom-multiselect-placeholder">Select event types...</span>
+                    )}
+                    <span className={`custom-multiselect-arrow ${showEditFavEventTypeDropdown ? "open" : ""}`}>▾</span>
+                  </div>
+                  {showEditFavEventTypeDropdown && (
+                    <div className="custom-multiselect-dropdown">
+                      <div className="custom-multiselect-input-row">
+                        <input type="text" className="input input-sm" placeholder="Type custom..." value={customEditFavETInput}
+                          onChange={(e) => setCustomEditFavETInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && customEditFavETInput.trim()) {
+                              e.preventDefault(); e.stopPropagation();
+                              if (editFavFolderEventTypes.length >= 3) { showNotif("Maximum 3 event types allowed", "warning"); return; }
+                              const val = customEditFavETInput.trim();
+                              if (!allEventTypes.includes(val)) setCustomEventTypes(prev => [...prev, val]);
+                              setEditFavFolderEventTypes(prev => prev.includes(val) ? prev : [...prev, val]);
+                              setCustomEditFavETInput("");
+                            }
+                          }} />
+                      </div>
+                      {editFavFolderEventTypes.length >= 3 && (
+                        <div className="multiselect-limit-msg" style={{ padding: "6px 12px", fontSize: 12, color: "#ef4444", background: "#fef2f2" }}>
+                          Maximum 3 event types allowed. Remove one to add another.
+                        </div>
+                      )}
+                      {allEventTypes.map(type => (
+                        <label key={type} className={`custom-multiselect-option ${editFavFolderEventTypes.includes(type) ? "selected" : ""}`}>
+                          <input type="checkbox" checked={editFavFolderEventTypes.includes(type)}
+                            onChange={() => {
+                              setEditFavFolderEventTypes(prev =>
+                                prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
+                              );
+                            }} />
+                          <span onClick={(e) => {
+                            e.stopPropagation();
+                            setEditFavFolderEventTypes(prev =>
+                              prev.includes(type) ? prev.filter(t => t !== type) : (prev.length >= 3 ? (showNotif("Maximum 3 event types allowed", "warning"), prev) : [...prev, type])
+                            );
+                          }}>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {editFavFolderName && editFavFolderVenue && editFavFolderDate && (
+                <div className="folder-name-preview">
+                  Folder will be: <strong>{editFavFolderName}_{editFavFolderVenue}_{editFavFolderDate}</strong>
+                </div>
+              )}
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => { resetEditFavFolderForm(); setShowEditFavFolderModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? "Saving..." : "Save"}
                 </button>
@@ -2329,7 +2485,6 @@ function ImageManagement() {
                   </button>
                 </div>
               </form>
-            )}
 
           </div>
         </div>
@@ -2337,7 +2492,26 @@ function ImageManagement() {
 
       {/* Lightbox */}
       {lightboxImage && (
-        <div className="lightbox" onClick={() => setLightboxImage(null)}>
+        <div className="lightbox" onClick={() => setLightboxImage(null)}
+          onTouchStart={(e) => {
+            lightboxTouchStartX.current = e.touches[0].clientX;
+            lightboxTouchStartY.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - lightboxTouchStartX.current;
+            const dy = e.changedTouches[0].clientY - lightboxTouchStartY.current;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+              const all = lightboxImage.allImages;
+              const idx = lightboxImage.currentIndex;
+              if (dx > 0 && all && idx > 0) {
+                e.stopPropagation();
+                openLightbox(all, idx - 1);
+              } else if (dx < 0 && all && idx < all.length - 1) {
+                e.stopPropagation();
+                openLightbox(all, idx + 1);
+              }
+            }
+          }}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>X</button>
           {lightboxImage.allImages && lightboxImage.allImages.length > 1 && (
             <>

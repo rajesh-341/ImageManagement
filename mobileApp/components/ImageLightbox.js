@@ -84,7 +84,11 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
       },
       onPanResponderMove: (evt, gs) => {
         const touches = evt.nativeEvent.touches;
-        if (touches.length === 2 && pinchBaseDist.current !== null) {
+        if (touches.length === 2) {
+          if (pinchBaseDist.current === null) {
+            pinchBaseDist.current = touchDistance(touches[0], touches[1]);
+            pinchBaseScale.current = baseScale.current;
+          }
           const dist = touchDistance(touches[0], touches[1]);
           const newScale = Math.min(
             Math.max(pinchBaseScale.current * (dist / pinchBaseDist.current), 0.5),
@@ -100,12 +104,6 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
       onPanResponderRelease: (_, gs) => {
         pinchBaseDist.current = null;
 
-        if (baseScale.current > 1) {
-          baseTX.current += gs.dx;
-          baseTY.current += gs.dy;
-          return;
-        }
-
         if (Math.abs(gs.dx) < 10 && Math.abs(gs.dy) < 10) {
           const now = Date.now();
           if (now - lastTapTime.current < DOUBLE_TAP_DELAY) {
@@ -114,6 +112,12 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
           } else {
             lastTapTime.current = now;
           }
+          return;
+        }
+
+        if (baseScale.current > 1) {
+          baseTX.current += gs.dx;
+          baseTY.current += gs.dy;
           return;
         }
 
