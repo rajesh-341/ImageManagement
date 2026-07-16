@@ -44,6 +44,7 @@ function ImageManagement() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxRotation, setLightboxRotation] = useState(0);
   const [uploadProgress, setUploadProgress] = useState("");
   const [view, setView] = useState("folders");
   const [filteredImages, setFilteredImages] = useState([]);
@@ -355,6 +356,7 @@ function ImageManagement() {
 
   const openLightbox = useCallback((imageArray, index) => {
     const img = imageArray[index];
+    setLightboxRotation(0);
     setLightboxImage({
       url: getFullResUrl(img.image_data),
       data: img.image_data,
@@ -1135,6 +1137,8 @@ function ImageManagement() {
         const all = lightboxImage.allImages;
         const idx = lightboxImage.currentIndex;
         if (all && idx < all.length - 1) openLightbox(all, idx + 1);
+      } else if (e.key === "r" || e.key === "R") {
+        setLightboxRotation(prev => (prev + 90) % 360);
       } else if (e.key === "Escape") {
         setLightboxImage(null);
       }
@@ -2538,6 +2542,7 @@ function ImageManagement() {
           )}
           {lightboxImage.url ? (
             <img className="lightbox-image" src={lightboxImage.url} alt={lightboxImage.data?.designName}
+              style={{ transform: `rotate(${lightboxRotation}deg)` }}
               onClick={(e) => e.stopPropagation()}
               onError={(e) => { e.target.onerror = null; e.target.style.display = "none"; }} />
           ) : (
@@ -2547,6 +2552,9 @@ function ImageManagement() {
             <h3>{lightboxImage.data?.designName || "Untitled"}</h3>
             {renderImageCardDetails(lightboxImage.data)}
             <div className="lightbox-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => setLightboxRotation(prev => (prev + 90) % 360)}>
+                Rotate
+              </button>
               <button className="btn btn-secondary btn-sm" onClick={async () => {
                 const choice = await openDownloadModal();
                 if (!choice) return;

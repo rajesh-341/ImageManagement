@@ -9,6 +9,7 @@ const KEYS = {
   DOWNLOAD_PATH: "download_path",
   FAVOURITES: "favourites",
   FAVOURITE_FOLDERS: "favourite_folders",
+  FAVOURITE_FOLDER_IMAGES: "favourite_folder_images",
   IMAGE_CACHE_PATHS: "image_cache_paths",
   IMAGE_VERSIONS: "image_versions",
   LAST_SYNC: "last_sync",
@@ -166,6 +167,24 @@ export const getFavouriteFolders = async () => {
   }
 };
 
+export const storeFavouriteFolderImages = async (mapping) => {
+  try {
+    await AsyncStorage.setItem(KEYS.FAVOURITE_FOLDER_IMAGES, JSON.stringify(mapping));
+  } catch (error) {
+    console.error("Error storing favourite folder images:", error);
+  }
+};
+
+export const getFavouriteFolderImages = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.FAVOURITE_FOLDER_IMAGES);
+    return data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.error("Error getting favourite folder images:", error);
+    return {};
+  }
+};
+
 export const addToSyncQueue = async (action) => {
   try {
     const queue = await getSyncQueue();
@@ -274,6 +293,7 @@ export const clearOfflineData = async () => {
       KEYS.OFFLINE_MODE,
       KEYS.FAVOURITES,
       KEYS.FAVOURITE_FOLDERS,
+      KEYS.FAVOURITE_FOLDER_IMAGES,
       KEYS.IMAGE_CACHE_PATHS,
       KEYS.IMAGE_VERSIONS,
       KEYS.LAST_SYNC,
@@ -302,6 +322,8 @@ export default {
   getFavourites,
   storeFavouriteFolders,
   getFavouriteFolders,
+  storeFavouriteFolderImages,
+  getFavouriteFolderImages,
   addToSyncQueue,
   getSyncQueue,
   clearSyncQueue,

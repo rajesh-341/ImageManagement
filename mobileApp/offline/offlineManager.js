@@ -221,6 +221,14 @@ class OfflineManager {
     try {
       const favFolders = await apiService.getFavoriteFolders();
       await offlineStorage.storeFavouriteFolders(favFolders || []);
+      const favFolderImages = {};
+      for (const ff of (favFolders || [])) {
+        try {
+          const imgs = await apiService.getFavorites(ff.name);
+          favFolderImages[ff.name] = imgs || [];
+        } catch (_) {}
+      }
+      await offlineStorage.storeFavouriteFolderImages(favFolderImages);
     } catch (e) {
       console.warn("Failed to sync favourite folders:", e);
     }

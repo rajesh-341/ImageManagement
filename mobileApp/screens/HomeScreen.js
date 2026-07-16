@@ -277,15 +277,23 @@ function HomeScreen({ navigation }) {
           (pct) => setOfflineProgress(pct)
         );
         await offlineStorage.storeImages(allImgs);
-        await offlineStorage.setOfflineMode(true);
-        setOfflineMode(true);
-        setOfflineStatus("Offline ready");
         const favs = await ApiService.getFavorites();
         await offlineStorage.storeFavourites(favs || []);
         const folders = await ApiService.getFolders();
         await offlineStorage.storeFolders(folders || []);
         const favFolders = await ApiService.getFavoriteFolders();
         await offlineStorage.storeFavouriteFolders(favFolders || []);
+        const favFolderImages = {};
+        for (const ff of (favFolders || [])) {
+          try {
+            const imgs = await ApiService.getFavorites(ff.name);
+            favFolderImages[ff.name] = imgs || [];
+          } catch (_) {}
+        }
+        await offlineStorage.storeFavouriteFolderImages(favFolderImages);
+        await offlineStorage.setOfflineMode(true);
+        setOfflineMode(true);
+        setOfflineStatus("Offline ready");
       } catch (err) {
         Alert.alert("Download Failed", err.message);
       } finally {

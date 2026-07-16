@@ -15,6 +15,8 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const txAnim = useRef(new Animated.Value(0)).current;
   const tyAnim = useRef(new Animated.Value(0)).current;
+  const rotation = useRef(0);
+  const [rotationDegree, setRotationDegree] = React.useState(0);
 
   const baseScale = useRef(1);
   const baseTX = useRef(0);
@@ -32,6 +34,8 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
     baseTY.current = 0;
     lastTapTime.current = 0;
     pinchBaseDist.current = null;
+    rotation.current = 0;
+    setRotationDegree(0);
   }, [scaleAnim, txAnim, tyAnim]);
 
   useEffect(() => {
@@ -68,6 +72,11 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
       baseScale.current = 2;
     }
   }, [scaleAnim, txAnim, tyAnim]);
+
+  const handleRotate = useCallback(() => {
+    rotation.current = (rotation.current + 90) % 360;
+    setRotationDegree(rotation.current);
+  }, []);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -167,6 +176,13 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
           <Text style={styles.lightboxCloseText}>{"\u2715"}</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={[styles.lightboxRotate, { top: insets.top + 10 }]}
+          onPress={handleRotate}
+        >
+          <Text style={styles.lightboxRotateText}>{"\u21BB"}</Text>
+        </TouchableOpacity>
+
         {image?.url ? (
           <>
             <Animated.View
@@ -174,6 +190,7 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
                 styles.lightboxImgContainer,
                 {
                   transform: [
+                    { rotate: `${rotationDegree}deg` },
                     { scale: scaleAnim },
                     { translateX: txAnim },
                     { translateY: tyAnim },
@@ -251,6 +268,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  lightboxRotate: {
+    position: "absolute",
+    right: 66,
+    zIndex: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lightboxRotateText: { color: "#fff", fontSize: 20, fontWeight: "700" },
   lightboxImgContainer: { width: "90%", height: "60%" },
   lightboxImg: { width: "100%", height: "100%" },
   lbArrow: {

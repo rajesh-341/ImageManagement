@@ -302,15 +302,16 @@ class ApiService {
   async getFavorites(folder = null) {
     const offline = await offlineStorage.isOfflineMode();
     if (offline) {
-      const cached = await offlineStorage.getFavourites();
-      if (cached) {
-        if (folder) {
-          return cached.filter(
-            (fav) => fav.folder_name === folder
-          );
-        }
-        return cached;
+      if (folder) {
+        const folderImages = await offlineStorage.getFavouriteFolderImages();
+        const images = folderImages[folder] || folderImages[String(folder)] || [];
+        if (images.length > 0) return images;
+        const cached = await offlineStorage.getFavourites();
+        if (cached) return cached.filter((fav) => fav.folder_name === folder);
+        return [];
       }
+      const cached = await offlineStorage.getFavourites();
+      if (cached) return cached;
     }
     const endpoint = folder
       ? `/favorites?folder=${encodeURIComponent(folder)}`
@@ -324,31 +325,55 @@ class ApiService {
   }
 
   async addFavorite(imageId) {
+    const offline = await offlineStorage.isOfflineMode();
+    if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "add_favorite",
+        payload: { imageId },
+      });
+      const favs = await offlineStorage.getFavourites();
+      const existingIds = favs.map(f => f.id);
+      if (!existingIds.includes(imageId)) {
+        const images = await offlineStorage.getImages();
+        const img = images?.find(i => i.id === imageId);
+        if (img) {
+          favs.push(img);
+          await offlineStorage.storeFavourites(favs);
+        }
+      }
+      return { success: true };
+    }
     const result = await this.request("/favorites", {
       method: "POST",
       body: JSON.stringify({ imageId }),
     });
-    const offline = await offlineStorage.isOfflineMode();
-    if (offline) {
-      const favs = await offlineStorage.getFavourites();
-      const updated = favs.filter((f) => f.id !== imageId);
-      updated.push(result.image || result);
-      await offlineStorage.storeFavourites(updated);
-    }
+    const favs = await offlineStorage.getFavourites();
+    const updated = favs.filter((f) => f.id !== imageId);
+    updated.push(result.image || result);
+    await offlineStorage.storeFavourites(updated);
     return result;
   }
 
   async removeFavorite(imageId) {
-    const result = await this.request(`/favorites/${imageId}`, {
-      method: "DELETE",
-    });
     const offline = await offlineStorage.isOfflineMode();
     if (offline) {
+      await offlineStorage.addToSyncQueue({
+        type: "remove_favorite",
+        payload: { imageId },
+      });
       const favs = await offlineStorage.getFavourites();
       await offlineStorage.storeFavourites(
         favs.filter((f) => f.id !== imageId)
       );
+      return { success: true };
     }
+    const result = await this.request(`/favorites/${imageId}`, {
+      method: "DELETE",
+    });
+    const favs = await offlineStorage.getFavourites();
+    await offlineStorage.storeFavourites(
+      favs.filter((f) => f.id !== imageId)
+    );
     return result;
   }
 
@@ -496,6 +521,17 @@ class ApiService {
             break;
           case "delete_favorite_folder":
             await this.request(`/favorites/folders/${item.payload.folderId}`, {
+              method: "DELETE",
+            });
+            break;
+          case "add_favorite":
+            await this.request("/favorites", {
+              method: "POST",
+              body: JSON.stringify(item.payload),
+            });
+            break;
+          case "remove_favorite":
+            await this.request(`/favorites/${item.payload.imageId}`, {
               method: "DELETE",
             });
             break;

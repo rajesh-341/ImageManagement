@@ -182,7 +182,7 @@ function FavouritesScreen({ navigation }) {
     setActiveTab("folders");
     setSelectMode(false);
     setSelectedIds(new Set());
-    loadFavourites();
+    loadFavouriteFolders();
   };
 
   const toggleSelectMode = () => {
@@ -657,6 +657,11 @@ function FavouritesScreen({ navigation }) {
           {currentFolder ? currentFolder.name : "Favourites"}
         </Text>
         <View style={styles.navbarRight}>
+          {offlineMode && (
+            <View style={styles.offlineIndicator}>
+              <Text style={styles.offlineIndicatorText}>Offline</Text>
+            </View>
+          )}
           {!currentFolder && (
             <TouchableOpacity style={styles.navBtn} onPress={() => setShowFilter(true)}>
               <Text style={styles.navBtnText}>Filter</Text>
@@ -1000,6 +1005,8 @@ const styles = StyleSheet.create({
   dlBtnText: { fontSize: 11, fontWeight: "600", color: "#2563eb" },
   navBtnActive: { backgroundColor: "#ff6b8a" },
   navBtnTextActive: { color: "#fff" },
+  offlineIndicator: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "#22c55e" },
+  offlineIndicatorText: { fontSize: 12, fontWeight: "600", color: "#fff" },
   selectionBar: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start",
     paddingVertical: 8, paddingHorizontal: 12,
