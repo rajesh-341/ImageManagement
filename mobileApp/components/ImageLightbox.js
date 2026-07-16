@@ -166,13 +166,16 @@ function ImageLightbox({ visible, image, index, totalCount, onClose, onPrevious,
         {image?.url ? (
           <>
             <Animated.View
-              style={{
-                transform: [
-                  { scale: scaleAnim },
-                  { translateX: txAnim },
-                  { translateY: tyAnim },
-                ],
-              }}
+              style={[
+                styles.lightboxImgContainer,
+                {
+                  transform: [
+                    { scale: scaleAnim },
+                    { translateX: txAnim },
+                    { translateY: tyAnim },
+                  ],
+                },
+              ]}
             >
               <OptimizedImage uri={image.url} style={styles.lightboxImg} resizeMode="contain" />
             </Animated.View>
@@ -244,7 +247,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  lightboxImg: { width: "90%", height: "60%" },
+  lightboxImgContainer: { width: "90%", height: "60%" },
+  lightboxImg: { width: "100%", height: "100%" },
   lbArrow: {
     position: "absolute",
     top: "50%",
