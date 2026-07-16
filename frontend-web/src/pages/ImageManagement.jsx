@@ -521,7 +521,7 @@ function ImageManagement() {
     if (isFieldRequired("image_designName") && !imageData.designName) missing.push("Design Name");
     if (isFieldRequired("image_decorType") && !imageData.decorType) missing.push("Decoration Type");
     if (isFieldRequired("image_colours") && imageData.colours.length === 0) missing.push("Colour");
-    if (isFieldRequired("image_size") && (!imageData.sizeWidth || !imageData.sizeLength || !imageData.sizeHeight)) missing.push("Size (W, L, H all required)");
+    if (isFieldRequired("image_size") && !imageData.sizeWidth && !imageData.sizeLength && !imageData.sizeHeight) missing.push("Size (at least W, L, or H)");
     if (isFieldRequired("image_price") && !imageData.priceMin && !imageData.priceMax) missing.push("Price Range");
     const folderVenueName = currentFolder ? parseFolderName(currentFolder.name).venue : "";
     if (isFieldRequired("image_venueName") && !imageData.venueName && !folderVenueName) missing.push("Venue");
@@ -531,10 +531,6 @@ function ImageManagement() {
     }
     if (imageData.priceMin && imageData.priceMax && parseFloat(imageData.priceMax) <= parseFloat(imageData.priceMin)) {
       showNotif("Maximum price must be greater than minimum price", "warning");
-      return;
-    }
-    if ((imageData.sizeWidth || imageData.sizeLength || imageData.sizeHeight) && (!imageData.sizeWidth || !imageData.sizeLength || !imageData.sizeHeight)) {
-      showNotif("All three size fields (Width, Length, Height) are required", "warning");
       return;
     }
     setLoading(true);
@@ -1029,10 +1025,6 @@ function ImageManagement() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingImage) return;
-    if ((editData.sizeWidth || editData.sizeLength || editData.sizeHeight) && (!editData.sizeWidth || !editData.sizeLength || !editData.sizeHeight)) {
-      showNotif("All three size fields (Width, Length, Height) are required", "warning");
-      return;
-    }
     if (editData.priceMin && editData.priceMax && parseFloat(editData.priceMax) <= parseFloat(editData.priceMin)) {
       showNotif("Maximum price must be greater than minimum price", "warning");
       return;

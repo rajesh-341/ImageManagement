@@ -193,7 +193,6 @@ function BatchUploadPage() {
       if (!row.designName) missing.push("Design Name");
       if (!row.decorType) missing.push("Decoration Type");
       if (!row.colours || (Array.isArray(row.colours) && row.colours.length === 0)) missing.push("Colour");
-      if ((row.sizeWidth || row.sizeLength || row.sizeHeight) && (!row.sizeWidth || !row.sizeLength || !row.sizeHeight)) missing.push("All three size fields required");
       if (row.priceMin && row.priceMax && parseFloat(row.priceMax) <= parseFloat(row.priceMin)) missing.push("Max price must be > Min price");
       if (missing.length > 0) missingRows.push({ row: idx + 1, fields: missing });
     });
