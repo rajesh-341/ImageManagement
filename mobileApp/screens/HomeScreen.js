@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal, TextInput,
-  Image, useWindowDimensions, Platform, PanResponder,
+  Image, useWindowDimensions, Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
 import { pickDownloadDirectory, DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
-import OptimizedImage from "../components/OptimizedImage";
+import ImageLightbox from "../components/ImageLightbox";
 import ImageCard from "../components/ImageCard";
 import downloadService from "../services/downloadService";
 import ApiService from "../services/apiService";
@@ -324,43 +324,6 @@ function HomeScreen({ navigation }) {
   const goToNext = useCallback(() => {
     setLightboxIndex(prev => Math.min(imagesRef.current.length - 1, prev + 1));
   }, []);
-
-  const lightboxPanResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dx > 50) goToPrevious();
-        else if (gs.dx < -50) goToNext();
-      },
-    })
-  ).current;
-
-  const renderLightboxField = (label, value) => (
-    <View style={styles.lbFieldRow}>
-      <Text style={styles.lbFieldLabel}>{label}</Text>
-      <Text style={styles.lbFieldValue}>{value || "Not Available"}</Text>
-    </View>
-  );
-
-  const formatSize = (d) => {
-    if (!d) return null;
-    if (d.sizeDisplay) return d.sizeDisplay;
-    const parts = [];
-    if (d.sizeWidth) parts.push(`${d.sizeWidth} W`);
-    if (d.sizeLength) parts.push(`${d.sizeLength} L`);
-    if (d.sizeHeight) parts.push(`${d.sizeHeight} H`);
-    if (parts.length > 0) return `${parts.join(" x ")} ${d.sizeUnit || ""}`.trim();
-    if (d.size) return `${d.size} ${d.sizeUnit || ""}`.trim();
-    return null;
-  };
-
-  const formatPrice = (d) => {
-    if (!d) return null;
-    if (d.priceMin != null && d.priceMax != null) return `₹${d.priceMin} - ₹${d.priceMax}`;
-    if (d.priceMin != null) return `₹${d.priceMin}`;
-    if (d.priceMax != null) return `₹${d.priceMax}`;
-    return null;
-  };
 
   const toggleSelectMode = () => {
     if (selectMode) setSelectedIds(new Set());
@@ -785,54 +748,15 @@ function HomeScreen({ navigation }) {
       </Modal>
 
       {/* Lightbox */}
-      <Modal visible={lightboxVisible} transparent animationType="fade" onRequestClose={() => setLightboxVisible(false)}>
-        <View style={styles.lightboxOverlay} {...lightboxPanResponder.panHandlers}>
-          <TouchableOpacity style={[styles.lightboxClose, { top: insets.top + 10 }]} onPress={() => setLightboxVisible(false)}>
-            <Text style={styles.lightboxCloseText}>✕</Text>
-          </TouchableOpacity>
-
-          {currentLightboxImage?.url ? (
-            <>
-              <OptimizedImage uri={currentLightboxImage.url} style={styles.lightboxImg} resizeMode="contain" />
-
-              {/* Navigation arrows */}
-              {lightboxIndex > 0 && (
-                <TouchableOpacity style={[styles.lbArrow, styles.lbArrowLeft]} onPress={goToPrevious}>
-                  <Text style={styles.lbArrowText}>‹</Text>
-                </TouchableOpacity>
-              )}
-              {lightboxIndex < imagesRef.current.length - 1 && (
-                <TouchableOpacity style={[styles.lbArrow, styles.lbArrowRight]} onPress={goToNext}>
-                  <Text style={styles.lbArrowText}>›</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Counter */}
-              <View style={[styles.lbCounter, { top: insets.top + 10 }]}>
-                <Text style={styles.lbCounterText}>{lightboxIndex + 1} / {imagesRef.current.length}</Text>
-              </View>
-            </>
-          ) : (
-            <View style={styles.center}><Text style={styles.emptyText}>Image not available</Text></View>
-          )}
-
-          {/* Details */}
-          {currentLightboxImage?.data && (
-            <View style={styles.lightboxInfo}>
-              <ScrollView showsVerticalScrollIndicator={false} style={styles.lbDetailsScroll}>
-                {renderLightboxField("Design Name", currentLightboxImage.data.designName)}
-                {renderLightboxField("Size", formatSize(currentLightboxImage.data))}
-                {renderLightboxField("Price", formatPrice(currentLightboxImage.data))}
-                {renderLightboxField("Decor", currentLightboxImage.data.decorType)}
-                {renderLightboxField("Event", currentLightboxImage.data.eventType)}
-                {renderLightboxField("Flower", currentLightboxImage.data.flowerType)}
-                {renderLightboxField("Customer", currentLightboxImage.data.venueCustomer)}
-                {renderLightboxField("Venue", currentLightboxImage.data.venueName)}
-              </ScrollView>
-            </View>
-          )}
-        </View>
-      </Modal>
+      <ImageLightbox
+        visible={lightboxVisible}
+        image={currentLightboxImage}
+        index={lightboxIndex}
+        totalCount={imagesRef.current.length}
+        onClose={() => setLightboxVisible(false)}
+        onPrevious={goToPrevious}
+        onNext={goToNext}
+      />
 
       {/* Update Modal */}
       {updateInfo && (
@@ -1003,22 +927,6 @@ const styles = StyleSheet.create({
   batchThumb: { width: 40, height: 40, borderRadius: 6 },
   batchInput: { flex: 1, borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 6, fontSize: 13 },
   removeBtn: { fontSize: 20, color: "#ef4444", fontWeight: "700", paddingHorizontal: 8 },
-  // Lightbox
-  lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", justifyContent: "center", alignItems: "center" },
-  lightboxClose: { position: "absolute", right: 20, zIndex: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
-  lightboxCloseText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  lightboxImg: { width: "90%", height: "60%" },
-  lbArrow: { position: "absolute", top: "50%", zIndex: 20, width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center", marginTop: -24 },
-  lbArrowLeft: { left: 12 },
-  lbArrowRight: { right: 12 },
-  lbArrowText: { color: "#fff", fontSize: 32, fontWeight: "300", lineHeight: 36 },
-  lbCounter: { position: "absolute", left: 20, zIndex: 20, backgroundColor: "rgba(0,0,0,0.5)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  lbCounterText: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontWeight: "500" },
-  lightboxInfo: { position: "absolute", bottom: 30, left: 16, right: 16, backgroundColor: "rgba(0,0,0,0.75)", padding: 14, borderRadius: 12, maxHeight: 240 },
-  lbDetailsScroll: { maxHeight: 200 },
-  lbFieldRow: { flexDirection: "row", marginVertical: 3 },
-  lbFieldLabel: { fontSize: 12, fontWeight: "700", color: "#ff6b8a", width: 80 },
-  lbFieldValue: { fontSize: 12, color: "#e5e7eb", flex: 1 },
   // Offline
   offlineBtnActive: { backgroundColor: "#22c55e" },
   offlineBtnTextActive: { color: "#fff" },
