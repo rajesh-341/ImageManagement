@@ -5,7 +5,7 @@ import {
   useWindowDimensions, Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pickDownloadDirectory, DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
+import { DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
 import ImageCard from "../components/ImageCard";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
@@ -313,46 +313,38 @@ function FavouritesScreen({ navigation }) {
     }
   };
 
-  const askDownloadPath = () => {
+  const confirmDownload = (count, type) => {
     return new Promise((resolve) => {
-      Alert.alert(
-        "Download Location",
-        "Choose where to save the downloaded images.",
-        [
-          { text: "Default (Downloads)", onPress: () => resolve(null) },
-          { text: "Custom Path", onPress: () => resolve("custom") },
-          { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
-        ]
-      );
+      let message;
+      if (type === "images") {
+        message = `Do you want to download ${count} image(s)?`;
+      } else if (type === "folders") {
+        message = `Do you want to download ${count} folder(s)?`;
+      } else {
+        message = `Do you want to download ${count} item(s)?`;
+      }
+      Alert.alert("Download", message, [
+        { text: "Yes", onPress: () => resolve(true) },
+        { text: "No", style: "cancel", onPress: () => resolve(false) },
+      ]);
     });
   };
 
-  const resolveDestination = async () => {
-    const choice = await askDownloadPath();
-    if (choice === "cancel") return "cancel";
-    if (choice === "custom") {
-      const result = await pickDownloadDirectory();
-      if (result.cancelled) return "cancel";
-      return result.path || DEFAULT_DOWNLOAD_PATH;
-    }
-    return null;
-  };
-
-  const executeDownload = async (images, dest) => {
+  const executeDownload = async (images) => {
     setDownloading(true);
     setDownloadProgress({ total: images.length, completed: 0 });
     try {
       const results = await downloadService.downloadMultipleImages(
         images,
         (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-        dest,
+        null,
         (progress, completed) => setDownloadProgress({ total: images.length, completed }),
       );
       const msg = [];
       if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
       if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
       if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
-      Alert.alert("Download Complete", msg.join("\n"));
+      Alert.alert("Download Completed Successfully", msg.join("\n") + `\nFiles saved to: ${DEFAULT_DOWNLOAD_PATH}`);
       setSelectMode(false);
       setSelectedIds(new Set());
     } catch (err) {
@@ -368,11 +360,11 @@ function FavouritesScreen({ navigation }) {
       Alert.alert("No Images", "No images to download.");
       return;
     }
-    const dest = await resolveDestination();
-    if (dest === "cancel") return;
+    const confirmed = await confirmDownload(images.length, "images");
+    if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
-    await executeDownload(images, dest);
+    await executeDownload(images);
   };
 
   const handleDownloadSingleImage = async (img) => {
@@ -395,16 +387,16 @@ function FavouritesScreen({ navigation }) {
       return;
     }
     const selectedFolders = favouriteFolders.filter(f => selectedIds.has(f.id));
-    const dest = await resolveDestination();
-    if (dest === "cancel") return;
+    const confirmed = await confirmDownload(selectedFolders.length, "folders");
+    if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folders as ZIP..." });
     try {
       const folderIds = selectedFolders.map(f => f.id);
-      const result = await downloadService.downloadMultipleFoldersAsZip(folderIds, dest);
-      Alert.alert("Download Complete", `Folders saved as ZIP:\n${result.filePath}`);
+      const result = await downloadService.downloadMultipleFoldersAsZip(folderIds, null);
+      Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
       setSelectMode(false);
       setSelectedIds(new Set());
     } catch (err) {
@@ -415,12 +407,12 @@ function FavouritesScreen({ navigation }) {
     }
   };
 
-  const executeSingleFolderDownload = async (folder, dest) => {
+  const executeSingleFolderDownload = async (folder) => {
     setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folder as ZIP..." });
     try {
-      const result = await downloadService.downloadFolderAsZip(folder.id, dest);
-      Alert.alert("Download Complete", `Folder saved as ZIP:\n${result.filePath}`);
+      const result = await downloadService.downloadFolderAsZip(folder.id, null);
+      Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
     } catch (err) {
       Alert.alert("Download Failed", err.message);
     } finally {
@@ -430,11 +422,11 @@ function FavouritesScreen({ navigation }) {
   };
 
   const handleDownloadFolderImages = async (folder) => {
-    const dest = await resolveDestination();
-    if (dest === "cancel") return;
+    const confirmed = await confirmDownload(1, "folders");
+    if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
-    await executeSingleFolderDownload(folder, dest);
+    await executeSingleFolderDownload(folder);
   };
 
   const handleApplyFilters = async (filterData) => {

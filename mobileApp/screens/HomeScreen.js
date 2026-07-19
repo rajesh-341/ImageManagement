@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { launchImageLibrary } from "react-native-image-picker";
-import { pickDownloadDirectory, DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
+import { DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
 import ImageLightbox from "../components/ImageLightbox";
 import ImageCard from "../components/ImageCard";
 import downloadService from "../services/downloadService";
@@ -346,51 +346,43 @@ function HomeScreen({ navigation }) {
     });
   };
 
-  const askDownloadPath = async () => {
+  const confirmDownload = (count, type) => {
     return new Promise((resolve) => {
-      Alert.alert(
-        "Download Location",
-        "Choose where to save the downloaded images.",
-        [
-          { text: "Default (Downloads)", onPress: () => resolve(null) },
-          { text: "Custom Path", onPress: () => resolve("custom") },
-          { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
-        ]
-      );
+      let message;
+      if (type === "images") {
+        message = `Do you want to download ${count} image(s)?`;
+      } else if (type === "folders") {
+        message = `Do you want to download ${count} folder(s)?`;
+      } else {
+        message = `Do you want to download ${count} item(s)?`;
+      }
+      Alert.alert("Download", message, [
+        { text: "Yes", onPress: () => resolve(true) },
+        { text: "No", style: "cancel", onPress: () => resolve(false) },
+      ]);
     });
-  };
-
-  const resolveDestination = async () => {
-    const choice = await askDownloadPath();
-    if (choice === "cancel") return "cancel";
-    if (choice === "custom") {
-      const result = await pickDownloadDirectory();
-      if (result.cancelled) return "cancel";
-      return result.path || DEFAULT_DOWNLOAD_PATH;
-    }
-    return null;
   };
 
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
-    const dest = await resolveDestination();
-    if (dest === "cancel") return;
+    const confirmed = await confirmDownload(selectedIds.size, "images");
+    if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     const displayImages = activeFilters ? filteredImages : allImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
-    await executeDownload(toDownload, dest);
+    await executeDownload(toDownload);
   };
 
   const handleDownloadSingle = async (img) => {
-    const dest = await resolveDestination();
-    if (dest === "cancel") return;
+    const confirmed = await confirmDownload(1, "images");
+    if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
-    await executeDownload([img], dest);
+    await executeDownload([img]);
   };
 
-  const executeDownload = async (images, dest) => {
+  const executeDownload = async (images) => {
     setDownloading(true);
     if (images.length > 1) {
       setDownloadProgress({ total: images.length, completed: 0 });
@@ -400,24 +392,24 @@ function HomeScreen({ navigation }) {
         const img = images[0];
         const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
         const fileName = `${img.image_data?.designName || img.id}.jpg`;
-        const result = await downloadService.downloadSingleImage(img.id, remoteUrl, dest, fileName);
+        const result = await downloadService.downloadSingleImage(img.id, remoteUrl, null, fileName);
         if (result.status === "exists") {
           Alert.alert("Already Exists", "This image already exists in the download location.");
         } else {
-          Alert.alert("Downloaded", `Image saved to ${result.filePath}`);
+          Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
         }
       } else {
         const results = await downloadService.downloadMultipleImages(
           images,
           (img) => offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img),
-          dest,
+          null,
           (progress, completed) => setDownloadProgress({ total: images.length, completed }),
         );
         const msg = [];
         if (results.downloaded.length > 0) msg.push(`${results.downloaded.length} downloaded`);
         if (results.exists.length > 0) msg.push(`${results.exists.length} already exist`);
         if (results.failed.length > 0) msg.push(`${results.failed.length} failed`);
-        Alert.alert("Download Complete", msg.join("\n"));
+        Alert.alert("Download Completed Successfully", msg.join("\n") + `\nFiles saved to: ${DEFAULT_DOWNLOAD_PATH}`);
         setSelectMode(false);
         setSelectedIds(new Set());
       }
