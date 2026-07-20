@@ -220,12 +220,35 @@ app.use("/api/dropdown", dropdownRoutes);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
+const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
+
+function hasDownloadRole(user) {
+  const role = user && user.role ? user.role.toLowerCase() : "";
+  return DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(role);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function queryFolderImagesWithRetry(pool, folderId, userId, maxRetries = 2, retryDelayMs = 500) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const mappingResult = await pool.query(
+      `SELECT im.id, im.image_data FROM image_management im
+       INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id
+       WHERE ffm.folder_id = $1 AND ffm.employee_id = $2
+       ORDER BY im.id`,
+      [folderId, userId]
+    );
+    if (mappingResult.rows.length > 0) return mappingResult;
+    if (attempt < maxRetries) await sleep(retryDelayMs * (attempt + 1));
+  }
+  return { rows: [] };
+}
+
 app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
   try {
-    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
-    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
-    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
-    if (!allowed) return res.status(403).json({ message: "Access denied" });
+    if (!hasDownloadRole(req.user)) return res.status(403).json({ message: "Access denied" });
 
     const folderName = req.params.folderName;
     const imgResult = await pool.query(
@@ -291,10 +314,7 @@ app.get("/api/download-folder/:folderName", verifyToken, async (req, res) => {
 
 app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res) => {
   try {
-    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
-    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
-    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
-    if (!allowed) return res.status(403).json({ message: "Access denied" });
+    if (!hasDownloadRole(req.user)) return res.status(403).json({ message: "Access denied" });
 
     const folderId = parseInt(req.params.folderId, 10);
     if (isNaN(folderId)) return res.status(400).json({ message: "Invalid folder ID" });
@@ -302,13 +322,7 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
     const folderResult = await pool.query("SELECT name FROM folders WHERE id = $1", [folderId]);
     const folderName = folderResult.rows.length > 0 ? folderResult.rows[0].name : `folder_${folderId}`;
 
-    const mappingResult = await pool.query(
-      `SELECT im.id, im.image_data FROM image_management im
-       INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id
-       WHERE ffm.folder_id = $1 AND ffm.employee_id = $2
-       ORDER BY im.id`,
-      [folderId, req.user.userId]
-    );
+    const mappingResult = await queryFolderImagesWithRetry(pool, folderId, req.user.userId);
     if (mappingResult.rows.length === 0) return res.status(404).json({ message: "No images found in this folder" });
 
     const sanitize = (name) => name.replace(/[^a-zA-Z0-9_\-]/g, "_").toLowerCase();
@@ -361,6 +375,7 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
 
     await archive.finalize();
   } catch (error) {
+    console.error("[Download-Favorite-Folder] Error:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ message: error.message || "Download failed" });
     }
@@ -369,10 +384,7 @@ app.get("/api/download-favorite-folder/:folderId", verifyToken, async (req, res)
 
 app.post("/api/download-favorite-folders", verifyToken, async (req, res) => {
   try {
-    const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
-    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
-    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
-    if (!allowed) return res.status(403).json({ message: "Access denied" });
+    if (!hasDownloadRole(req.user)) return res.status(403).json({ message: "Access denied" });
 
     const { folderIds } = req.body;
     if (!folderIds || !Array.isArray(folderIds) || folderIds.length === 0) {
@@ -422,13 +434,7 @@ app.post("/api/download-favorite-folders", verifyToken, async (req, res) => {
       const folderName = folderResult.rows.length > 0 ? folderResult.rows[0].name : `folder_${fIdNum}`;
       const safeName = sanitize(folderName);
 
-      const mappingResult = await pool.query(
-        `SELECT im.id, im.image_data FROM image_management im
-         INNER JOIN favourite_folder_mapping ffm ON im.id = ffm.image_id
-         WHERE ffm.folder_id = $1 AND ffm.employee_id = $2
-         ORDER BY im.id`,
-        [fIdNum, req.user.userId]
-      );
+      const mappingResult = await queryFolderImagesWithRetry(pool, fIdNum, req.user.userId);
 
       for (const row of mappingResult.rows) {
         allTasks.push(fetchWithRetry(row, safeName));
@@ -436,7 +442,10 @@ app.post("/api/download-favorite-folders", verifyToken, async (req, res) => {
     }
 
     if (allTasks.length === 0) {
-      return res.status(404).json({ message: "No images found in the selected folders" });
+      if (!res.headersSent) {
+        return res.status(404).json({ message: "No images found in the selected folders" });
+      }
+      return archive.finalize();
     }
 
     for (let i = 0; i < allTasks.length; i += CONCURRENCY) {
@@ -451,6 +460,7 @@ app.post("/api/download-favorite-folders", verifyToken, async (req, res) => {
 
     await archive.finalize();
   } catch (error) {
+    console.error("[Download-Favorite-Folders] Error:", error.message);
     if (!res.headersSent) {
       res.status(500).json({ message: error.message || "Download failed" });
     }
@@ -461,12 +471,9 @@ app.get("/api/download-all", verifyToken, async (req, res) => {
   const CONCURRENCY = 20;
   const PER_IMAGE_TIMEOUT = 15000;
   const MAX_RETRIES = 2;
-  const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
 
   try {
-    const userRole = req.user.role ? req.user.role.toLowerCase() : "";
-    const allowed = DOWNLOAD_ROLES.map(r => r.toLowerCase()).includes(userRole);
-    if (!allowed) return res.status(403).json({ message: "Access denied" });
+    if (!hasDownloadRole(req.user)) return res.status(403).json({ message: "Access denied" });
 
     const imgResult = await pool.query(
       `SELECT id, folder_name, image_data FROM image_management

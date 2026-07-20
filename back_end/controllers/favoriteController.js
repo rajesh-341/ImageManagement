@@ -89,35 +89,53 @@ const getFavorites = async (req, res) => {
 };
 
 const addImageToFavouriteFolder = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { folderId, imageId } = req.body;
     if (!folderId || !imageId) return res.status(400).json({ message: "folderId and imageId are required" });
 
-    const folderCheck = await pool.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
+    const folderCheck = await client.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
     if (folderCheck.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
 
-    const imgCheck = await pool.query("SELECT id FROM image_management WHERE id = $1", [imageId]);
+    const imgCheck = await client.query("SELECT id FROM image_management WHERE id = $1", [imageId]);
     if (imgCheck.rows.length === 0) return res.status(404).json({ message: "Image not found" });
 
-    await pool.query(
+    await client.query("BEGIN");
+
+    await client.query(
       `INSERT INTO favourite_folder_mapping (folder_id, image_id, employee_id)
        VALUES ($1, $2, $3)
        ON CONFLICT (folder_id, image_id, employee_id) DO NOTHING`,
       [folderId, imageId, req.user.userId]
     );
 
-    const ids = await getFavImageIds(req.user.userId);
+    const idsResult = await client.query(
+      "SELECT favourite_images FROM employee_details WHERE employee_id = $1",
+      [req.user.userId]
+    );
+    let ids = [];
+    if (idsResult.rows.length > 0) {
+      ids = idsResult.rows[0].favourite_images || [];
+      if (typeof ids === "string") ids = JSON.parse(ids);
+      ids = ids.map(id => (typeof id === "string" ? parseInt(id, 10) : id)).filter(id => !isNaN(id));
+    }
+
     if (!ids.includes(imageId)) {
       ids.push(imageId);
-      await pool.query(
+      await client.query(
         "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
         [JSON.stringify(ids), req.user.userId]
       );
     }
 
+    await client.query("COMMIT");
+
     res.json({ message: "Image added to favourite folder" });
   } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
     res.status(500).json({ message: error.message });
+  } finally {
+    client.release();
   }
 };
 
@@ -138,25 +156,40 @@ const removeImageFromFavouriteFolder = async (req, res) => {
 };
 
 const addImagesToFavouriteFolder = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { folderId, imageIds } = req.body;
     if (!folderId || !imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
       return res.status(400).json({ message: "folderId and imageIds array are required" });
     }
 
-    const folderCheck = await pool.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
+    const folderCheck = await client.query("SELECT id FROM folders WHERE id = $1 AND scope = 'favourite'", [folderId]);
     if (folderCheck.rows.length === 0) return res.status(404).json({ message: "Favourite folder not found" });
 
-    const ids = await getFavImageIds(req.user.userId);
-    let changed = false;
+    await client.query("BEGIN");
 
     for (const imageId of imageIds) {
-      await pool.query(
+      await client.query(
         `INSERT INTO favourite_folder_mapping (folder_id, image_id, employee_id)
          VALUES ($1, $2, $3)
          ON CONFLICT (folder_id, image_id, employee_id) DO NOTHING`,
         [folderId, imageId, req.user.userId]
       );
+    }
+
+    const idsResult = await client.query(
+      "SELECT favourite_images FROM employee_details WHERE employee_id = $1",
+      [req.user.userId]
+    );
+    let ids = [];
+    if (idsResult.rows.length > 0) {
+      ids = idsResult.rows[0].favourite_images || [];
+      if (typeof ids === "string") ids = JSON.parse(ids);
+      ids = ids.map(id => (typeof id === "string" ? parseInt(id, 10) : id)).filter(id => !isNaN(id));
+    }
+
+    let changed = false;
+    for (const imageId of imageIds) {
       if (!ids.includes(imageId)) {
         ids.push(imageId);
         changed = true;
@@ -164,15 +197,20 @@ const addImagesToFavouriteFolder = async (req, res) => {
     }
 
     if (changed) {
-      await pool.query(
+      await client.query(
         "UPDATE employee_details SET favourite_images = $1 WHERE employee_id = $2",
         [JSON.stringify(ids), req.user.userId]
       );
     }
 
+    await client.query("COMMIT");
+
     res.json({ message: `${imageIds.length} image(s) added to favourite folder` });
   } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
     res.status(500).json({ message: error.message });
+  } finally {
+    client.release();
   }
 };
 

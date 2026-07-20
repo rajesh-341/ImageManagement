@@ -393,27 +393,50 @@ function FavouritesScreen({ navigation }) {
     if (!granted) return;
     setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folders as ZIP..." });
-    try {
-      const folderIds = selectedFolders.map(f => f.id);
-      const result = await downloadService.downloadMultipleFoldersAsZip(folderIds, null);
-      Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
-      setSelectMode(false);
-      setSelectedIds(new Set());
-    } catch (err) {
-      Alert.alert("Download Failed", err.message);
-    } finally {
-      setDownloading(false);
-      setDownloadProgress(null);
+    const folderIds = selectedFolders.map(f => f.id);
+    let lastErr = null;
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        const result = await downloadService.downloadMultipleFoldersAsZip(folderIds, null);
+        Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
+        setSelectMode(false);
+        setSelectedIds(new Set());
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 2 && (
+          err.message.includes("403") || err.message.includes("status 4") ||
+          err.message.includes("network") || err.message.includes("timeout")
+        )) {
+          setDownloadProgress({ total: 1, completed: 0, phase: `Retrying download (${attempt + 1}/2)...` });
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          continue;
+        }
+      }
     }
+    if (lastErr) {
+      Alert.alert("Download Failed", lastErr.message);
+    }
+    setDownloading(false);
+    setDownloadProgress(null);
   };
 
-  const executeSingleFolderDownload = async (folder) => {
+  const executeSingleFolderDownload = async (folder, retryCount = 0) => {
     setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folder as ZIP..." });
     try {
       const result = await downloadService.downloadFolderAsZip(folder.id, null);
       Alert.alert("Download Completed Successfully", `Files saved to: ${result.filePath}`);
     } catch (err) {
+      if (retryCount < 2 && (
+        err.message.includes("403") || err.message.includes("status 4") ||
+        err.message.includes("network") || err.message.includes("timeout")
+      )) {
+        setDownloadProgress({ total: 1, completed: 0, phase: `Retrying download (${retryCount + 1}/2)...` });
+        await new Promise(r => setTimeout(r, 2000 * (retryCount + 1)));
+        return executeSingleFolderDownload(folder, retryCount + 1);
+      }
       Alert.alert("Download Failed", err.message);
     } finally {
       setDownloading(false);

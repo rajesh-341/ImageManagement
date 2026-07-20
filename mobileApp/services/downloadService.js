@@ -8,9 +8,20 @@ const DEFAULT_DOWNLOAD_DIR = Platform.select({
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
 });
 
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+
 function normalizePath(dirPath) {
   if (!dirPath) return dirPath;
   return dirPath.replace(/\/+$/, "");
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(statusCode) {
+  return [403, 408, 429, 502, 503, 504].includes(statusCode);
 }
 
 class DownloadService {
@@ -88,36 +99,88 @@ class DownloadService {
 
   async downloadFolderAsZip(folderId, destination) {
     const token = await offlineStorage.getToken();
+    if (!token) throw new Error("Authentication required. Please log in again.");
+
     const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
     const filePath = `${dest}/favorite_folder_${folderId}_${Date.now()}.zip`;
     const url = `${API_BASE_URL}/download-favorite-folder/${folderId}`;
-    const result = await RNFS.downloadFile({
-      fromUrl: url,
-      toFile: filePath,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      background: true,
-    }).promise;
-    if (result.statusCode === 200) return { status: "downloaded", filePath };
-    throw new Error(`Download failed with status ${result.statusCode}`);
+
+    let lastError = null;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await RNFS.downloadFile({
+          fromUrl: url,
+          toFile: filePath,
+          headers: { Authorization: `Bearer ${token}` },
+          background: true,
+        }).promise;
+
+        if (result.statusCode === 200) return { status: "downloaded", filePath };
+        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw new Error(`Download failed with status ${result.statusCode}`);
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_RETRIES - 1 && (
+          err.message.includes("network") ||
+          err.message.includes("timeout") ||
+          err.message.includes("connection") ||
+          err.message.includes("abort")
+        )) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError || new Error("Download failed after multiple attempts");
   }
 
   async downloadMultipleFoldersAsZip(folderIds, destination) {
     const token = await offlineStorage.getToken();
+    if (!token) throw new Error("Authentication required. Please log in again.");
+
     const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
     const filePath = `${dest}/Favourite_zip_${Date.now()}.zip`;
     const url = `${API_BASE_URL}/download-favorite-folders`;
-    const result = await RNFS.downloadFile({
-      fromUrl: url,
-      toFile: filePath,
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ folderIds }),
-      background: true,
-    }).promise;
-    if (result.statusCode === 200) return { status: "downloaded", filePath };
-    throw new Error(`Download failed with status ${result.statusCode}`);
+
+    let lastError = null;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await RNFS.downloadFile({
+          fromUrl: url,
+          toFile: filePath,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ folderIds }),
+          background: true,
+        }).promise;
+
+        if (result.statusCode === 200) return { status: "downloaded", filePath };
+        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw new Error(`Download failed with status ${result.statusCode}`);
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_RETRIES - 1 && (
+          err.message.includes("network") ||
+          err.message.includes("timeout") ||
+          err.message.includes("connection") ||
+          err.message.includes("abort")
+        )) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError || new Error("Download failed after multiple attempts");
   }
 
   async downloadMultipleImages(
