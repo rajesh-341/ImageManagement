@@ -220,7 +220,7 @@ app.use("/api/dropdown", dropdownRoutes);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
 
-const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
+const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin", "Event Managers"];
 
 function hasDownloadRole(user) {
   const role = user && user.role ? user.role.toLowerCase() : "";

@@ -9,7 +9,7 @@ import FolderCard from "../components/FolderCard";
 import FolderBox from "../components/FolderBox";
 import useChunkedRender from "../hooks/useChunkedRender";
 import {
-  UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES, MANAGE_USERS_ROLES, REPORT_ROLES,
+  UPLOAD_ROLES, EDIT_DELETE_ROLES, FOLDER_VIEW_ROLES, MANAGE_USERS_ROLES, REPORT_ROLES, DOWNLOAD_ALL_ROLES,
   SIZE_UNITS, FLOWER_TYPES, EVENT_TYPES, DECOR_TYPES,
 } from "../constants";
 import { downloadAsPDF } from "../utils/pdfGenerator";
@@ -1152,7 +1152,6 @@ function ImageManagement() {
     navigate("/", { replace: true });
   };
 
-  const DOWNLOAD_ALL_ROLES = ["Owner", "CEO", "Marketing Head", "Admin"];
   const canUpload = user && UPLOAD_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canEditDelete = user && EDIT_DELETE_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
   const canViewFolders = user && FOLDER_VIEW_ROLES.map(r => r.toLowerCase()).includes(user.role?.toLowerCase());
