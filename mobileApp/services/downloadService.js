@@ -2,7 +2,7 @@ import RNFS from "react-native-fs";
 import { Platform, PermissionsAndroid, Alert } from "react-native";
 import offlineStorage from "../offline/offlineStorage";
 
-const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
+const API_BASE_URL = "https://pv-gallery-backend.fly.dev/api";
 const DEFAULT_DOWNLOAD_DIR = Platform.select({
   android: RNFS.DownloadDirectoryPath,
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,

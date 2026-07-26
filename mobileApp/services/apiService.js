@@ -1,6 +1,6 @@
 import offlineStorage from "../offline/offlineStorage";
 
-const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
+const API_BASE_URL = "https://pv-gallery-backend.fly.dev/api";
 
 class ApiService {
   constructor() {

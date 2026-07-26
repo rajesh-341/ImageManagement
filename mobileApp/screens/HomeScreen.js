@@ -19,7 +19,7 @@ import { UPLOAD_ROLES, SIZE_UNIT_OPTIONS } from "../utils/constants";
 
 const CARD_GAP = 12;
 
-const API_BASE_URL = "https://imagemanagement-dku8.onrender.com/api";
+const API_BASE_URL = "https://pv-gallery-backend.fly.dev/api";
 const IMAGE_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 function HomeScreen({ navigation }) {
