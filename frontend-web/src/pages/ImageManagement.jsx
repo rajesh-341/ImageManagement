@@ -104,8 +104,6 @@ function ImageManagement() {
   const [notification, setNotification] = useState(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadResolve, setDownloadResolve] = useState(null);
-  const [showOtherServices, setShowOtherServices] = useState(false);
-  const [otherServicesTab, setOtherServicesTab] = useState("");
   const [customEventTypes, setCustomEventTypes] = useState([]);
   const [customDecorTypes, setCustomDecorTypes] = useState([]);
   const [customETInput, setCustomETInput] = useState("");
@@ -1770,26 +1768,6 @@ function ImageManagement() {
             {canViewUsers && (
               <button className="nav-item" onClick={() => navigate("/users")}>USERS</button>
             )}
-            <div className="nav-item-dropdown">
-              <button
-                className={`nav-item ${showOtherServices ? "active" : ""}`}
-                onClick={() => { setShowOtherServices(!showOtherServices); setShowFavorites(false); setCurrentFolder(null); setFilteredImages([]); }}
-              >
-                OTHER SERVICES ▾
-              </button>
-              {showOtherServices && (
-                <div className="nav-dropdown-menu">
-                  {["Rental", "Garland", "Electrical Materials", "Events Handled"].map(tab => (
-                    <button key={tab}
-                      className={`nav-dropdown-item ${otherServicesTab === tab ? "active" : ""}`}
-                      onClick={() => setOtherServicesTab(tab)}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
           <button
             className={`nav-item nav-fav-btn ${showFavorites ? "active" : ""}`}
@@ -1812,28 +1790,7 @@ function ImageManagement() {
         </div>
       )}
       <div className="main-content">
-        {showOtherServices ? (
-          <div className="other-services-view">
-            <h2>Other Services</h2>
-            <div className="other-services-tabs">
-              {["Rental", "Garland", "Electrical Materials", "Events Handled"].map(tab => (
-                <button key={tab}
-                  className={`other-services-tab ${otherServicesTab === tab ? "active" : ""}`}
-                  onClick={() => setOtherServicesTab(tab)}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="other-services-content">
-              {otherServicesTab ? (
-                <p className="other-services-placeholder">Content for <strong>{otherServicesTab}</strong> will be added here.</p>
-              ) : (
-                <p className="other-services-placeholder">Select a service tab above to view details.</p>
-              )}
-            </div>
-          </div>
-        ) : showFavorites && !currentFolder ? renderFavoritesContent() :
+        {showFavorites && !currentFolder ? renderFavoritesContent() :
          currentFolder ? renderFolderContent() :
          renderFolderView()}
       </div>
