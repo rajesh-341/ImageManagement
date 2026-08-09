@@ -87,7 +87,7 @@ const updateFolder = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { name, eventTypes } = req.body;
+    const { name, eventTypes, collectedBy } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: "Folder name is required" });
@@ -110,17 +110,19 @@ const updateFolder = async (req, res) => {
       return res.status(400).json({ message: "A folder with this name already exists" });
     }
 
+    const sets = ["name = $1"];
+    const values = [newName];
     if (eventTypes !== undefined) {
-      await pool.query(
-        "UPDATE folders SET name = $1, event_types = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
-        [newName, JSON.stringify(eventTypes), id]
-      );
-    } else {
-      await pool.query(
-        "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-        [newName, id]
-      );
+      sets.push(`event_types = $${values.length + 1}`);
+      values.push(JSON.stringify(eventTypes));
     }
+    if (collectedBy !== undefined) {
+      sets.push(`collected_by = $${values.length + 1}`);
+      values.push(collectedBy);
+    }
+    sets.push("updated_at = CURRENT_TIMESTAMP");
+    values.push(id);
+    await pool.query(`UPDATE folders SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
 
     await pool.query(
       "UPDATE image_management SET folder_name = $1 WHERE folder_name = $2",

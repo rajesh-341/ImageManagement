@@ -111,9 +111,10 @@ const ApiService = {
     });
   },
 
-  async updateFolder(id, name, eventTypes = undefined) {
+  async updateFolder(id, name, eventTypes = undefined, collectedBy = undefined) {
     const body = { name };
     if (eventTypes !== undefined) body.eventTypes = eventTypes;
+    if (collectedBy !== undefined) body.collectedBy = collectedBy;
     return request(`/folders/${id}`, {
       method: "PUT",
       body: JSON.stringify(body),
@@ -234,10 +235,12 @@ const ApiService = {
     });
   },
 
-  async updateFavoriteFolder(folderId, folderName) {
+  async updateFavoriteFolder(folderId, folderName, collectedBy = undefined) {
+    const body = { folderName };
+    if (collectedBy !== undefined) body.collectedBy = collectedBy;
     return request(`/favorites/folders/${folderId}`, {
       method: "PUT",
-      body: JSON.stringify({ folderName }),
+      body: JSON.stringify(body),
     });
   },
 

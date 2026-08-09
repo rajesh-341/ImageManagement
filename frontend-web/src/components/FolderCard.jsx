@@ -110,6 +110,11 @@ const FolderCard = ({ folder, onClick, onDelete, onEdit, canDelete, canDownload,
             <span className="folder-card-row-value">—</span>
           )}
         </div>
+        <div className="folder-card-divider" />
+        <div className="folder-card-row">
+          <span className="folder-card-row-label">COLLECTED BY</span>
+          <span className="folder-card-row-value" title={folder.collected_by}>{folder.collected_by || "—"}</span>
+        </div>
       </div>
     </div>
   );

@@ -73,12 +73,14 @@ function ImageManagement() {
   const [editFolderVenue, setEditFolderVenue] = useState("");
   const [editFolderDate, setEditFolderDate] = useState("");
   const [editFolderEventTypes, setEditFolderEventTypes] = useState([]);
+  const [editFolderCollectedBy, setEditFolderCollectedBy] = useState("");
   const [showEditFavFolderModal, setShowEditFavFolderModal] = useState(false);
   const [editingFavFolder, setEditingFavFolder] = useState(null);
   const [editFavFolderName, setEditFavFolderName] = useState("");
   const [editFavFolderVenue, setEditFavFolderVenue] = useState("");
   const [editFavFolderDate, setEditFavFolderDate] = useState("");
   const [editFavFolderEventTypes, setEditFavFolderEventTypes] = useState([]);
+  const [editFavFolderCollectedBy, setEditFavFolderCollectedBy] = useState("");
   const [commonSearch, setCommonSearch] = useState("");
   const [commonSearchType, setCommonSearchType] = useState("venue");
   const [searchSizeWidth, setSearchSizeWidth] = useState("");
@@ -401,6 +403,7 @@ function ImageManagement() {
     setEditFolderVenue(venue);
     setEditFolderDate(eventDate);
     setEditFolderEventTypes(folder.event_types || []);
+    setEditFolderCollectedBy(folder.collected_by || "");
     setShowEditFolderModal(true);
   };
 
@@ -411,7 +414,7 @@ function ImageManagement() {
     if (!editFolderName.trim()) { showNotif("Customer name is required", "warning"); return; }
     setLoading(true);
     try {
-      await ApiService.updateFolder(editingFolder.id, newName, editFolderEventTypes);
+      await ApiService.updateFolder(editingFolder.id, newName, editFolderEventTypes, editFolderCollectedBy.trim());
       resetEditFolderForm();
       setShowEditFolderModal(false);
       loadFolders();
@@ -487,6 +490,7 @@ function ImageManagement() {
     setEditFolderVenue("");
     setEditFolderDate("");
     setEditFolderEventTypes([]);
+    setEditFolderCollectedBy("");
     setCustomEditETInput("");
     setShowEditEventTypeDropdown(false);
   };
@@ -1005,6 +1009,7 @@ function ImageManagement() {
     setEditFavFolderVenue(venue);
     setEditFavFolderDate(eventDate);
     setEditFavFolderEventTypes(folder.event_types || []);
+    setEditFavFolderCollectedBy(folder.collected_by || "");
     setShowEditFavFolderModal(true);
   };
 
@@ -1015,7 +1020,7 @@ function ImageManagement() {
     if (!editFavFolderName.trim()) { showNotif("Customer name is required", "warning"); return; }
     setLoading(true);
     try {
-      await ApiService.updateFavoriteFolder(editingFavFolder.id, newName);
+      await ApiService.updateFavoriteFolder(editingFavFolder.id, newName, editFavFolderCollectedBy.trim());
       resetEditFavFolderForm();
       setShowEditFavFolderModal(false);
       loadFavoriteFolders();
@@ -1035,6 +1040,7 @@ function ImageManagement() {
     setEditFavFolderVenue("");
     setEditFavFolderDate("");
     setEditFavFolderEventTypes([]);
+    setEditFavFolderCollectedBy("");
     setCustomEditFavETInput("");
     setShowEditFavEventTypeDropdown(false);
   };
@@ -2144,6 +2150,18 @@ function ImageManagement() {
                 />
               </div>
               <div className="form-group">
+                <label className="label">Collected By{isFieldRequired("folder_collectedBy") && <span className="required">*</span>}</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFolderCollectedBy}
+                  onChange={(e) => setEditFolderCollectedBy(e.target.value)}
+                  placeholder="Enter collector name"
+                  required={isFieldRequired("folder_collectedBy")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+                />
+              </div>
+              <div className="form-group">
                 <label className="label">Event Types (multi-select, max 3)</label>
                 <div className="custom-multiselect" ref={editEventTypeRef}>
                   <div className="custom-multiselect-trigger" onClick={() => setShowEditEventTypeDropdown(prev => !prev)}>
@@ -2250,6 +2268,18 @@ function ImageManagement() {
                   className="input"
                   value={editFavFolderDate}
                   onChange={(e) => setEditFavFolderDate(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="label">Collected By{isFieldRequired("folder_collectedBy") && <span className="required">*</span>}</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={editFavFolderCollectedBy}
+                  onChange={(e) => setEditFavFolderCollectedBy(e.target.value)}
+                  placeholder="Enter collector name"
+                  required={isFieldRequired("folder_collectedBy")}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
                 />
               </div>
               <div className="form-group">

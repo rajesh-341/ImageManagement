@@ -270,7 +270,7 @@ const createFavoriteFolder = async (req, res) => {
 const updateFavoriteFolder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { folderName } = req.body;
+    const { folderName, collectedBy } = req.body;
     if (!folderName || !folderName.trim()) return res.status(400).json({ message: "Folder name required" });
 
     const folderResult = await pool.query(
@@ -286,11 +286,15 @@ const updateFavoriteFolder = async (req, res) => {
     );
     if (existing.rows.length > 0) return res.status(400).json({ message: "A folder with this name already exists" });
 
-    const oldName = folderResult.rows[0].name;
-    await pool.query(
-      "UPDATE folders SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-      [newName, id]
-    );
+    const sets = ["name = $1"];
+    const values = [newName];
+    if (collectedBy !== undefined) {
+      sets.push(`collected_by = $${values.length + 1}`);
+      values.push(collectedBy);
+    }
+    sets.push("updated_at = CURRENT_TIMESTAMP");
+    values.push(id);
+    await pool.query(`UPDATE folders SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
 
     const result = await pool.query("SELECT * FROM folders WHERE id = $1", [id]);
     res.json({ message: "Folder renamed successfully", folder: result.rows[0] });

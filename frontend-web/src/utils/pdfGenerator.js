@@ -1,16 +1,29 @@
 import { jsPDF } from "jspdf";
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_BASE = API_BASE_URL.replace(/\/api$/, "");
+
 const getFullImageUrl = (rawUrl) => {
   if (!rawUrl) return "";
-  const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/api$/, "");
   if (rawUrl.startsWith("http")) {
     return rawUrl;
   }
   return `${API_BASE}${rawUrl}`;
 };
 
-const fetchBlob = async (url) => {
-  const response = await fetch(url);
+const getAuthHeaders = () => {
+  const token = document.cookie.replace(/(?:(?:^|.*;\s*)auth_token\s*=\s*([^;]*).*$)|^.*$/, "$1");
+  if (token) {
+    return { Authorization: `Bearer ${token}`, "X-Requested-With": "XMLHttpRequest" };
+  }
+  return {};
+};
+
+const fetchBlob = async (url, includeAuth) => {
+  const config = includeAuth
+    ? { credentials: "include", headers: getAuthHeaders() }
+    : undefined;
+  const response = await fetch(url, config);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.blob();
 };
@@ -25,25 +38,39 @@ const blobToImage = (blob) => new Promise((resolve, reject) => {
 
 const imageToJpegDataUrl = (img, quality = 0.85) => {
   const canvas = document.createElement("canvas");
-  canvas.width = img.width;
-  canvas.height = img.height;
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0);
   return canvas.toDataURL("image/jpeg", quality);
 };
 
-const fetchImageAsJpeg = async (url) => {
-  const blob = await fetchBlob(url);
-  if (blob.type === "image/jpeg") {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+// Returns { dataUrl, width, height } for an image.
+// Tries the direct URL first; if that is blocked (e.g. cross-origin CORS),
+// falls back to the application's authenticated download endpoint.
+const loadImageData = async (imgRecord, rawUrl) => {
+  const fullUrl = getFullImageUrl(rawUrl);
+  if (!fullUrl) throw new Error("No image URL");
+
+  const decode = async (blob) => {
+    const imgEl = await blobToImage(blob);
+    return {
+      dataUrl: imageToJpegDataUrl(imgEl),
+      width: imgEl.naturalWidth || imgEl.width || 0,
+      height: imgEl.naturalHeight || imgEl.height || 0,
+    };
+  };
+
+  try {
+    const blob = await fetchBlob(fullUrl, false);
+    return await decode(blob);
+  } catch (directError) {
+    if (imgRecord && imgRecord.id) {
+      const blob = await fetchBlob(`${API_BASE_URL}/download/${imgRecord.id}`, true);
+      return await decode(blob);
+    }
+    throw directError;
   }
-  const img = await blobToImage(blob);
-  return imageToJpegDataUrl(img);
 };
 
 const formatDate = (dateStr) => {
@@ -86,10 +113,11 @@ export const generateImagePDF = async (images) => {
   const doc = new jsPDF("landscape", "mm", "a4");
   const PAGE_W = 297;
   const MARGIN = 12;
-  const CARDS_PER_PAGE = 3;
-  const CARD_H = 56;
-  const CARD_GAP = 5;
-  const IMG_SIZE = 40;
+  const CARDS_PER_PAGE = 2;
+  const CARD_H = 84;
+  const CARD_GAP = 8;
+  const IMG_BOX_W = 100;
+  const IMG_BOX_H = 78;
   const COLS = 3;
   const ROW_H = 7;
 
@@ -110,31 +138,32 @@ export const generateImagePDF = async (images) => {
     }
 
     const img = images[i];
-    const data = img.image_data || {};
+    const data = img.image_data || img.data || {};
     const cardY = 17 + cardIndex * (CARD_H + CARD_GAP);
     const imgX = MARGIN;
-    const imgY = cardY + 3;
+    const rawUrl = data.imageUrl || img.url || "";
 
     try {
-      const rawUrl = data.imageUrl || "";
-      const fullUrl = getFullImageUrl(rawUrl);
-      if (fullUrl) {
-        const jpegData = await fetchImageAsJpeg(fullUrl);
-        doc.addImage(jpegData, "JPEG", imgX, imgY, IMG_SIZE, IMG_SIZE);
-      } else {
-        throw new Error("No image URL");
-      }
+      const { dataUrl, width, height } = await loadImageData(img, rawUrl);
+      const scale = width > 0 && height > 0
+        ? Math.min(IMG_BOX_W / width, IMG_BOX_H / height)
+        : 1;
+      const imgW = width * scale;
+      const imgH = height * scale;
+      const imgY = cardY + (CARD_H - imgH) / 2;
+      doc.addImage(dataUrl, "JPEG", imgX, imgY, imgW, imgH);
     } catch {
+      const imgY = cardY + (CARD_H - IMG_BOX_H) / 2;
       doc.setDrawColor(210, 210, 210);
       doc.setFillColor(248, 248, 248);
-      doc.rect(imgX, imgY, IMG_SIZE, IMG_SIZE, "FD");
+      doc.rect(imgX, imgY, IMG_BOX_W, IMG_BOX_H, "FD");
       doc.setFontSize(7);
       doc.setFont("helvetica", "italic");
       doc.setTextColor(180, 180, 180);
-      doc.text("No Image", imgX + IMG_SIZE / 2, imgY + IMG_SIZE / 2 + 1, { align: "center" });
+      doc.text("No Image", imgX + IMG_BOX_W / 2, imgY + IMG_BOX_H / 2 + 1, { align: "center" });
     }
 
-    const specX = imgX + IMG_SIZE + 7;
+    const specX = imgX + IMG_BOX_W + 7;
     const specW = PAGE_W - MARGIN - specX;
     const colW = specW / COLS;
 
