@@ -13,6 +13,7 @@ import offlineManager from "../offline/offlineManager";
 import downloadService from "../services/downloadService";
 import FilterSidebar from "../components/FilterSidebar";
 import ImageLightbox from "../components/ImageLightbox";
+import DownloadOptionsModal from "../components/DownloadOptionsModal";
 
 const CARD_GAP = 12;
 
@@ -43,6 +44,8 @@ function FavouritesScreen({ navigation }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [downloadOptionImages, setDownloadOptionImages] = useState([]);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
@@ -368,7 +371,8 @@ function FavouritesScreen({ navigation }) {
   };
 
   const handleDownloadSingleImage = async (img) => {
-    await doDownload([img]);
+    setDownloadOptionImages([img]);
+    setShowDownloadOptions(true);
   };
 
   const handleDownloadSelectedImages = async () => {
@@ -378,7 +382,51 @@ function FavouritesScreen({ navigation }) {
     }
     const displayImages = activeFilters ? filteredImages : favouriteImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
-    await doDownload(toDownload);
+    setDownloadOptionImages(toDownload);
+    setShowDownloadOptions(true);
+  };
+
+  const handleDownloadOptionSelect = async (optionId) => {
+    setShowDownloadOptions(false);
+    const images = downloadOptionImages;
+    if (images.length === 0) return;
+    if (optionId === "pdf") {
+      await doPdfDownload(images);
+    } else {
+      await doDownload(images);
+    }
+  };
+
+  const doPdfDownload = async (images) => {
+    if (images.length === 0) {
+      Alert.alert("No Images", "No images to download.");
+      return;
+    }
+    const confirmed = await confirmDownload(images.length, "images");
+    if (!confirmed) return;
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    await executePdfDownload(images);
+  };
+
+  const executePdfDownload = async (images) => {
+    setDownloading(true);
+    setDownloadProgress({ total: 1, completed: 0 });
+    try {
+      const result = await downloadService.downloadImagesAsPDF(
+        images.map(img => img.id),
+        null,
+        (phase) => setDownloadProgress({ total: 1, completed: 0, phase })
+      );
+      Alert.alert("Download Completed Successfully", `PDF saved to: ${result.filePath}`);
+      setSelectMode(false);
+      setSelectedIds(new Set());
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
   };
 
   const handleDownloadSelectedFolders = async () => {
@@ -905,6 +953,21 @@ function FavouritesScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Download Options Modal */}
+      <DownloadOptionsModal
+        visible={showDownloadOptions}
+        title={downloadOptionImages.length > 1
+          ? `Download ${downloadOptionImages.length} images`
+          : "Download image"}
+        subtitle="Choose a download format"
+        options={[
+          { id: "jpg", label: "Download as Image", description: "Save as .jpg files" },
+          { id: "pdf", label: "Download as PDF", description: "Specification sheet with image details" },
+        ]}
+        onSelect={handleDownloadOptionSelect}
+        onCancel={() => setShowDownloadOptions(false)}
+      />
 
       {/* Lightbox */}
       <ImageLightbox

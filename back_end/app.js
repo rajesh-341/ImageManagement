@@ -19,6 +19,7 @@ const favoriteRoutes = require("./routes/favoriteRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dropdownRoutes = require("./routes/dropdownRoutes");
 const { logout, me } = require("./controllers/authController");
+const { generateImagesPdf } = require("./controllers/pdfController");
 const verifyToken = require("./middleware/authMiddleware");
 const pool = require("./config/db");
 
@@ -219,6 +220,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/dropdown", dropdownRoutes);
 app.post("/api/logout", verifyToken, logout);
 app.get("/api/me", verifyToken, me);
+app.post("/api/download-images-pdf", verifyToken, generateImagesPdf);
 
 const DOWNLOAD_ROLES = ["Owner", "CEO", "Marketing Head", "Admin", "Event Managers"];
 

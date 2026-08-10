@@ -183,6 +183,56 @@ class DownloadService {
     throw lastError || new Error("Download failed after multiple attempts");
   }
 
+  async downloadImagesAsPDF(imageIds, destination, onPhaseChange) {
+    if (!Array.isArray(imageIds) || imageIds.length === 0) {
+      throw new Error("No images selected for PDF download.");
+    }
+    const token = await offlineStorage.getToken();
+    if (!token) throw new Error("Authentication required. Please log in again.");
+
+    const dest = await this.ensureDir(destination || DEFAULT_DOWNLOAD_DIR);
+    const filePath = `${dest}/image_specifications_${Date.now()}.pdf`;
+    const url = `${API_BASE_URL}/download-images-pdf`;
+
+    onPhaseChange?.("Generating PDF...");
+
+    let lastError = null;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await RNFS.downloadFile({
+          fromUrl: url,
+          toFile: filePath,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ imageIds }),
+          background: true,
+        }).promise;
+
+        if (result.statusCode === 200) return { status: "downloaded", filePath };
+        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw new Error(`PDF generation failed with status ${result.statusCode}`);
+      } catch (err) {
+        lastError = err;
+        if (attempt < MAX_RETRIES - 1 && (
+          err.message.includes("network") ||
+          err.message.includes("timeout") ||
+          err.message.includes("connection") ||
+          err.message.includes("abort")
+        )) {
+          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError || new Error("PDF download failed after multiple attempts");
+  }
+
   async downloadMultipleImages(
     images,
     getImgUrlFn,

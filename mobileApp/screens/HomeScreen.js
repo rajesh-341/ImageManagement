@@ -9,6 +9,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
 import ImageLightbox from "../components/ImageLightbox";
 import ImageCard from "../components/ImageCard";
+import DownloadOptionsModal from "../components/DownloadOptionsModal";
 import downloadService from "../services/downloadService";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
@@ -60,6 +61,8 @@ function HomeScreen({ navigation }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [downloadOptionImages, setDownloadOptionImages] = useState([]);
 
   useEffect(() => {
     const init = async () => {
@@ -365,21 +368,52 @@ function HomeScreen({ navigation }) {
 
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) { Alert.alert("No Selection", "Please select images."); return; }
-    const confirmed = await confirmDownload(selectedIds.size, "images");
-    if (!confirmed) return;
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) return;
     const displayImages = activeFilters ? filteredImages : allImages;
     const toDownload = displayImages.filter(img => selectedIds.has(img.id));
-    await executeDownload(toDownload);
+    setDownloadOptionImages(toDownload);
+    setShowDownloadOptions(true);
   };
 
   const handleDownloadSingle = async (img) => {
-    const confirmed = await confirmDownload(1, "images");
+    setDownloadOptionImages([img]);
+    setShowDownloadOptions(true);
+  };
+
+  const handleDownloadOptionSelect = async (optionId) => {
+    setShowDownloadOptions(false);
+    const images = downloadOptionImages;
+    if (images.length === 0) return;
+    const confirmed = await confirmDownload(images.length, "images");
     if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
-    await executeDownload([img]);
+    if (optionId === "pdf") {
+      await executePdfDownload(images);
+    } else {
+      await executeDownload(images);
+    }
+  };
+
+  const executePdfDownload = async (images) => {
+    setDownloading(true);
+    setDownloadProgress({ total: 1, completed: 0 });
+    try {
+      const result = await downloadService.downloadImagesAsPDF(
+        images.map(img => img.id),
+        null,
+        (phase) => setDownloadProgress({ total: 1, completed: 0, phase })
+      );
+      Alert.alert("Download Completed Successfully", `PDF saved to: ${result.filePath}`);
+      if (images.length > 1) {
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
   };
 
   const executeDownload = async (images) => {
@@ -739,13 +773,30 @@ function HomeScreen({ navigation }) {
           <View style={[styles.modalContent, { alignItems: "center", padding: 24 }]}>
             <ActivityIndicator size="large" color="#ff6b8a" />
             <Text style={styles.dlProgressText}>
-              {downloadProgress
-                ? `Downloading ${downloadProgress.completed + 1} of ${downloadProgress.total}...`
-                : "Preparing download..."}
+              {downloadProgress?.phase || (
+                downloadProgress
+                  ? `Downloading ${downloadProgress.completed + 1} of ${downloadProgress.total}...`
+                  : "Preparing download..."
+              )}
             </Text>
           </View>
         </View>
       </Modal>
+
+      {/* Download Options Modal */}
+      <DownloadOptionsModal
+        visible={showDownloadOptions}
+        title={downloadOptionImages.length > 1
+          ? `Download ${downloadOptionImages.length} images`
+          : "Download image"}
+        subtitle="Choose a download format"
+        options={[
+          { id: "jpg", label: "Download as Image", description: "Save as .jpg files" },
+          { id: "pdf", label: "Download as PDF", description: "Specification sheet with image details" },
+        ]}
+        onSelect={handleDownloadOptionSelect}
+        onCancel={() => setShowDownloadOptions(false)}
+      />
 
       {/* Lightbox */}
       <ImageLightbox
