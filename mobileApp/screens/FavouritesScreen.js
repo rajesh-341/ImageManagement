@@ -46,6 +46,8 @@ function FavouritesScreen({ navigation }) {
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
   const [downloadOptionImages, setDownloadOptionImages] = useState([]);
+  const [showFolderDownloadOptions, setShowFolderDownloadOptions] = useState(false);
+  const [folderDownloadTarget, setFolderDownloadTarget] = useState(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
@@ -435,13 +437,70 @@ function FavouritesScreen({ navigation }) {
       return;
     }
     const selectedFolders = favouriteFolders.filter(f => selectedIds.has(f.id));
-    const confirmed = await confirmDownload(selectedFolders.length, "folders");
+    setFolderDownloadTarget({ folders: selectedFolders });
+    setShowFolderDownloadOptions(true);
+  };
+
+  const handleFolderDownloadOptionSelect = async (optionId) => {
+    setShowFolderDownloadOptions(false);
+    const target = folderDownloadTarget;
+    if (!target || !Array.isArray(target.folders) || target.folders.length === 0) return;
+    if (optionId === "pdf") {
+      await executeFolderPdfDownload(target.folders);
+    } else {
+      await executeFolderZipDownload(target.folders);
+    }
+  };
+
+  const executeFolderPdfDownload = async (folders) => {
+    const confirmed = await confirmDownload(folders.length, "folders");
     if (!confirmed) return;
     const granted = await downloadService.requestStoragePermission();
     if (!granted) return;
     setDownloading(true);
+    setDownloadProgress({ total: 1, completed: 0, phase: "Preparing PDF..." });
+    try {
+      const byId = new Map();
+      for (const folder of folders) {
+        const data = await ApiService.getFavorites(folder.name);
+        const images = Array.isArray(data) ? data : (data.images || []);
+        for (const img of images) {
+          if (img && img.id != null && !byId.has(img.id)) byId.set(img.id, img);
+        }
+      }
+      const images = Array.from(byId.values());
+      if (images.length === 0) {
+        Alert.alert("No Images", "No images found in the selected folder(s).");
+        return;
+      }
+      const result = await downloadService.downloadImagesAsPDF(
+        images.map(img => img.id),
+        null,
+        (phase) => setDownloadProgress({ total: 1, completed: 0, phase })
+      );
+      Alert.alert("Download Completed Successfully", `PDF saved to: ${result.filePath}`);
+      setSelectMode(false);
+      setSelectedIds(new Set());
+    } catch (err) {
+      Alert.alert("Download Failed", err.message);
+    } finally {
+      setDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const executeFolderZipDownload = async (folders) => {
+    const confirmed = await confirmDownload(folders.length, "folders");
+    if (!confirmed) return;
+    const granted = await downloadService.requestStoragePermission();
+    if (!granted) return;
+    if (folders.length === 1) {
+      await executeSingleFolderDownload(folders[0]);
+      return;
+    }
+    setDownloading(true);
     setDownloadProgress({ total: 1, completed: 0, phase: "Downloading folders as ZIP..." });
-    const folderIds = selectedFolders.map(f => f.id);
+    const folderIds = folders.map(f => f.id);
     let lastErr = null;
     for (let attempt = 0; attempt <= 2; attempt++) {
       try {
@@ -493,11 +552,8 @@ function FavouritesScreen({ navigation }) {
   };
 
   const handleDownloadFolderImages = async (folder) => {
-    const confirmed = await confirmDownload(1, "folders");
-    if (!confirmed) return;
-    const granted = await downloadService.requestStoragePermission();
-    if (!granted) return;
-    await executeSingleFolderDownload(folder);
+    setFolderDownloadTarget({ folders: [folder] });
+    setShowFolderDownloadOptions(true);
   };
 
   const handleApplyFilters = async (filterData) => {
@@ -967,6 +1023,21 @@ function FavouritesScreen({ navigation }) {
         ]}
         onSelect={handleDownloadOptionSelect}
         onCancel={() => setShowDownloadOptions(false)}
+      />
+
+      {/* Folder Download Options Modal */}
+      <DownloadOptionsModal
+        visible={showFolderDownloadOptions}
+        title={folderDownloadTarget?.folders?.length > 1
+          ? `Download ${folderDownloadTarget.folders.length} folders`
+          : "Download folder"}
+        subtitle="Choose a download format"
+        options={[
+          { id: "zip", label: "Download as Image (ZIP)", description: "Save folder images as a ZIP archive" },
+          { id: "pdf", label: "Download as PDF", description: "Specification sheet with image details" },
+        ]}
+        onSelect={handleFolderDownloadOptionSelect}
+        onCancel={() => setShowFolderDownloadOptions(false)}
       />
 
       {/* Lightbox */}

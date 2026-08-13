@@ -6,6 +6,7 @@ const API_BASE_URL = "https://pv-gallery-backend.fly.dev/api";
 const DEFAULT_DOWNLOAD_DIR = Platform.select({
   android: RNFS.DownloadDirectoryPath,
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
+  web: "/downloads",
 });
 
 const MAX_RETRIES = 3;
@@ -22,6 +23,83 @@ function sleep(ms) {
 
 function isRetryableStatus(statusCode) {
   return [403, 408, 429, 502, 503, 504].includes(statusCode);
+}
+
+function extractStatus(message) {
+  const match = String(message || "").match(/status (\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+export function sanitizeFileName(name, fallback) {
+  const base = String(name || "").trim();
+  if (!base) return fallback;
+  const sanitized = base
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/, "")
+    .trim();
+  const safe = sanitized || fallback;
+  return safe.length > 80 ? safe.slice(0, 80) : safe;
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      resolve(dataUrl.split(",")[1] || dataUrl);
+    };
+    reader.onerror = () => reject(new Error("Failed to read download data"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function triggerWebDownload(blob, fileName) {
+  if (typeof document === "undefined" || typeof URL === "undefined") {
+    throw new Error("Download is not supported in this environment");
+  }
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = fileName || `download_${Date.now()}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+// RNFS.downloadFile cannot send POST/PUT requests or attach a request body.
+// For endpoints that require a POST (PDF generation, multi-folder ZIP) we use
+// fetch and persist the binary response to disk, so the request method and
+// payload match the backend route contract exactly.
+async function saveRemoteFile({ url, method = "GET", body, headers, filePath, fileName }) {
+  const config = { method };
+  if (headers) config.headers = headers;
+  if (method !== "GET" && body !== undefined) config.body = body;
+
+  const response = await fetch(url, config);
+  if (!response.ok) {
+    const message = await response
+      .json()
+      .then(d => d.message)
+      .catch(() => "");
+    throw new Error(
+      message
+        ? `${message} (status ${response.status})`
+        : `Request failed with status ${response.status}`
+    );
+  }
+
+  if (Platform.OS === "web") {
+    const blob = await response.blob();
+    triggerWebDownload(blob, fileName || (filePath ? String(filePath).split("/").pop() : ""));
+    return { status: "downloaded", filePath };
+  }
+
+  const blob = await response.blob();
+  const base64 = await blobToBase64(blob);
+  await RNFS.writeFile(filePath, base64, "base64");
+  return { status: "downloaded", filePath };
 }
 
 class DownloadService {
@@ -86,6 +164,27 @@ class DownloadService {
     if (exists) {
       return { status: "exists", filePath };
     }
+
+    // Offline mode: the image is already stored locally, so copy it instead of
+    // trying to fetch a file:// URI over the network.
+    if (Platform.OS !== "web" && remoteUrl && remoteUrl.startsWith("file://")) {
+      const srcPath = remoteUrl.replace(/^file:\/\//, "");
+      const srcExists = await this.fileExists(srcPath);
+      if (!srcExists) throw new Error("Offline copy not found for this image");
+      await RNFS.copyFile(srcPath, filePath);
+      return { status: "downloaded", filePath };
+    }
+
+    if (Platform.OS === "web") {
+      const result = await saveRemoteFile({
+        url: remoteUrl,
+        method: "GET",
+        filePath,
+        fileName: String(filePath).split("/").pop(),
+      });
+      return result;
+    }
+
     const result = await RNFS.downloadFile({
       fromUrl: remoteUrl,
       toFile: filePath,
@@ -108,22 +207,32 @@ class DownloadService {
     let lastError = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const result = await RNFS.downloadFile({
-          fromUrl: url,
-          toFile: filePath,
-          headers: { Authorization: `Bearer ${token}` },
-          background: true,
-        }).promise;
-
-        if (result.statusCode === 200) return { status: "downloaded", filePath };
-        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
-          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
-          continue;
+        let result;
+        if (Platform.OS === "web") {
+          result = await saveRemoteFile({
+            url,
+            method: "GET",
+            headers: { Authorization: `Bearer ${token}` },
+            filePath,
+          });
+        } else {
+          result = await RNFS.downloadFile({
+            fromUrl: url,
+            toFile: filePath,
+            headers: { Authorization: `Bearer ${token}` },
+            background: true,
+          }).promise;
+          if (result.statusCode !== 200) {
+            throw new Error(`Download failed with status ${result.statusCode}`);
+          }
+          result = { status: "downloaded", filePath };
         }
-        throw new Error(`Download failed with status ${result.statusCode}`);
+        return result;
       } catch (err) {
         lastError = err;
+        const status = extractStatus(err.message);
         if (attempt < MAX_RETRIES - 1 && (
+          isRetryableStatus(status) ||
           err.message.includes("network") ||
           err.message.includes("timeout") ||
           err.message.includes("connection") ||
@@ -149,26 +258,22 @@ class DownloadService {
     let lastError = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const result = await RNFS.downloadFile({
-          fromUrl: url,
-          toFile: filePath,
+        const result = await saveRemoteFile({
+          url,
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ folderIds }),
-          background: true,
-        }).promise;
-
-        if (result.statusCode === 200) return { status: "downloaded", filePath };
-        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
-          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
-          continue;
-        }
-        throw new Error(`Download failed with status ${result.statusCode}`);
+          filePath,
+        });
+        return result;
       } catch (err) {
         lastError = err;
+        const status = extractStatus(err.message);
         if (attempt < MAX_RETRIES - 1 && (
+          isRetryableStatus(status) ||
           err.message.includes("network") ||
           err.message.includes("timeout") ||
           err.message.includes("connection") ||
@@ -180,7 +285,7 @@ class DownloadService {
         throw err;
       }
     }
-    throw lastError || new Error("Download failed after multiple attempts");
+    throw lastError || new Error("Folder download failed after multiple attempts");
   }
 
   async downloadImagesAsPDF(imageIds, destination, onPhaseChange) {
@@ -199,31 +304,28 @@ class DownloadService {
     let lastError = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const result = await RNFS.downloadFile({
-          fromUrl: url,
-          toFile: filePath,
+        const result = await saveRemoteFile({
+          url,
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ imageIds }),
-          background: true,
-        }).promise;
-
-        if (result.statusCode === 200) return { status: "downloaded", filePath };
-        if (isRetryableStatus(result.statusCode) && attempt < MAX_RETRIES - 1) {
-          await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
-          continue;
-        }
-        throw new Error(`PDF generation failed with status ${result.statusCode}`);
+          filePath,
+        });
+        return result;
       } catch (err) {
         lastError = err;
+        const status = extractStatus(err.message);
         if (attempt < MAX_RETRIES - 1 && (
+          isRetryableStatus(status) ||
           err.message.includes("network") ||
           err.message.includes("timeout") ||
           err.message.includes("connection") ||
           err.message.includes("abort")
         )) {
+          onPhaseChange?.(`Retrying download (${attempt + 1}/${MAX_RETRIES - 1})...`);
           await sleep(BASE_RETRY_DELAY_MS * Math.pow(2, attempt));
           continue;
         }
@@ -260,7 +362,7 @@ class DownloadService {
           onProgress?.(completed / total, completed, total);
           continue;
         }
-        const fileName = `${img.image_data?.designName || img.id}.jpg`;
+        const fileName = `${sanitizeFileName(img.image_data?.designName, `image_${img.id}`)}.jpg`;
         const result = await this.downloadSingleImage(
           img.id, remoteUrl, dest, fileName,
           (p) => onImageProgress?.(img.id, p)

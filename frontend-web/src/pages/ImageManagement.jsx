@@ -682,7 +682,13 @@ function ImageManagement() {
     } else {
       try {
         showNotif("Preparing PDF...", "warning");
-        await downloadAsPDF(images);
+        const folderResult = await ApiService.getAllImages(folderName);
+        const folderImgs = folderResult.images || [];
+        if (folderImgs.length === 0) {
+          showNotif("No images found in this folder");
+          return;
+        }
+        await downloadAsPDF(folderImgs);
         showNotif("PDF download complete", "success");
       } catch (err) {
         showNotif(err.message || "PDF generation failed");
@@ -704,8 +710,13 @@ function ImageManagement() {
     } else {
       try {
         showNotif("Preparing PDF...", "warning");
-        const favImgs = favoriteFolders.length > 0 ? favoriteImages : [];
-        await downloadAsPDF(favImgs);
+        const favFolderImgs = await ApiService.getFavorites(folder.name);
+        const folderImgs = Array.isArray(favFolderImgs) ? favFolderImgs : (favFolderImgs.images || []);
+        if (folderImgs.length === 0) {
+          showNotif("No images found in this folder");
+          return;
+        }
+        await downloadAsPDF(folderImgs);
         showNotif("PDF download complete", "success");
       } catch (err) {
         showNotif(err.message || "PDF generation failed");

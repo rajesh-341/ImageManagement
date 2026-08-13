@@ -321,8 +321,7 @@ const ApiService = {
   },
 
   async downloadFolder(folderName) {
-    const sanitized = folderName.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
-    const url = `${API_BASE_URL}/download-folder/${encodeURIComponent(sanitized)}`;
+    const url = `${API_BASE_URL}/download-folder/${encodeURIComponent(folderName)}`;
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -330,7 +329,7 @@ const ApiService = {
     }
     const blob = await response.blob();
     const contentDisposition = response.headers.get("Content-Disposition");
-    let filename = `${sanitized}_${Date.now()}.zip`;
+    let filename = `folder_${Date.now()}.zip`;
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="?(.+?)"?$/);
       if (match) filename = match[1];

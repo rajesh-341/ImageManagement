@@ -10,7 +10,7 @@ import { DEFAULT_DOWNLOAD_PATH } from "../utils/downloadPathPicker";
 import ImageLightbox from "../components/ImageLightbox";
 import ImageCard from "../components/ImageCard";
 import DownloadOptionsModal from "../components/DownloadOptionsModal";
-import downloadService from "../services/downloadService";
+import downloadService, { sanitizeFileName } from "../services/downloadService";
 import ApiService from "../services/apiService";
 import offlineStorage from "../offline/offlineStorage";
 import offlineManager from "../offline/offlineManager";
@@ -425,7 +425,7 @@ function HomeScreen({ navigation }) {
       if (images.length === 1) {
         const img = images[0];
         const remoteUrl = offlineMode ? getEffectiveImgUrl(img) : getImgUrl(img);
-        const fileName = `${img.image_data?.designName || img.id}.jpg`;
+        const fileName = `${sanitizeFileName(img.image_data?.designName, `image_${img.id}`)}.jpg`;
         const result = await downloadService.downloadSingleImage(img.id, remoteUrl, null, fileName);
         if (result.status === "exists") {
           Alert.alert("Already Exists", "This image already exists in the download location.");

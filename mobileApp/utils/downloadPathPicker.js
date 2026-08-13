@@ -6,6 +6,7 @@ const { DirectoryPicker } = NativeModules;
 export const DEFAULT_DOWNLOAD_PATH = Platform.select({
   android: RNFS.DownloadDirectoryPath,
   ios: `${RNFS.DocumentDirectoryPath}/Downloads`,
+  web: "/downloads",
 });
 
 export async function pickDownloadDirectory() {
